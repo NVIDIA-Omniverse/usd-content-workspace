@@ -1,0 +1,22 @@
+{
+  "_comment": "Spec consumed by the bump-manifests skill. For each workspace folder, it Stats each `source` object on the target backend (at <backend-base>/unittests/workspaces/<source>) and emits a `.manifest` file at <backend-base>/unittests/workspaces/<workspace>/.manifest, in the standard manifest JSON format, with one entry per item: { relative_path, resource_info: { resource_identity, size, modified_time } } from the Stat response. `source` paths are relative to unittests/workspaces/. Do not 1:1-map relative_path to source — the mapping is intentional (collisions, manifest-only prefixes).",
+  "prefix": "unittests/workspaces",
+  "storage_api_version": "v1alpha",
+  "workspaces": {
+    "overlay_v1.wkspc": [
+      { "relative_path": "folder_a/hello.txt", "source": "sources/hello.txt" },
+      { "relative_path": "folder_a/goodbye.txt", "source": "sources/goodbye.txt" },
+      { "relative_path": "folder_a/nested/bee.txt", "source": "sources/nested/bee.txt" },
+      { "relative_path": "folder_b/jellyfish - hevc.mkv", "source": "sources/blob.bin" },
+      { "relative_path": "shadowed.txt", "source": "sources/shadow_source.txt" },
+      { "relative_path": "shared/in_manifest.txt", "source": "sources/hello.txt" },
+      { "relative_path": "my docs/from_manifest.txt", "source": "sources/spaced/from_manifest.txt" },
+      { "relative_path": "café.txt", "source": "sources/unicode/café.txt" }
+    ],
+    "manifest_only_v1.wkspc": [
+      { "relative_path": "pkg/a.usd", "source": "sources/hello.txt" },
+      { "relative_path": "pkg/b.usd", "source": "sources/goodbye.txt" },
+      { "relative_path": "pkg/sub/c.usd", "source": "sources/nested/bee.txt" }
+    ]
+  }
+}

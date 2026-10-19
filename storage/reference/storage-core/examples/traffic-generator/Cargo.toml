@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+edition = "2021"
+license = "Apache-2.0"
+name = "traffic-generator"
+publish = false
+version = "0.1.0"
+
+[[bin]]
+name = "traffic-generator"
+path = "src/main.rs"
+
+[dependencies]
+bytes = "1.12.1"
+clap = { version = "4.6.6", features = ["derive"] }
+futures = "0.3.34"
+rand = "0.10.2"
+reqwest = { version = "0.13.4", default-features = false, features = ["hickory-dns", "json", "native-tls"] }
+storage-core = { path = "../../storage-core" }
+storage-core-test = { path = "../../storage-core-test" }
+storage-core-util = { path = "../../storage-core-util" }
+tokio = { version = "1.53.1", features = ["full"] }
+tonic = "0.14.6"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[package.metadata.cargo-machete]
+ignored = ["tracing"] # required by _limited macros from storage-core-util

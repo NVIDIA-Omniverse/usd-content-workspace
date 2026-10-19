@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if .Values.httpProxy.enabled -}}
+---
+
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ include "storage-navigator.fullname" . }}
+  labels:
+    {{- include "storage-navigator.labels" . | nindent 4 }}
+  annotations:
+    {{ toYaml .Values.httpProxy.annotations | nindent 4 }}
+spec:
+  virtualhost:
+    fqdn: {{ print (ternary "" (print .Values.httpProxy.fqdn.host ".") (empty .Values.httpProxy.fqdn.host)) .Values.httpProxy.fqdn.domain }}
+    {{- if .Values.httpProxy.tls.enabled }}
+    tls:
+      secretName:  {{ include "storage-navigator.tls-secret-name" . }}
+    {{- end }}
+  routes:
+    - conditions:
+        - prefix: {{ .Values.httpProxy.path | default "/" }}
+      timeoutPolicy: {{ $.Values.httpProxy.timeoutPolicy | toYaml | nindent 8 }}
+      {{- if $.Values.httpProxy.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ $.Values.httpProxy.responseHeadersPolicy | toYaml | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ include "storage-navigator.servicename" . }}
+          port: {{ .Values.service.port }}
+{{- else -}}
+### HTTPProxy (ingress) is disabled, see .Values.httpProxy.enabled 
+{{- end }}

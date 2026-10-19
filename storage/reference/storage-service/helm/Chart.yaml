@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v2
+name: storage-service
+description: Omniverse Sevan Storage API service.
+
+type: application
+version: "0.0.0"
+appVersion: "0.0.0"
+
+home: https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/storage/reference/storage-service
+
+keywords:
+  - nvidia
+  - omniverse
+  - storage-api
+  - storage-service
+  - s3
+  - azure
+  - gcp
+  - gRPC
+  - usd
+
+sources:
+  - https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/storage/reference/storage-service
+  - https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/storage/api

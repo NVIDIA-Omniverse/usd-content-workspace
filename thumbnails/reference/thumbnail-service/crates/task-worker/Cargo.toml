@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "thumbnail-task-worker"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "task-worker"
+path = "src/main.rs"
+
+# Deliberately no `thumbnail-service`, no axum, and no utoipa: the worker is a
+# queue consumer with no API surface, and keeping the HTTP stack out of it is
+# what lets the two Deployments scale and fail independently. The probe surface
+# is a hand-rolled listener in `health.rs` for the same reason.
+[dependencies]
+thumbnail-common = { path = "../common" }
+thumbnail-convert = { path = "../thumbnail-convert" }
+thumbnail-auth = { path = "../auth" }
+notifications-proto = { path = "../proto/notifications" }
+# No `storage-proto`: storage transfers moved into `thumbnail-common` so the
+# synchronous mode can call them too, and the worker now reaches storage only
+# through that crate.
+thumbnail-proto = { path = "../proto/thumbnail" }
+
+async-trait.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
+dotenvy.workspace = true
+futures-util.workspace = true
+humantime.workspace = true
+prost-types.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tonic.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+otel-tools.workspace = true
+opentelemetry.workspace = true
+
+[dev-dependencies]
+# Enables the shared test doubles for this crate's own tests only.
+thumbnail-common = { path = "../common", features = ["test-utils"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serial_test.workspace = true

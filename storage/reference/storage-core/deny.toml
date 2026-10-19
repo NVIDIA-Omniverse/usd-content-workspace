@@ -1,0 +1,205 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[graph]
+all-features = true
+exclude = ["examples"]
+
+[advisories]
+ignore = [
+  # ID: RUSTSEC-2024-0384
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0384
+  # - This crate is no longer maintained, and the author recommends using the maintained [`web-time`] crate instead.
+  "RUSTSEC-2024-0384",
+  # ID: RUSTSEC-2024-0436
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0436
+  # - The creator of the crate `paste` has stated in the [`README.md`](https://github.com/dtolnay/paste/blob/master/README.md) that this project is not longer maintained as well as archived the repository
+  "RUSTSEC-2024-0436",
+  # ID: RUSTSEC-2024-0449
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0449
+  # - unsafe-libyaml is unmaintained (no fixed release); transitive via figment ("yaml" feature in storage-core-util,
+  #   used for YAML config and secrets files) -> serde_yaml -> unsafe-libyaml, so it is in the published library's tree
+  "RUSTSEC-2024-0449",
+  # ID: RUSTSEC-2025-0134
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0134
+  # - rustls-pemfile is unmaintained; transitive dependency via aws-sdk -> hyper-rustls -> rustls-native-certs
+  "RUSTSEC-2025-0134",
+  # ID: RUSTSEC-2026-0098
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0098
+  # - rustls-webpki 0.101.7 URI name constraint flaw; pinned via rustls 0.21.12 (no backport available)
+  # - Reachable only after signature verification and requires CA misissuance. Fixed in 0.103.12+ (covered by rustls 0.23 chain)
+  "RUSTSEC-2026-0098",
+  # ID: RUSTSEC-2026-0099
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0099
+  # - rustls-webpki 0.101.7 wildcard name constraint flaw; pinned via rustls 0.21.12 (no backport available)
+  # - Reachable only after signature verification and requires CA misissuance. Fixed in 0.103.12+ (covered by rustls 0.23 chain)
+  "RUSTSEC-2026-0099",
+  # ID: RUSTSEC-2026-0104
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0104
+  # - rustls-webpki 0.101.7 CRL parsing panic; pinned via rustls 0.21.12 (AWS SDK); 0.103.x resolved at >=0.103.13 in lockfile
+  # - Advisory notes apps not using CRLs are not affected
+  "RUSTSEC-2026-0104",
+  # ID: RUSTSEC-2026-0349 (GHSA-w44r-93j7-qv28)
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0349
+  # - rustls key-share hint recorded before server authentication can downgrade later connections from X25519MLKEM768
+  #   to classical key exchange. rustls 0.23 is on the patched 0.23.46 in Cargo.lock; the remaining hit is
+  #   rustls 0.21.12 (AWS SDK legacy hyper 0.14 stack, no backport), which has no post-quantum key exchange to lose
+  "RUSTSEC-2026-0349",
+  # ID: RUSTSEC-2026-0346
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0346
+  # - rustls derived `Debug` for Tls12/Tls13ClientSessionValue, so formatting a stored client session prints the TLS 1.2
+  #   master secret or TLS 1.3 resumption PSK. rustls 0.23 is on the patched 0.23.46; the remaining hit is rustls 0.21.12
+  #   (AWS SDK legacy hyper 0.14 stack, no backport). Exposure needs code that Debug-formats session-store values; none
+  #   here does (the session store is internal to rustls and never logged)
+  "RUSTSEC-2026-0346",
+  # ID: RUSTSEC-2026-0118
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0118
+  # - hickory-proto 0.25.2 NSEC3 closest-encloser-proof unbounded loop on cross-zone responses
+  # - Transitive via reqwest 0.12.28 (pinned by azure-core) -> hickory-resolver 0.25.2; no safe upgrade until reqwest moves past 0.12
+  # - Reachable only when DNSSEC validation is enabled (dnssec-ring/dnssec-aws-lc-rs features); we use the `hickory-dns` feature only and do not enable DNSSEC validation
+  "RUSTSEC-2026-0118",
+  # ID: RUSTSEC-2026-0119
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0119
+  # - hickory-proto 0.25.2 O(n^2) name compression during message encoding
+  # - Same dependency chain and constraint as RUSTSEC-2026-0118 (transitive via reqwest 0.12 -> hickory-resolver 0.25); fix is in hickory-proto 0.26.1 which requires hickory-resolver 0.26
+  # - Encoder amplification primarily affects DNS servers/recursors building large responses; as a client we encode our own queries (small, few records)
+  "RUSTSEC-2026-0119",
+  # ID: RUSTSEC-2023-0089
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2023-0089
+  # - atomic-polyfill is unmaintained; transitive via postcard 1.x -> heapless 0.7 -> atomic-polyfill 1.0.3
+  # - Used internally by postcard for the L2 cache envelope serialization; on stable host targets the polyfill compiles to native atomics so the unmaintained status is not a runtime concern
+  "RUSTSEC-2023-0089",
+  # ID: RUSTSEC-2026-0174
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0174
+  # - http-types is unmaintained (Authorization::value / WwwAuthenticate::value can violate the
+  #   crate's documented ASCII invariant); no safe upgrade exists.
+  # - Transitive via azure_core 0.21 -> azure_identity / azure_storage / azure_storage_blobs.
+  "RUSTSEC-2026-0174",
+  # ID: RUSTSEC-2026-0194
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0194
+  # - quick-xml 0.31.0 quadratic run time when checking a start tag for duplicate attribute names.
+  # - Transitive via azure_core 0.21 (pins quick-xml 0.31); fix is quick-xml >= 0.41, which requires
+  #   an azure_core major upgrade. quick-xml here only parses Azure Storage's own XML responses.
+  "RUSTSEC-2026-0194",
+  # ID: RUSTSEC-2026-0195
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0195
+  # - quick-xml 0.31.0 unbounded namespace-declaration allocation in `NsReader` (memory-exhaustion DoS).
+  # - Same dependency chain and constraint as RUSTSEC-2026-0194 (transitive via azure_core 0.21 ->
+  #   quick-xml 0.31); no safe upgrade until azure_core moves past 0.21.
+  "RUSTSEC-2026-0195",
+  # ID: RUSTSEC-2026-0258
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0258
+  # - h2 accepts unbounded empty DATA frames. This is receive-side, so it applies to a client
+  #   reading from its peer just as much as to a server, and both of this workspace's h2 paths
+  #   have to be accounted for.
+  # - The serving path (tonic / hyper 1.x / reqwest) is on the fixed h2 0.4.19, bumped in this
+  #   lockfile.
+  # - The residual h2 0.3.27 is reachable only through hyper 0.14, which enters the graph solely
+  #   via the AWS Smithy `hyper-014` connector built by the UCC proxy path in
+  #   storage-core/src/s3/service.rs. That path is inert unless UCC_PROXY is set, and it is the
+  #   only construction in the workspace that feeds `hyper_014::HyperClientBuilder`.
+  # - It is a genuine exposure, accepted rather than argued away: on that path the service is an
+  #   HTTP/2 client of the configured proxy and S3 endpoint, so a malicious or malfunctioning
+  #   peer could stream unbounded empty DATA frames at it. h2 0.3.x has no compatible patch.
+  # - Making the connector HTTP/1.1-only was tried and reverted: without HTTP/2 in ALPN the SDK
+  #   falls back to HTTP/1.1 and Google Cloud Storage's S3-compatible endpoint rejects the
+  #   bodyless CopyObject PUT with 411 Length Required, breaking copy and move on every
+  #   GCS-compatible backend behind the proxy (integration tests test-linux-x86_64-proxy).
+  # - Scope of the accepted risk: UCC-proxy deployments only, and only against the operator's own
+  #   proxy and the S3 endpoints they configured. The serving path, which faces untrusted
+  #   callers, is on the patched 0.4.19.
+  # - Drop this ignore entirely when the hyper-0.14 chain goes away (aws-smithy on hyper 1.x),
+  #   which removes h2 0.3.27 from the lockfile.
+  "RUSTSEC-2026-0258",
+  # ID: RUSTSEC-2026-0275
+  # - Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0275
+  # - Legacy azure_core 0.21 may write the Authorization header value to logs. Transitive via
+  #   azure_core 0.21 -> azure_identity / azure_storage / azure_storage_blobs (the outbound Azure client);
+  #   fix requires migrating to azure_core >= 1.0, a large separate upgrade tracked as a follow-up (same
+  #   constraint as RUSTSEC-2026-0174 / 0194 / 0195).
+  # - Compensating control: `azure_credential_log_guard`
+  #   (storage-core-util/src/observability/logger.rs) is a filter layer ANDed with the EnvFilter on
+  #   every subscriber, rejecting DEBUG/TRACE events from azure_core / azure_identity / azure_storage
+  #   / azure_storage_blobs outright. It has no opt-out: azure_core 0.21's `Debug for Headers` prints
+  #   `authorization` verbatim and redacts everything else, so enabling SDK debug logging and logging
+  #   the credential are the same act. INFO and above still pass.
+  #   A directive alone would NOT be sufficient, which is why this is a layer and not just a
+  #   `azure_core=info` entry: EnvFilter evaluates dynamic span directives first (`[Get Properties]=debug`
+  #   re-enables the event without naming an Azure target), and picks the most specific matching
+  #   directive, so `azure_core::policies::transport=debug` outranks `azure_core=info`. The layer also
+  #   covers the OTLP exporter, whose own per-layer filter is evaluated separately -- otherwise a
+  #   credential suppressed on stdout would still ship off-box.
+  #   `create_merged_log_filter` additionally adds `<target>=info` directives, but only when the global
+  #   level is more verbose than info: EnvFilter directives are absolute, so adding them under `warn`
+  #   or unset would *raise* these targets rather than cap them.
+  #   Drop both when the azure_core >= 1.0 migration removes the advisory.
+  "RUSTSEC-2026-0275",
+  # ID: RUSTSEC-2026-0367, RUSTSEC-2026-0368, RUSTSEC-2026-0369
+  # - zip 3.0.0 extract(): keeps SUID/SGID bits, writes symlinks outside the destination, applies
+  #   permissions through symlinks. Fixed only in zip >= 9, and no utoipa-swagger-ui release uses it
+  #   (10.0.1 requires ^8.6).
+  #   zip is only a build dependency of utoipa-swagger-ui (storage-core-builder), whose build script
+  #   unpacks one fixed archive (Swagger UI v5.17.14 from GitHub) with its own by_index() loop and
+  #   never calls extract(). Nothing links zip: `cargo tree --workspace -i zip -e normal` prints nothing.
+  #   Drop these once utoipa-swagger-ui moves to zip >= 9.
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+]
+
+[bans]
+multiple-versions = "allow"
+
+[bans.workspace-dependencies]
+duplicates = "allow"
+
+[sources]
+allow-registry = [
+  "sparse+https://github.com/rust-lang/crates.io-index",
+]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+[licenses]
+unused-allowed-license = "allow"
+# We want really high confidence when inferring licenses from text
+confidence-threshold = 0.92
+allow = [
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "OpenSSL",
+  "Unicode-3.0",
+  "Zlib",
+]
+
+# These CC0-1.0 exceptions were approved in NVIDIA's open-source license review.
+exceptions = [
+  { allow = [
+    "CC0-1.0",
+  ], crate = "axum-tracing-opentelemetry" },
+  { allow = [
+    "CC0-1.0",
+  ], crate = "init-tracing-opentelemetry" },
+  { allow = [
+    "CC0-1.0",
+  ], crate = "tonic-tracing-opentelemetry" },
+  { allow = [
+    "CC0-1.0",
+  ], crate = "tracing-opentelemetry-instrumentation-sdk" },
+]
+
+[[licenses.clarify]]
+crate = "ring"
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]

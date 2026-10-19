@@ -1,0 +1,58 @@
+# Type-check envoy-auth-extension.
+#
+# Depends on permissions/reference/permission-service and common/observability being published into this repository, so the
+# path filter below also fires when those change.
+
+name: envoy-auth-extension
+
+on:
+  pull_request:
+    paths:
+      - 'permissions/reference/envoy-auth-extension/**'
+      - 'permissions/reference/permission-service/**'
+      - 'common/observability/**'
+      - '.github/workflows/envoy-auth-extension.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - '.github/workflows/docker-image.yml'
+      - '.dockerignore'
+  push:
+    # release/v*: the mirrored release branch in the public repository, whose
+    # pull request is opened with GITHUB_TOKEN and so gets no pull_request run.
+    branches: [main, 'release/v*']
+    paths:
+      - 'permissions/reference/envoy-auth-extension/**'
+      - 'permissions/reference/permission-service/**'
+      - 'common/observability/**'
+      - '.github/workflows/envoy-auth-extension.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - '.github/workflows/docker-image.yml'
+      - '.dockerignore'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: permissions/reference/envoy-auth-extension
+
+  test:
+    # Unit tests only; no external dependencies.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: permissions/reference/envoy-auth-extension
+      test-args: '--workspace'
+
+  image:
+    # The snapshot vendors its first-party crates under vendor/, so the image
+    # builds with its component directory as the Docker build context.
+    uses: ./.github/workflows/docker-image.yml
+    with:
+      component: envoy-auth-extension
+      build-context: permissions/reference/envoy-auth-extension
+      dockerfile: permissions/reference/envoy-auth-extension/docker/envoy-auth-ext.Dockerfile

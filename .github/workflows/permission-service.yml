@@ -1,0 +1,52 @@
+# Type-check, test and build permission-service.
+
+name: permission-service
+
+on:
+  pull_request:
+    paths:
+      - 'permissions/reference/permission-service/**'
+      - '.github/workflows/permission-service.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - '.github/workflows/docker-image.yml'
+      - '.dockerignore'
+  push:
+    # release/v*: the mirrored release branch in the public repository, whose
+    # pull request is opened with GITHUB_TOKEN and so gets no pull_request run.
+    branches: [main, 'release/v*']
+    paths:
+      - 'permissions/reference/permission-service/**'
+      - '.github/workflows/permission-service.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - '.github/workflows/docker-image.yml'
+      - '.dockerignore'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: permissions/reference/permission-service
+
+  test:
+    # permission-db talks to Postgres, which runs as a service container in the reusable workflow.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: permissions/reference/permission-service
+      test-args: '--workspace'
+
+  image:
+    # The snapshot vendors its observability crates under vendor/, so the image
+    # builds with its component directory as the Docker build context and the
+    # published Cargo.lock as is.
+    uses: ./.github/workflows/docker-image.yml
+    with:
+      component: permission-service
+      build-context: permissions/reference/permission-service
+      dockerfile: permissions/reference/permission-service/docker/Dockerfile

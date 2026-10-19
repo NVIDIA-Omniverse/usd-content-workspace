@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.channelPoolAutoscaling.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}-autoscaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: autoscaler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}-autoscaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: autoscaler
+rules:
+  # Required to list pods, get their IPs for metrics collection,
+  # and patch pod annotations (for deletion cost during scale-down)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "patch"]
+  # Required to get and scale deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}-autoscaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: autoscaler
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "event-consumer-service.fullname" . }}-autoscaler
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "event-consumer-service.fullname" . }}-autoscaler
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+

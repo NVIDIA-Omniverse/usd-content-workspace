@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+edition = "2021"
+license = "Apache-2.0"
+name = "remapper-service"
+publish = false
+version = "0.1.0"
+
+[features]
+azure = ["storage-core/azure"]
+default = ["azure", "s3"]
+s3 = ["storage-core/s3"]
+
+[[bin]]
+name = "remapper-azure"
+path = "src/bin/remapper-azure.rs"
+required-features = ["azure"]
+
+[[bin]]
+name = "remapper-s3"
+path = "src/bin/remapper-s3.rs"
+required-features = ["s3"]
+
+[dependencies]
+async-trait = "0.1.92"
+clap = { version = "4.6.6", features = ["derive"] }
+figment = "0.10.19"
+futures = "0.3.34"
+serde = { version = "1.0.229", features = ["derive"] }
+storage-core = { path = "../../storage-core", features = ["layers"] }
+storage-core-util = { path = "../../storage-core-util" }
+tokio = { version = "1.53.1", features = ["full"] }
+tower = "0.5.3"
+tracing = "0.1.44"

@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if and .Values.httpProxy.enabled .Values.httpProxy.tls.certManager.enabled .Values.httpProxy.tls.enabled -}}
+{{-  $fqdn :=  print .Values.httpProxy.fqdn.host "."  .Values.httpProxy.fqdn.domain  -}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: {{ include "event-consumer-service.tls-secret-name" . }}
+  privateKey:
+    rotationPolicy: Always
+  dnsNames:
+    - {{ $fqdn }}
+    - {{ print "grpc." $fqdn }}
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+  issuerRef: {{ toYaml .Values.httpProxy.tls.certManager.issuerRef | nindent 4 }}
+{{- else -}}
+### CertManager's Certificate object  disabled, see .Values.httpProxy.enabled, .Values.httpProxy.tls.enabled, and .values.httpProxy.tls.certManager.enabled
+{{- end }}

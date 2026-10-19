@@ -1,0 +1,2 @@
+[run]
+omit = notification_common/scripts/app_scripts.py

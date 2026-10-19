@@ -1,0 +1,50 @@
+Thumbnail Service has been deployed.
+
+1. The service exposes a REST API on port {{ .Values.service.restPort }} and a gRPC API on port {{ .Values.service.grpcPort }}.
+
+2. Access endpoints:
+{{- if .Values.httpProxy.enabled }}
+  {{- $scheme := ternary "https" "http" .Values.httpProxy.tls.enabled }}
+  REST: {{ $scheme }}://{{ .Values.httpProxy.fqdn.host }}.{{ .Values.httpProxy.fqdn.domain }}{{ .Values.httpProxy.path }}
+  gRPC: {{ $scheme }}://grpc.{{ .Values.httpProxy.fqdn.host }}.{{ .Values.httpProxy.fqdn.domain }}
+{{- else }}
+  In-cluster only (httpProxy.enabled is false):
+  REST: http://{{ include "service.servicename" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.restPort }}
+  gRPC: {{ include "service.servicename" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.grpcPort }}
+{{- end }}
+
+3. Thumbnail is an event-driven service. It does not require inbound user-facing
+   authentication: it consumes storage events from the event-consumer-service,
+   dispatches generation tasks to the thumbnail-task-queue, and publishes
+   thumbnail-associated events to the event-aggregation-service.
+
+{{- if and .Values.serviceIdentity.clientCredentials.enabled (not .Values.serviceIdentity.clientCredentials.clientId) }}
+
+WARNING: serviceIdentity.clientCredentials.enabled is true but clientId is empty.
+The service will fail to obtain access tokens for outbound calls.
+{{- end }}
+
+{{- if .Values.thumbnailWorker.enabled }}
+
+4. {{ include "worker.fullname" . }} (task-worker) is deploying alongside the service.
+
+   The worker consumes WorkerEventQueue (id derived at startup from
+   notifications.eventConsumer.resourcePrefixes) for omni.thumbnail.generate work. It
+   serves no API — port {{ .Values.workerRuntime.healthPort }} carries probes and /metrics only.
+
+   Check it is consuming:
+
+     kubectl --namespace {{ .Release.Namespace }} rollout status \
+       deployment/{{ include "worker.fullname" . }}
+
+     kubectl --namespace {{ .Release.Namespace }} logs \
+       -l app.kubernetes.io/name={{ include "worker.name" . }},app.kubernetes.io/instance={{ .Release.Name }} -f
+
+   Ready means the consume stream is established, not merely that the process
+   started. A worker that never becomes Ready is usually missing its durable queue
+   or its consume permission — see helm/thumbnail-service/README.md.
+
+{{- else }}
+
+4. thumbnailWorker.enabled is false — this release installs the orchestrator only.
+{{- end }}

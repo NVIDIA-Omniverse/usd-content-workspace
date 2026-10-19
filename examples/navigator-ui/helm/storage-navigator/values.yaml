@@ -1,0 +1,209 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for storage-navigator.
+
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: nvcr.io/nvidia/omniverse/storage-navigator
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+config:
+  # Defines Content-Security-Policy header for hosted content
+  csp: ""
+
+  # Discovery URL (or hostname) that Navigator should auto-connect to on load.
+  # When set, Navigator becomes the default web UI for that SAPI stack:
+  # the "Add Connection" UI is hidden and all storage services advertised by
+  # the discovery service are surfaced as top-level nodes in the tree.
+  # When empty, Navigator falls back to manual "Add Connection" UX.
+  defaultDiscovery: ""
+
+  # Reference links shown to end users in a dropdown next to the application menu.
+  # Each entry: a label, a url opened in a new tab, and an optional icon.
+  # icon is any Tabler icon name (without the "ti-" prefix); see https://tabler.io/icons.
+  # When the icon is omitted or unknown, the link is shown without a glyph.
+  # Example:
+  # references:
+  #   - label: "Documentation"
+  #     url: "https://docs.example.com"
+  #     icon: "book"
+  #   - label: "Support"
+  #     url: "https://support.example.com"
+  #     icon: "lifebuoy"
+  references: []
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+
+  # Name override for the Service object.
+  # If not set, uses the Chart name as the service name.
+  nameOverride: ""
+
+# Enable external ingress via Contour's `httpproxy` objects
+httpProxy:
+  enabled: false
+
+  # Final ingress hostname will be composed as "<host>.<domain>".
+  fqdn:
+    host:   "navigator"
+    domain: "nodomain.none"
+
+  # The prefix for all routes of this service,
+  # e.g. if a route is available on /v1/myroute and this path equals to /api,
+  # the route will become on /api/v1/myroute
+  path: "/"
+
+  tls:
+    enabled: false
+
+    secretName: "" # Name of secret containing the TLS cert
+
+    # If enabled, will create a Certificate resource for CertManager,
+    # using either default TLS secret name or one above
+    # (httpProxy.tls.secretName) if specified.
+    #
+    # This secret will be added as tls.secretName of the httpProxy CR for
+    # Contour.
+    #
+    certManager:
+      enabled: false
+      issuerRef:
+        # Issuer name and kind must be set correctly if enabling certManager
+        # certificates
+        name: my-issuer
+        kind: my-issuer-kind
+
+  # Timeouts - will be passed verbatim to httpProxy object(s) generated
+  timeoutPolicy:
+    # Timeout for receiving a response from the server after processing
+    # a request from client. Applies to both httpProxy -> backend, 
+    # as well as Client -> httpProxy connections.
+
+    response: "10s"
+
+    # Timeout for how long the proxy should wait while there is
+    # no activity during single request/response (for HTTP/1.1) or
+    # stream (for HTTP/2)
+    idle: "3s"
+
+  # Override the default response headers policy. If specified, the default response headers won't be set.
+  # Example:
+  # responseHeadersPolicy:
+  #   set:
+  #     - name: Strict-Transport-Security
+  #       value: max-age=31536000; includeSubdomains; preload
+  #   remove:
+  #     - "X-Response-Id"
+  responseHeadersPolicy: {}
+
+  # Additional annotations for HTTPProxy CRD
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+#  - name: storage-navigator-nginx
+#    configMap:
+#      name: storage-navigator
+#      items:
+#        - key: "nginx.conf"
+#          path: "nginx.conf"
+#          mode: 0777
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: storage-navigator-config
+    mountPath: "/usr/local/nginx/conf/nginx.conf"
+    subPath: "nginx.conf"
+    readOnly: true
+  - name: storage-navigator-config
+    mountPath: "/var/www/html/config.json"
+    subPath: "config.json"
+    readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

@@ -1,0 +1,148 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if .Values.smokeTest.enabled }}
+{{- include "service.validateServiceIdentity" . }}
+{{- $serviceName := include "service.servicename" . }}
+{{- $namespace := .Release.Namespace }}
+{{- $httpPort := .Values.service.restPort }}
+{{- $defaultUrl := printf "http://%s.%s.svc.cluster.local:%v" $serviceName $namespace $httpPort }}
+{{- $serviceUrl := .Values.smokeTest.serviceUrl | default $defaultUrl }}
+{{- $imageRepo := .Values.smokeTest.image.repository | default .Values.thumbnailService.image.repository }}
+{{- $imageTag := .Values.smokeTest.image.tag | default (.Values.image.tag | default .Chart.AppVersion) }}
+{{- $imagePullPolicy := .Values.smokeTest.image.pullPolicy | default .Values.image.pullPolicy }}
+{{- $imagePullSecrets := .Values.smokeTest.image.pullSecrets | default .Values.image.pullSecrets }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "service.fullname" . }}-smoke-test"
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: smoke-test
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- with .Values.smokeTest.extraAnnotations }}
+    {{- $safeAnnotations := omit . "helm.sh/hook" "helm.sh/hook-delete-policy" }}
+    {{- if not (empty $safeAnnotations) }}
+    {{- toYaml $safeAnnotations | nindent 4 }}
+    {{- end }}
+    {{- end }}
+spec:
+  {{- if gt (int (.Values.smokeTest.ttlSecondsAfterFinished | default 0)) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.smokeTest.ttlSecondsAfterFinished }}
+  {{- end }}
+  backoffLimit: 0
+  template:
+    metadata:
+      {{- $podAnnotations := merge (deepCopy .Values.smokeTest.podAnnotations) .Values.podAnnotations -}}
+      {{- with $podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "service.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: smoke-test
+        {{- $podLabels := merge (deepCopy .Values.smokeTest.podLabels) .Values.podLabels -}}
+        {{- with $podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Values.smokeTest.serviceAccountName | default (include "service.serviceAccountName" .) }}
+      # Workload-identity sidecars require a projected service-account token. Keep pod-level
+      # automount disabled in client-credentials mode, but force-enable it when access-token-file
+      # mode is active for smoke tests.
+      automountServiceAccountToken: {{ ternary true .Values.serviceAccount.automount .Values.serviceIdentity.accessTokenFile.enabled }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+      {{- $provisioner := merge (deepCopy .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container) (dict "securityContext" .Values.securityContext) }}
+      initContainers:
+        - name: {{ default (printf "%s-token-provisioner" .Chart.Name) .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.name }}
+          restartPolicy: Always
+          {{- (omit $provisioner "name" "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+            {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: token-exchange
+              mountPath: "/etc/secrets/access-token"
+      {{- end }}
+      containers:
+        - name: smoke-test
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ $imageRepo }}:{{ $imageTag }}"
+          imagePullPolicy: {{ $imagePullPolicy }}
+          command: ["/app/thumbnail-smoke-test"]
+          env:
+            - name: SERVICE_URL
+              value: {{ $serviceUrl | quote }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: AUTH_TOKEN_FILE
+              value: {{ .Values.serviceIdentity.accessTokenFile.path | quote }}
+            - name: ENABLE_ACCESS_TOKEN_FILE
+              value: "true"
+            - name: ACCESS_TOKEN_FILE_PATH
+              value: {{ .Values.serviceIdentity.accessTokenFile.path | quote }}
+            - name: ACCESS_TOKEN_FILE_POLL_INTERVAL
+              value: {{ .Values.serviceIdentity.accessTokenFile.pollInterval | quote }}
+            {{- end }}
+            {{- if .Values.smokeTest.sourceFile }}
+            - name: SOURCE_FILE
+              value: {{ .Values.smokeTest.sourceFile | quote }}
+            {{- end }}
+            - name: WAIT_RETRIES
+              value: {{ .Values.smokeTest.waitRetries | quote }}
+            - name: WAIT_INTERVAL
+              value: {{ .Values.smokeTest.waitInterval | quote }}
+            - name: REQUEST_TIMEOUT
+              value: {{ .Values.smokeTest.requestTimeout | quote }}
+          {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+          volumeMounts:
+            - name: token-exchange
+              readOnly: true
+              mountPath: "/etc/secrets/access-token"
+          {{- end }}
+          {{- with .Values.smokeTest.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+      volumes:
+        # Volume names must be RFC1123 labels (lowercase + '-'); camelCase is rejected by Kubernetes.
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+      {{- end }}
+      restartPolicy: Never
+{{- end }}

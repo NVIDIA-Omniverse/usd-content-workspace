@@ -1,0 +1,136 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ if .Values.httpProxy.enabled -}}
+
+{{-  $proxies  := dict "rest" (dict 
+                                     "hostPrefix" ""
+                                     "targetSvc" (include "storage-service.servicename" $)
+                                     "targetPort" .Values.service.rest.port
+                                     "path" (.Values.httpProxy.path | default "/")
+                                     "protocol" ""
+                                     "v" (mustMergeOverwrite 
+                                            (deepCopy $.Values.httpProxy)
+                                            (deepCopy $.Values.httpProxy.rest)
+                                         )
+                              )
+                      "grpc"  (dict
+                                     "hostPrefix" "grpc."
+                                     "targetSvc" (include "storage-service.servicename" $)
+                                     "targetPort" .Values.service.grpc.port
+                                     "protocol" "h2c"
+                                     "path" "/"
+                                     "v" (mustMergeOverwrite 
+                                            (deepCopy $.Values.httpProxy)
+                                            (deepCopy $.Values.httpProxy.grpc)
+                                         )
+                              )
+                     
+-}}
+{{- $streamingRoutes := list
+    "/nvidia.omniverse.storage.fileobject.v1alpha.FileObjectService/Enumerate"
+    "/nvidia.omniverse.storage.fileobject.v1alpha.FileObjectService/Read"
+    "/nvidia.omniverse.storage.fileobject.v1alpha.FileObjectService/ReadFromAddress"
+    "/nvidia.omniverse.storage.fileobject.v1alpha.FileObjectService/Write"
+    "/nvidia.omniverse.storage.fileobject.v1alpha.FileFolderService/List"
+    "/nvidia.omniverse.storage.filefolder.v1alpha.FileFolderService/ListStat"
+    "/nvidia.omniverse.storage.versioning.v1alpha.VersioningService/EnumerateVersions"
+    "/nvidia.omniverse.storage.fileobject.v1beta.FileObjectService/Enumerate"
+    "/nvidia.omniverse.storage.fileobject.v1beta.FileObjectService/Read"
+    "/nvidia.omniverse.storage.fileobject.v1beta.FileObjectService/ReadFromAddress"
+    "/nvidia.omniverse.storage.fileobject.v1beta.FileObjectService/Write"
+    "/nvidia.omniverse.storage.fileobject.v1beta.FileFolderService/List"
+    "/nvidia.omniverse.storage.filefolder.v1beta.FileFolderService/ListStat"
+    "/nvidia.omniverse.storage.versioning.v1beta.VersioningService/EnumerateVersions"
+-}}
+
+{{-  range $type, $config := $proxies }}
+{{-  $fqdn := print $config.hostPrefix  $config.v.fqdn.host "."  $config.v.fqdn.domain  -}}
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ print (include "storage-service.fullname" $) "-" $type }}
+  labels:
+    {{- include "storage-service.labels" $ | nindent 4 }}
+  annotations:  {{ toYaml $config.v.annotations | nindent 4 }} 
+spec:
+  virtualhost:
+    fqdn: {{ $fqdn }}
+    {{- if $config.v.tls.enabled }}
+    tls:
+      secretName:  {{ include "storage-service.tls-secret-name" $ }}
+    {{- end }}
+    {{- with $config.v.corsPolicy }}
+    corsPolicy:
+      allowCredentials: {{ .allowCredentials }}
+      allowHeaders: {{ .allowHeaders | toYaml | nindent 8 }}
+      allowMethods: {{ .allowMethods | toYaml | nindent 8 }}
+      exposeHeaders: {{ .exposeHeaders | toYaml | nindent 8 }}
+      {{- if .allowOrigin }}
+      allowOrigin: {{ .allowOrigin | toYaml | nindent 8 }}
+      {{- else }}
+      allowOrigin:
+        - http[s]?:\/\/.*\.{{ $config.v.fqdn.domain | replace "." "\\." }}
+      {{- end }}
+    {{- end }}
+
+    {{- if $config.v.authExtension.enabled }}
+    authorization:
+      responseTimeout: {{ $config.v.authExtension.responseTimeout }}
+      extensionRef:
+        name: {{ $config.v.authExtension.extensionRef.name }}
+        namespace: {{ $config.v.authExtension.extensionRef.namespace | default $.Release.Namespace }}
+    {{- end }}
+
+  routes:
+    {{- if eq $type "grpc" }}
+    # Streaming gRPC RPCs require extended timeouts because
+    # clients maintain long-lived connections for file transfer
+    # and enumeration operations.
+      {{- range $idx, $route := $streamingRoutes }}
+    - conditions:
+        - prefix: {{ $route | quote }}
+      {{- if $config.v.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ $config.v.responseHeadersPolicy | toYaml | nindent 8 }}
+      {{- end }}
+      timeoutPolicy: {{ $config.v.streamTimeoutPolicy | toYaml | nindent 8 }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          protocol: h2c
+      {{- end }}
+    {{- end }}
+    # All other (non-streaming) routes use the configurable
+    # timeouts from values.yaml.
+    - conditions:
+        - prefix: {{ $config.path }}
+      timeoutPolicy: {{ $config.v.timeoutPolicy | toYaml | nindent 8 }}
+      {{- if $config.v.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ $config.v.responseHeadersPolicy | toYaml | nindent 8 }}
+      {{- else if (and $config.v.tls.enabled (eq $type "rest")) }}
+      responseHeadersPolicy:
+        set:
+          - name: Strict-Transport-Security
+            value: max-age=31536000
+      {{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          {{- ternary "" ((print "protocol: "  $config.protocol) | nindent 10) (empty $config.protocol) }}
+{{  end -}}
+{{- else -}}
+### HTTPProxy (ingress) is disabled, see .Values.httpProxy.enabled 
+{{- end }}

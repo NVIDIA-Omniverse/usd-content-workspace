@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+
+modules:
+    - name: pb.api.nvidia.com/omniverse/notifications
+
+lint:
+  use:
+    - STANDARD
+    - COMMENTS
+
+breaking:
+  use:
+    - FILE
+
+deps:
+  - buf.build/protocolbuffers/wellknowntypes

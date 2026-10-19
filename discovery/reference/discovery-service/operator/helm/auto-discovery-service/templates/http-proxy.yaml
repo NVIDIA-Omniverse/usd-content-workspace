@@ -1,0 +1,123 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ if .Values.httpProxy.enabled -}}
+{{- $root := . -}}
+{{- $endpoints := .Values.httpProxy.endpoints -}}
+{{- $hasConfiguredEndpoints := not (empty $endpoints) -}}
+{{- if not $endpoints -}}
+{{- $fqdn := required "httpProxy.fqdn.domain is required when httpProxy.endpoints is empty" .Values.httpProxy.fqdn.domain -}}
+{{- with .Values.httpProxy.fqdn.host -}}
+{{- $fqdn = printf "%s.%s" . $fqdn -}}
+{{- end -}}
+{{- $endpoints = list (dict "fqdn" $fqdn "port" .Values.service.ports.external) -}}
+{{- end -}}
+{{- range $endpoint := $endpoints }}
+{{- $resourceName := include "discovery.fullname" $root -}}
+{{- if $hasConfiguredEndpoints -}}
+{{- $endpointName := required "httpProxy.endpoints[].name is required" $endpoint.name -}}
+{{- $resourceName = printf "%s-%s" $resourceName $endpointName | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ $resourceName }}
+  {{- with $root.Values.httpProxy.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "discovery.labels" $root | nindent 4 }}
+spec:
+  virtualhost:
+    fqdn: {{ required "httpProxy.endpoints[].fqdn is required" $endpoint.fqdn | quote }}
+    {{- if $root.Values.httpProxy.tls.enabled }}
+    tls:
+      secretName: {{ include "discovery.tlsSecretName" $root }}
+    {{- end }}
+    corsPolicy: {{ $root.Values.httpProxy.corsPolicy | toYaml | nindent 6 }}
+
+    {{- if $root.Values.httpProxy.authExtension.enabled }}
+    authorization:
+      responseTimeout: {{ $root.Values.httpProxy.authExtension.responseTimeout }}
+      extensionRef:
+        name: {{ $root.Values.httpProxy.authExtension.extensionRef.name }}
+        namespace: {{ $root.Values.httpProxy.authExtension.extensionRef.namespace | default $root.Release.Namespace }}
+    {{- end }}
+  routes:
+    {{/*
+      Always expose auth-config without Contour auth so clients can bootstrap
+      whether AUTH_CONFIG_JSON comes from openId values or extraVars.
+      The app returns 404 when auth config is not configured.
+    */}}
+    {{- $basePath := trimSuffix "/" ($root.Values.httpProxy.path | default "/") }}
+    - conditions:
+        - regex: {{ printf "%s/api/v(1|1alpha|2|2beta)/auth-config$" $basePath | quote }}
+      timeoutPolicy: {{ $root.Values.httpProxy.timeoutPolicy | toYaml | nindent 8 }}
+      services:
+        - name: {{ include "discovery.servicename" $root }}
+          port: {{ required "httpProxy.endpoints[].port is required" $endpoint.port }}
+      authPolicy:
+        disabled: true
+    {{- range $routeIndex, $route := ($endpoint.additionalRoutes | default list) }}
+    {{- $matchCount := 0 }}
+    {{- if hasKey $route "exact" }}{{- $matchCount = add1 $matchCount }}{{- end }}
+    {{- if hasKey $route "prefix" }}{{- $matchCount = add1 $matchCount }}{{- end }}
+    {{- if hasKey $route "regex" }}{{- $matchCount = add1 $matchCount }}{{- end }}
+    {{- if ne (int $matchCount) 1 }}
+    {{- fail (printf "httpProxy.endpoints[%s].additionalRoutes[%d] must set exactly one of exact, prefix, or regex" ($endpoint.name | default "legacy") $routeIndex) }}
+    {{- end }}
+    {{- $service := required (printf "httpProxy.endpoints[%s].additionalRoutes[%d].service is required" ($endpoint.name | default "legacy") $routeIndex) $route.service }}
+    - conditions:
+        {{- if hasKey $route "exact" }}
+        - exact: {{ required (printf "httpProxy.endpoints[%s].additionalRoutes[%d].exact must not be empty" ($endpoint.name | default "legacy") $routeIndex) $route.exact | quote }}
+        {{- else if hasKey $route "prefix" }}
+        - prefix: {{ required (printf "httpProxy.endpoints[%s].additionalRoutes[%d].prefix must not be empty" ($endpoint.name | default "legacy") $routeIndex) $route.prefix | quote }}
+        {{- else }}
+        - regex: {{ required (printf "httpProxy.endpoints[%s].additionalRoutes[%d].regex must not be empty" ($endpoint.name | default "legacy") $routeIndex) $route.regex | quote }}
+        {{- end }}
+      timeoutPolicy: {{ $root.Values.httpProxy.timeoutPolicy | toYaml | nindent 8 }}
+      services:
+        - name: {{ required (printf "httpProxy.endpoints[%s].additionalRoutes[%d].service.name is required" ($endpoint.name | default "legacy") $routeIndex) $service.name | quote }}
+          port: {{ required (printf "httpProxy.endpoints[%s].additionalRoutes[%d].service.port is required" ($endpoint.name | default "legacy") $routeIndex) $service.port }}
+    {{- end }}
+    {{- if $root.Values.httpProxy.rootRedirect.enabled }}
+    {{- $redirectTarget := required "httpProxy.rootRedirect.target is required when rootRedirect.enabled is true" $root.Values.httpProxy.rootRedirect.target }}
+    {{- $_ := required "httpProxy.rootRedirect.target.fqdn is required when rootRedirect.enabled is true" $redirectTarget.fqdn }}
+    {{/*
+      Contour ignores authPolicy.disabled on requestRedirectPolicy routes, so the
+      operator serves the 302 itself and this route is a normal service backend
+      with auth disabled (same pattern as auth-config).
+    */}}
+    - conditions:
+        - exact: {{ $root.Values.httpProxy.path | default "/" | quote }}
+      timeoutPolicy: {{ $root.Values.httpProxy.timeoutPolicy | toYaml | nindent 8 }}
+      services:
+        - name: {{ include "discovery.servicename" $root }}
+          port: {{ required "httpProxy.endpoints[].port is required" $endpoint.port }}
+      authPolicy:
+        disabled: true
+    {{- end }}
+    - conditions:
+        - prefix: {{ $root.Values.httpProxy.path | default "/" }}
+      timeoutPolicy: {{ $root.Values.httpProxy.timeoutPolicy | toYaml | nindent 8 }}
+      services:
+        - name: {{ include "discovery.servicename" $root }}
+          port: {{ required "httpProxy.endpoints[].port is required" $endpoint.port }}
+{{- end }}
+{{- else -}}
+### HTTPProxy (ingress) is disabled, see .Values.httpProxy.enabled
+{{- end }}

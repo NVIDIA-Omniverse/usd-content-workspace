@@ -1,0 +1,2 @@
+[properties]
+deny_contains = ["hybrid"]

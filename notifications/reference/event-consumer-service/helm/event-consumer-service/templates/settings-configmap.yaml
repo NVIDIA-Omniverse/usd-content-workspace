@@ -1,0 +1,140 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}-settings
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+data:
+  # Observability (OpenTelemetry over OTLP/gRPC).
+  # The standardized `observability` block takes precedence; the service uses
+  # gRPC, so endpoints are read from `.endpoint.grpc`. notification-common gates
+  # the metrics and tracing signals independently via OMNI_EVENTS_METRICS_ENABLED
+  # and OMNI_EVENTS_TRACING_ENABLED, so each toggle maps straight to its own env
+  # var. There is no dedicated logs signal or endpoint in the standardized
+  # schema: notification-common ships logs whenever either signal is enabled and
+  # reuses the tracing endpoint (falling back to the metrics endpoint when only
+  # metrics is enabled). Each unset endpoint falls back to the other signal's
+  # endpoint so no OTLP endpoint is emitted empty (all point at the same
+  # collector). When neither signal is enabled, the legacy `telemetry` block is
+  # used so existing values render identically.
+  {{- $obs := .Values.observability }}
+  {{- if or $obs.metrics.enabled $obs.tracing.enabled }}
+  {{- $metricsEndpoint := dig "endpoint" "grpc" "" $obs.metrics }}
+  {{- $tracingEndpoint := dig "endpoint" "grpc" "" $obs.tracing }}
+  {{- if and $obs.metrics.enabled (not $metricsEndpoint) }}{{ fail "observability.metrics.endpoint.grpc must be set when observability.metrics.enabled is true" }}{{ end }}
+  {{- if and $obs.tracing.enabled (not $tracingEndpoint) }}{{ fail "observability.tracing.endpoint.grpc must be set when observability.tracing.enabled is true" }}{{ end }}
+  {{- $metricsEndpoint = $metricsEndpoint | default $tracingEndpoint }}
+  {{- $tracingEndpoint = $tracingEndpoint | default $metricsEndpoint }}
+  OMNI_EVENTS_METRICS_ENABLED: "{{ $obs.metrics.enabled }}"
+  OMNI_EVENTS_TRACING_ENABLED: "{{ $obs.tracing.enabled }}"
+  OMNI_EVENTS_OTLP_TRACING_ENDPOINT: {{ $tracingEndpoint | quote }}
+  OMNI_EVENTS_OTLP_METRICS_ENDPOINT: {{ $metricsEndpoint | quote }}
+  OMNI_EVENTS_OTLP_LOGS_ENDPOINT: {{ $tracingEndpoint | quote }}
+  {{- else }}
+  OMNI_EVENTS_TELEMETRY_ENABLED: "{{ .Values.telemetry.enabled }}"
+  OMNI_EVENTS_OTLP_TRACING_ENDPOINT: "{{ .Values.telemetry.otlp_tracing_endpoint }}"
+  OMNI_EVENTS_OTLP_METRICS_ENDPOINT: "{{ .Values.telemetry.otlp_metrics_endpoint }}"
+  OMNI_EVENTS_OTLP_LOGS_ENDPOINT: "{{ .Values.telemetry.otlp_logs_endpoint }}"
+  {{- end }}
+  OMNI_EVENTS_GRPC_PORT: "[::]:{{ .Values.service.grpc.port }}"
+  OMNI_EVENTS_LOG_LEVEL: "{{ .Values.logging.level }}"
+  OMNI_EVENTS_GRPC_HEALTH_CHECKING_ENABLED: "{{ .Values.service.grpc.healthCheckingEnabled }}"
+  OMNI_EVENTS_PERMISSIONS_ENDPOINT: "{{ .Values.permissions.endpoint }}"
+  OMNI_EVENTS_PERMISSIONS_TTL_SECONDS: "{{ .Values.permissions.ttl_seconds }}"
+  OMNI_EVENTS_PERMISSIONS_YAML_FILE_PATH: "{{ .Values.permissions.yaml_file_path }}"
+  OMNI_EVENTS_REST_API_ENABLED: "{{ .Values.service.rest.enabled }}"
+  OMNI_EVENTS_REST_PORT: "{{ .Values.service.rest.port }}"
+  OMNI_EVENTS_CORS_ALLOW_ORIGINS: {{ include "event-consumer-service.corsAllowOrigins" . | quote }}
+  {{- /*
+  The helpers in _helpers.tpl select the effective principalSource and fail
+  the render on any auth combination the service would refuse at startup
+  (notification-common's AuthSettings, and permissions.enabled without
+  permissions.endpoint).
+  */}}
+  {{- include "event-consumer-service.validateAuthSettings" . }}
+  {{- $ps := include "event-consumer-service.principalSource" . }}
+  OMNI_EVENTS_PERMISSIONS_ENABLED: "{{ .Values.permissions.enabled }}"
+  OMNI_EVENTS_STORAGE_PERMISSIONS_ENABLED: "{{ .Values.permissions.storage_permissions.enabled }}"
+  OMNI_EVENTS_PRINCIPAL_SOURCE: "{{ $ps }}"
+  OMNI_EVENTS_ALLOW_UNVERIFIED_JWT: "{{ include "event-consumer-service.allowUnverifiedJwt" . }}"
+  OMNI_EVENTS_USER_INFO_SERVICE_URI: "{{ .Values.userInfoService.uri }}"
+  OMNI_EVENTS_OPENID_ENABLED: "{{ .Values.openId.enabled }}"
+  OMNI_EVENTS_TOKEN_VERIFICATION_TYPE: "{{ .Values.openId.tokenVerificationType | default "jwt" }}"
+  OMNI_EVENTS_OPENID_CONFIGURATION_URI: "{{ if or (eq $ps "jwt") (eq $ps "opaque") }}{{ .Values.openId.openIdConfigurationUri }}{{ end }}"
+  OMNI_EVENTS_PRINCIPAL_ID_CLAIM: "{{ if ne $ps "disabled" }}{{ .Values.openId.principalIdClaim }}{{ end }}"
+  OMNI_EVENTS_JWT_AUDIENCES: "{{ if or (eq $ps "jwt") (eq $ps "opaque") }}{{ include "event-consumer-service.jwtAudiences" . }}{{ end }}"
+  OMNI_EVENTS_AUTH_CONTEXT_TTL: "{{ .Values.authContextTtl }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_CLIENT_LIMIT: "{{ .Values.rabbitmq.channel_client_limit }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_SIZE: "{{ .Values.rabbitmq.channel_pool_size }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_MIN_SIZE: "{{ .Values.rabbitmq.channel_pool_min_size }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_OVERFLOW_ENABLED: "{{ .Values.rabbitmq.channel_overflow_enabled }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_WAIT_MS: "{{ .Values.rabbitmq.channel_wait_ms }}"
+  OMNI_EVENTS_NON_DURABLE_QUEUE_TTL_SECONDS: "{{ .Values.rabbitmq.non_durable_queue_ttl_seconds }}"
+  OMNI_EVENTS_READINESS_MIN_AVAILABLE_CHANNELS: "{{ .Values.rabbitmq.readiness_min_available_channels }}"
+  # Memory-safe non-durable stream cap inputs (SR-3.5). The prefetch is the
+  # dominant broker-memory lever and the divisor in the computed cap; the budget
+  # is fleet-wide MiB apportioned across the max-replicas divisor below. Both
+  # render unconditionally as quoted strings.
+  OMNI_EVENTS_RABBITMQ_CHANNEL_PREFETCH_COUNT: "{{ .Values.rabbitmq.channel_prefetch_count }}"
+  OMNI_EVENTS_BROKER_STREAM_MEMORY_BUDGET_MIB: "{{ .Values.rabbitmq.broker_stream_memory_budget_mib }}"
+  # The absolute per-pod cap override is optional and omitting the key is
+  # meaningful: unset (null) means the cap is COMPUTED from the budget and
+  # prefetch above. Null (or omitted) is the ONLY input that suppresses the key.
+  # This is an explicit nil test rather than `with`, which treats 0 and "" as
+  # absent: an operator-supplied 0 must SURFACE so pydantic rejects it on ge=1
+  # and the pod crash-loops loudly, rather than silently degrading into the
+  # computed default. (The field is int | None, so an unconditional empty render
+  # would also fail the pydantic parse -- absence, not emptiness, is unset.)
+  {{- if not (kindIs "invalid" .Values.rabbitmq.max_non_durable_streams_per_pod) }}
+  OMNI_EVENTS_MAX_NON_DURABLE_STREAMS_PER_POD: "{{ .Values.rabbitmq.max_non_durable_streams_per_pod }}"
+  {{- end }}
+  # The divisor that apportions the fleet-wide broker memory budget into a
+  # per-pod non-durable stream cap. One helm value feeds both consumers of the
+  # key below - the autoscaler Deployment's env var of the same name and this
+  # one - so an operator never sets the same fleet ceiling twice. When
+  # autoscaling is disabled there is no autoscaler to own the ceiling, so
+  # replicaCount IS the fleet ceiling and supplies the divisor.
+  OMNI_EVENTS_SCALER_MAX_REPLICAS: "{{ if .Values.channelPoolAutoscaling.enabled }}{{ .Values.channelPoolAutoscaling.maxReplicas }}{{ else }}{{ .Values.replicaCount }}{{ end }}"
+  # The shed threshold is optional and omitting the key is meaningful: when it
+  # is unset the service computes the midpoint of the soft-threshold/cap band
+  # itself. Null (or omitted) is therefore the ONLY input that suppresses the
+  # key; every other value renders as supplied and is validated by pydantic at
+  # startup. That is an explicit nil test rather than `with`, which treats 0
+  # and "" as absent and would silently fall back to the computed midpoint.
+  # Both of those values render here instead, and pydantic then rejects them
+  # (0 fails the field's ge=1; "" is not parseable as an int), crashing the
+  # pod loudly at startup. That is the intended posture: a misconfigured
+  # ceiling must never degrade quietly into the computed default.
+  {{- if not (kindIs "invalid" .Values.rabbitmq.max_re_routable_streams_per_pod) }}
+  OMNI_EVENTS_MAX_RE_ROUTABLE_STREAMS_PER_POD: "{{ .Values.rabbitmq.max_re_routable_streams_per_pod }}"
+  {{- end }}
+  # Durable channel pool and durable consumer QoS. The durable pool serves
+  # durable queue operations and DLQ browse, admitted against its own budget and
+  # strict by construction (no durable overflow twin). The durable pool prefetch
+  # is effectively inert -- every durable consumer and DLQ browse overrides it
+  # per checkout via set_qos.
+  OMNI_EVENTS_DURABLE_CONSUMER_PREFETCH_COUNT: "{{ .Values.rabbitmq.durable_consumer_prefetch_count }}"
+  OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_POOL_SIZE: "{{ .Values.rabbitmq.durable_channel_pool_size }}"
+  OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_POOL_MIN_SIZE: "{{ .Values.rabbitmq.durable_channel_pool_min_size }}"
+  OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_PREFETCH_COUNT: "{{ .Values.rabbitmq.durable_channel_prefetch_count }}"
+  OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_WAIT_MS: "{{ .Values.rabbitmq.durable_channel_wait_ms }}"
+  OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_CLIENT_LIMIT: "{{ .Values.rabbitmq.durable_channel_client_limit }}"
+  # Graceful-drain shutdown settings (SR-6.1 / SR-7.1), in the order the
+  # shutdown path spends them. All three are plain floats with safe code
+  # defaults, so they render unconditionally as quoted strings (no nil test);
+  # deployment.yaml bounds-checks them at render time, since a bad value would
+  # otherwise only surface as a startup failure. The settle delay holds the pod
+  # serving normally after SIGTERM so an endpoint change can propagate before
+  # the drain begins; 0 skips that phase. The drain window then bounds how long
+  # shutdown waits for in-flight non-durable streams to drain, and 0 likewise
+  # skips the wait; the pod's terminationGracePeriodSeconds must cover both plus
+  # the post-drain server teardown. The poll interval is the drain re-read
+  # cadence and is the one value that must be strictly positive.
+  OMNI_EVENTS_SHUTDOWN_SETTLE_DELAY_SECONDS: "{{ .Values.shutdown.settleDelaySeconds }}"
+  OMNI_EVENTS_SHUTDOWN_DRAIN_WINDOW_SECONDS: "{{ .Values.shutdown.drainWindowSeconds }}"
+  OMNI_EVENTS_SHUTDOWN_DRAIN_POLL_INTERVAL_SECONDS: "{{ .Values.shutdown.drainPollIntervalSeconds }}"
+  OMNI_EVENTS_REDIS_ENABLED: "{{ .Values.redis.enabled }}"

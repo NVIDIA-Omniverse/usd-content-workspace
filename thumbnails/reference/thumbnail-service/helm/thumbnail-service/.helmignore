@@ -1,0 +1,3 @@
+# Chart-root Make/CI render fixtures. Do not use a bare `tests/` pattern —
+# that would also omit templates/tests (in-cluster helm test hooks).
+/tests
