@@ -1,0 +1,9 @@
+build/
+venv/
+.DS_Store
+*.egg
+node_modules/
+public/
+../_build/
+_repo/
+*.pdf

@@ -1,0 +1,10 @@
+[workspace]
+members = [
+{%- for dir in dirs %}
+  "{{dir}}",
+{%- endfor %}
+]
+
+resolver = "2"
+
+[workspace.lints]

@@ -1,0 +1,154 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+image:
+  repository: nvcr.io/nvidia/omniverse/userinfo-conformance-test
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+  pullSecrets: []
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  ## @param serviceAccount.annotations Annotations to add to the ServiceAccount.
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+## Shared pod metadata applied to every pod the chart deploys.
+## @param podAnnotations Annotations added to all pods.
+podAnnotations: {}
+## @param podLabels Extra labels added to all pods.
+## Merged on top of the chart's common labels; must not collide with selector labels.
+podLabels: {}
+
+podSecurityContext:
+  ## @param podSecurityContext.runAsNonRoot Reject the pod if the image runs as UID 0.
+  runAsNonRoot: true
+  ## @param podSecurityContext.seccompProfile.type Seccomp profile applied to all containers.
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  ## @param securityContext.runAsNonRoot Reject the container if the image runs as UID 0.
+  runAsNonRoot: true
+  ## @param securityContext.readOnlyRootFilesystem Mount the root filesystem read-only.
+  readOnlyRootFilesystem: true
+  ## @param securityContext.allowPrivilegeEscalation Forbid setuid / file-capability elevation.
+  allowPrivilegeEscalation: false
+  ## @param securityContext.capabilities.drop Drop all Linux capabilities.
+  capabilities:
+    drop:
+      - ALL
+
+## @param resources Resource requests / limits for the conformance-test container.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+## Configures the identity the conformance test uses when calling the target
+## User Info Service. The structure mirrors `serviceIdentity` in the
+## permission-service chart so the same deployment conventions (OpenID
+## Connect Discovery, client-credentials secret mounts, sidecar-driven token
+## provisioning) apply here verbatim.
+##
+## Leave both blocks disabled to run the test unauthenticated — only valid
+## when the target service has authentication turned off.
+serviceIdentity:
+  clientCredentials:
+    ## @param serviceIdentity.clientCredentials.enabled Defines if the conformance test needs to authenticate its requests to the target service.
+    ## @param serviceIdentity.clientCredentials.openIdConfigurationUri The OpenID Connect Discovery URI used for the client credentials token exchange.
+    ##   The test fetches this URL, reads `token_endpoint` from the returned metadata, and uses it as the OAuth2 token endpoint.
+    ##   See https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata.
+    ## @param serviceIdentity.clientCredentials.clientId The client ID used for the client-credentials flow to obtain a service token.
+    ## @param serviceIdentity.clientCredentials.clientScope The value for the `scope` field passed to the identity provider with the client-credentials flow.
+    ## @param serviceIdentity.clientCredentials.clientSecretRef Reference to an existing Kubernetes secret containing the client secret.
+    ##   When enabled, the referenced secret is mounted into the conformance-test pod.
+    ## @param serviceIdentity.clientCredentials.extraHeaders Additional HTTP headers to include in the token exchange request (e.g. {"X-Custom-Header": "value"}).
+    ## @param serviceIdentity.clientCredentials.extraBodyParams Additional body parameters to include in the token exchange request (e.g. {"audience": "https://api.example.com"}).
+
+    enabled: false
+    openIdConfigurationUri: ""
+    clientId: ""
+    clientScope: ""
+    clientSecretRef:
+      name: ""
+      key: ""
+    extraHeaders: {}
+    extraBodyParams: {}
+
+  accessTokenFile:
+    ## @param serviceIdentity.accessTokenFile.enabled Defines if the test should read a pre-provisioned access token from a file instead of running the client-credentials flow.
+    ## Only one of clientCredentials.enabled and accessTokenFile.enabled should be true.
+
+    enabled: false
+    ## @param serviceIdentity.accessTokenFile.path Path of the access token file inside the conformance-test container.
+    path: "/etc/secrets/access-token/token"
+    provisionerSidecar:
+      # Full container spec; will be replicated verbatim, with
+      # one exception: volume mounts will get an ADDITIONAL volume called
+      # `token-exchange` to be able to comm token to the conformance-test
+      # container this token provisioner sidecar is for.
+      container:
+
+    ## @param serviceIdentity.accessTokenFile.pollInterval How often to check the token file for changes (e.g. "15s", "1m").
+    ##   Kept for structural parity with the common serviceIdentity section; the conformance test is a one-shot Job and reads the file once at startup.
+    pollInterval: "15s"
+
+## --- Conformance test specific values ---
+
+conformanceTest:
+  ## Which test suites to run: "rest", "grpc", or "all"
+  testSuite: "all"
+
+  ## Target service endpoints
+  restUrl: "http://userinfo-service:8080"
+  grpcUrl: "http://userinfo-service:50051"
+  grpcTlsEnabled: false
+
+  ## REST path used by the readiness wait loop. Set to a 2xx-returning probe
+  ## that signals "directory cache populated and ready to serve".
+  readyPath: "/readyz"
+
+  ## Page size used by the fixture-sampling probe. The test fixtures are
+  ## sampled from the service itself (no operator-supplied user/group
+  ## identifiers); a larger value gives sampling a better chance to find a
+  ## user with an email and a group that has at least one direct member.
+  pageLimit: 20
+
+  ## Per-request HTTP / gRPC timeout in seconds.
+  httpTimeout: 30
+
+  ## Retry settings for waiting on service readiness.
+  waitRetries: 10
+  waitInterval: 5

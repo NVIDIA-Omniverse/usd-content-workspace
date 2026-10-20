@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "tonic-observability"
+description = "Tracing and metric layers for Tonic-based gRPC clients and servers"
+
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+authors.workspace = true
+license.workspace = true
+
+autobins = false
+autoexamples = false
+autobenches = false
+
+include = ["/src", "/LICENSE.txt"]
+readme = "../../README.md"
+homepage = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/common/observability"
+repository = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/common/observability"
+
+publish = ["ct-omniverse-cargo-local"]
+
+[features]
+# extremely verbose logging - not recommended!
+verbose = []
+# draft proposal
+traceresponse = []
+default = []
+
+[dependencies]
+otel-tools = { version = "0.14.0", default-features = false, path = "../otel-tools" }
+
+pin-project-lite = { workspace = true, default-features = false }
+tonic = { workspace = true, default-features = false, features = [
+    "codegen",
+    "transport",
+] }
+prost = { workspace = true, default-features = false }
+prost-types = { workspace = true, default-features = false, features = ["std"] }
+tower-layer = { workspace = true, default-features = false }
+tower-service = { workspace = true, default-features = false }
+h2 = { workspace = true, default-features = false }
+hyper = { workspace = true, default-features = false }
+http-body = { workspace = true, default-features = false }
+bytes = { workspace = true, default-features = false }
+tracing = { workspace = true, default-features = false }
+opentelemetry = { workspace = true, default-features = false }
+opentelemetry-semantic-conventions = { workspace = true, default-features = false, features = [
+    "semconv_experimental",
+] }
+
+[dev-dependencies]
+otel-asserts = { path = "../otel-asserts" }
+otel-tools = { path = "../otel-tools", default-features = false, features = [
+    "otlp",
+] }
+protos = { path = "../protos" }
+testing = { path = "../testing" }
+tonic-observability = { path = "../tonic-observability", features = [
+    "verbose",
+] }
+
+tonic = { workspace = true, default-features = false, features = [
+    "router",
+    "gzip",
+] }
+tracing-opentelemetry = { workspace = true, default-features = false }
+tracing-subscriber = { workspace = true, default-features = false }
+tokio = { workspace = true, default-features = false, features = [
+    "net",
+    "sync",
+    "rt-multi-thread",
+] }
+tower = { workspace = true }
+futures = { workspace = true, default-features = false, features = ["std"] }
+axum-core = { version = "*" }
+hyper-util = { version = "*" }

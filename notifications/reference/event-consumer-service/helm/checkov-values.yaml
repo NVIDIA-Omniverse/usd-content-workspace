@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &
+# AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+## Values for the CI Checkov scan (prelaunch:helm:checkov in .gitlab-ci.yml,
+## passed with --var-file). Not a deployment values file.
+##
+## Checkov renders each chart with `helm template` before scanning it. The
+## event-consumer-service chart's defaults deliberately fail to render without
+## an auth configuration (principalSource unset and no OpenID provider) and
+## without the queue-policy hook's broker management values, and Checkov
+## reports a chart it cannot render only as a warning and exits 0, so without
+## these values the scan passes having checked nothing. These placeholders
+## configure OpenID, so the chart renders with its chart-selected
+## principalSource (jwt), and the hook's management API, so the hook Job is
+## scanned too; everything else stays at its defaults. They point at no real
+## identity provider, broker, or Secret.
+##
+## The file sits outside the chart directory so that it is not packaged.
+## Checkov applies it to every chart it scans; charts without these keys
+## ignore them.
+openId:
+  openIdConfigurationUri: "https://idp.example.com/.well-known/openid-configuration"
+  clientRegistrations:
+    - name: "default"
+      clientId: "checkov-placeholder-client"
+policyHook:
+  managementApi:
+    baseUrl: "https://broker.example.com:15672"
+    vhost: "checkov-placeholder"
+    existingSecret:
+      name: "checkov-placeholder-broker-credential"

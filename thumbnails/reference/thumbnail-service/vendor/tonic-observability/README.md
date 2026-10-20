@@ -1,0 +1,35 @@
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+# tonic-observability (vendored)
+
+Tracing and metric layers for tonic gRPC servers and clients.
+
+This is a vendored copy of `tonic-observability` 0.14.0 from NVIDIA's tonic-observability repository, vendored so that
+thumbnail-service builds without NVIDIA's internal Cargo registry. Only the license headers, this
+README and the manifest metadata (`authors`, `license`, `publish`, `repository`, and path dependencies on the
+other vendored crates), and the local changes below differ from the released crate.
+
+The source is published, under Apache-2.0, at [common/observability](https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/common/observability) in the
+consolidated repository.
+
+## Local changes
+
+The published 0.14.0 package contains unit tests that reference unpublished upstream
+workspace helpers. `src/test_support.rs` provides the small body and no-op meter
+fixtures those tests need, using existing dependencies. The body retains the
+upstream fixture's size hint (42), stream state, and polling behavior.
+
+The RPC-map test builds its descriptor fixture with `prost-types`, and the API
+example accepts descriptor bytes from the caller, removing the missing `protos`
+test dependency. In the deprecated OpenTelemetry server metric layer, unknown
+RPC paths now use `_OTHER`, including when no map is configured, to bound metric
+label cardinality. Known RPC names are unchanged. Regression tests cover both
+configured and empty maps.
+
+When upgrading, replace upstream sources and retain or re-evaluate the manifest
+edits and local changes above. Run this crate's unit and documentation tests
+separately from the service workspace with
+`cargo test --manifest-path vendor/tonic-observability/Cargo.toml`.
+Standalone test lockfiles and target directories are local build artifacts; the
+service build continues to use the repository-root `Cargo.lock`.

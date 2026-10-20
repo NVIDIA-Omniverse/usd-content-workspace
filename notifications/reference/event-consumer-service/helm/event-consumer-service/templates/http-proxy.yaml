@@ -1,0 +1,237 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.httpProxy.enabled -}}
+{{- /*
+     Every route below deliberately targets the envoy Service
+     (event-consumer-service-envoy, publishNotReadyAddresses: true), NOT
+     the main readiness-gated Service. That envoy Service is
+     load-bearing twice over. First, it keeps a pod that has gone
+     not-ready at the readiness reserve in Envoy's EDS cluster: such a
+     pod is over its soft threshold but still admitting — pinned
+     streams pack into the overflow band and are refused only at the
+     memory cap — so its long-lived streams survive, whereas pointing
+     these routes at the main Service would tear down live streams
+     whenever a pod went not-ready. Second, the retryPolicy on the
+     streaming routes below can only re-place a stream shed at the
+     shed threshold while the sibling pods it may land on stay
+     reachable through this same route. Do not "simplify" targetSvc to
+     the main Service. See service-envoy.yaml.
+  */}}
+{{-  $proxies  := dict "rest" (dict
+                                     "hostPrefix" ""
+                                     "targetSvc" (include "event-consumer-service.envoy-servicename" $)
+                                     "targetPort" .Values.service.rest.port
+                                     "path" (.Values.httpProxy.path | default "/")
+                                     "protocol" ""
+                                     "proxySettings" (mustMergeOverwrite 
+                                            (deepCopy $.Values.httpProxy)
+                                            (deepCopy $.Values.httpProxy.rest)
+                                         )
+ 
+                              )
+                      "grpc"  (dict
+                                     "hostPrefix" "grpc."
+                                     "targetSvc" (include "event-consumer-service.envoy-servicename" $)
+                                     "targetPort" .Values.service.grpc.port
+                                     "protocol" "h2c"
+                                     "path" "/"
+                                     "proxySettings" (mustMergeOverwrite 
+                                            (deepCopy $.Values.httpProxy)
+                                            (deepCopy $.Values.httpProxy.grpc)
+                                         )
+                              )
+                     
+-}}
+{{-  range $type, $config := $proxies }}
+{{-  $fqdn := print $config.hostPrefix  $config.proxySettings.fqdn.host "."  $config.proxySettings.fqdn.domain  -}}
+{{-  $streamPolicies := include "event-consumer-service.streaming-route-policies" (dict "settings" $config.proxySettings "kind" $type) | trim -}}
+{{-  $unaryPolicies := include "event-consumer-service.unary-route-policies" (dict "settings" $config.proxySettings) | trim -}}
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ print (include "event-consumer-service.fullname" $) "-" $type }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" $ | nindent 4 }}
+  {{- with $config.proxySettings.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  virtualhost:
+    fqdn: {{ $fqdn }}
+    {{- if $config.proxySettings.tls.enabled }}
+    tls:
+      secretName:  {{ include "event-consumer-service.tls-secret-name" $ }}
+    {{- end }}
+    corsPolicy: {{ $config.proxySettings.corsPolicy | toYaml | nindent 6 }}
+
+    {{- if or $.Values.openId.enabled $config.proxySettings.authExtension.enabled }}
+    authorization:
+      responseTimeout: "{{ $config.proxySettings.authExtension.responseTimeout }}"
+      extensionRef:
+        name: {{ $config.proxySettings.authExtension.extensionRef.name }}
+        namespace: {{ $config.proxySettings.authExtension.extensionRef.namespace | default $.Release.Namespace }}
+    {{- end }}
+
+  routes:
+    {{- if eq $type "rest" }}
+    # SSE streaming routes require extended timeouts because
+    # clients maintain long-lived connections for real-time event
+    # delivery. The /events/stream prefix matches both the
+    # /events/stream and /events/stream-durable paths. These routes
+    # also carry the httpProxy.streaming load-balancing strategy and
+    # retry policy, so a pod's capacity refusal raised before any
+    # response commits is re-placed by a fresh load-balancer
+    # selection that can land on another pod, with bounded retries
+    # exhausting into the documented 503. The catch-all route below
+    # deliberately carries no load-balancing strategy, and its retry
+    # policy (httpProxy.unary) is a different, much narrower one: it
+    # retries only failures Envoy raised before the request reached an
+    # application at all.
+    - conditions:
+        - prefix: /api/v1beta/events/stream
+      timeoutPolicy:
+        response: 240m
+        idle: 40s
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $streamPolicies }}{{ . | nindent 6 }}{{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+    - conditions:
+        - prefix: /api/v1/events/stream
+      timeoutPolicy:
+        response: 240m
+        idle: 40s
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $streamPolicies }}{{ . | nindent 6 }}{{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+    {{- end }}
+    {{- if eq $type "grpc" }}
+    # Streaming gRPC RPCs require extended timeouts because
+    # clients maintain long-lived connections for real-time event
+    # delivery. These routes also carry the httpProxy.streaming
+    # load-balancing strategy and retry policy, so a pod's capacity
+    # refusal that leaves as a trailers-only RESOURCE_EXHAUSTED is
+    # re-placed by a fresh load-balancer selection that can land on
+    # another pod, with bounded retries exhausting into the documented
+    # RESOURCE_EXHAUSTED. The catch-all route below deliberately carries
+    # no load-balancing strategy, and its retry policy (httpProxy.unary)
+    # is a different, much narrower one: it retries only failures Envoy
+    # raised before the request reached an application at all.
+    #
+    # Every streaming RPC gets its OWN entry below, and that is not
+    # redundancy. Contour matches a prefix condition as a plain STRING
+    # prefix, not on path segments, and sorts routes longest prefix
+    # first. So a new streaming RPC whose method name merely extends an
+    # existing one -- ConsumeDurableEventsWithAcks extending
+    # ConsumeDurableEvents, say -- silently inherits that route's
+    # timeouts and policies by name coincidence instead of falling to
+    # the catch-all, and a rename on either side just as silently drops
+    # it onto the catch-all's 10s idle timeout, which severs the
+    # stream. An explicit entry per RPC removes the dependence on the
+    # coincidence in both directions.
+    #
+    # The idle timeout here is 240m rather than the REST routes' 40s
+    # because gRPC keepalive PING frames do not reset Envoy's per-stream
+    # idle timer; a quiet-but-healthy stream would be cut at 40s.
+    - conditions:
+        - prefix: /nvidia.omniverse.notifications.consumer.v1beta.EventConsumerService/ConsumeDurableEvents
+      timeoutPolicy:
+        response: 240m
+        idle: 240m
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $streamPolicies }}{{ . | nindent 6 }}{{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          protocol: h2c
+    - conditions:
+        - prefix: /nvidia.omniverse.notifications.consumer.v1beta.EventConsumerService/ConsumeDurableEventsWithAcks
+      timeoutPolicy:
+        response: 240m
+        idle: 240m
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $streamPolicies }}{{ . | nindent 6 }}{{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          protocol: h2c
+    - conditions:
+        - prefix: /nvidia.omniverse.notifications.consumer.v1beta.EventConsumerService/ConsumeNonDurableEvents
+      timeoutPolicy:
+        response: 240m
+        idle: 240m
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $streamPolicies }}{{ . | nindent 6 }}{{- end }}
+      {{- include "event-consumer-service.proxy-request-headers" $ | nindent 6 }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          protocol: h2c
+    - conditions:
+        - prefix: /nvidia.omniverse.notifications.consumer.v1beta.EventConsumerService/ManageDeadLetteredEvents
+      timeoutPolicy:
+        response: 240m
+        idle: 240m
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $streamPolicies }}{{ . | nindent 6 }}{{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          protocol: h2c
+    {{- end }}
+    # All other (non-streaming) routes use the configurable
+    # timeouts from values.yaml.
+    #
+    # This route carries the narrow httpProxy.unary retry policy and no
+    # load-balancing strategy. The retry covers ONLY connect-failure and
+    # refused-stream -- two conditions under which Envoy never
+    # delivered the request to an application, so replaying it on
+    # another pod is safe even for the non-idempotent durable-queue
+    # create / update / delete. Between them they close the
+    # connect-refused window on both legs and, on gRPC, the
+    # refused-stream window a terminating pod's GOAWAY opens; a REST
+    # request dispatched onto a pooled connection the terminating pod
+    # has already closed is not covered. An app-generated refusal is
+    # deliberately NOT retried here: a 503 or RESOURCE_EXHAUSTED that the
+    # application itself produced may follow work it already performed,
+    # and unlike the streaming routes -- whose refusal is a pre-admission,
+    # trailers-only RESOURCE_EXHAUSTED raised before any response
+    # commits -- a unary route cannot tell the two apart. So no 5xx, no
+    # retriable-status-codes, no reset, no gateway-error.
+    - conditions:
+        - prefix: {{ $config.path }}
+      timeoutPolicy:
+        response: {{ $config.proxySettings.timeoutPolicy.response }}
+        idle: {{ $config.proxySettings.timeoutPolicy.idle }}
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $unaryPolicies }}{{ . | nindent 6 }}{{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          {{- ternary "" ((print "protocol: "  $config.protocol) | nindent 10) (empty $config.protocol) }}
+
+{{  end -}}
+{{- else -}}
+### HTTPProxy (ingress) is disabled, see .Values.httpProxy.enabled 
+{{- end }}

@@ -1,0 +1,826 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+components:
+  schemas:
+    AssociationRequest:
+      description: |-
+        Bundled parameters for associate calls, produced by each transport after
+        converting its protocol-specific request body.
+
+        Auth is intentionally not part of this type — it is transport metadata and is
+        passed separately to `store_association`. Transports should call `validate`
+        early so they can map `AssociationValidationError` to protocol-specific
+        status codes. `store_association` also validates before writing.
+
+        JSON wire shape matches the established HTTP contract: nested `thumbnail` and
+        `association_target` resources, `target_type`, and a flat `specification` object.
+      properties:
+        association_target:
+          $ref: '#/components/schemas/AssociationResource'
+        specification:
+          allOf:
+          - $ref: '#/components/schemas/AssociationSpec'
+        target_type:
+          default: FILE
+          oneOf:
+          - $ref: '#/components/schemas/AssociationTargetKind'
+        thumbnail:
+          $ref: '#/components/schemas/AssociationResource'
+      required:
+      - thumbnail
+      - association_target
+      - specification
+      type: object
+    AssociationResource:
+      description: |-
+        A storage resource in an associate request (file or folder).
+
+        `resource_address` is always required. `resource_identity` is present for files
+        and omitted for folders on the wire.
+      properties:
+        resource_address:
+          maxLength: 2048
+          type: string
+        resource_identity:
+          maxLength: 2048
+          type:
+          - string
+          - 'null'
+      required:
+      - resource_address
+      type: object
+    AssociationSpec:
+      description: |-
+        The specification for a thumbnail association. Each variant carries exactly the
+        fields required for its type; `"type"` appears as the JSON discriminant.
+
+        `IMAGE_TO_IMAGE` is accepted by both `AssociateThumbnail` and `CreateThumbnails`.
+        `MANUAL` is accepted by `AssociateThumbnail` only — the caller has already produced
+        the thumbnail bytes and is registering the association without conversion.
+      discriminator:
+        propertyName: type
+      oneOf:
+      - description: Thumbnail produced by the image-to-image conversion pipeline.
+        properties:
+          crop_strategy:
+            $ref: '#/components/schemas/CropStrategy'
+          encoding_format:
+            $ref: '#/components/schemas/EncodingFormat'
+          height:
+            format: int32
+            maximum: 8192
+            minimum: 1
+            type: integer
+          preserve_aspect_ratio:
+            description: |-
+              Optional preserve-aspect-ratio flag. `None` means the caller omitted it
+              (distinct from an explicit `false`); `normalize` fills the runtime default.
+            type:
+            - boolean
+            - 'null'
+          quality:
+            description: |-
+              Optional JPEG/WebP encode quality in `[1, 100]`. `None` means the caller
+              omitted it (distinct from an explicit value); `normalize` fills the
+              runtime default so stored metadata and events always carry a concrete value.
+            format: double
+            type:
+            - number
+            - 'null'
+          transform_type:
+            $ref: '#/components/schemas/TransformType'
+          type:
+            enum:
+            - IMAGE_TO_IMAGE
+            type: string
+          width:
+            format: int32
+            maximum: 8192
+            minimum: 1
+            type: integer
+        required:
+        - width
+        - height
+        - encoding_format
+        - transform_type
+        - crop_strategy
+        - type
+        type: object
+      - description: |-
+          Pre-generated thumbnail registered directly by the caller without conversion.
+          Only `width`, `height`, and `encoding_format` are present; conversion
+          parameters (transform, crop, quality) are absent because no conversion occurs.
+        properties:
+          encoding_format:
+            $ref: '#/components/schemas/EncodingFormat'
+          height:
+            format: int32
+            maximum: 8192
+            minimum: 1
+            type: integer
+          type:
+            enum:
+            - MANUAL
+            type: string
+          width:
+            format: int32
+            maximum: 8192
+            minimum: 1
+            type: integer
+        required:
+        - width
+        - height
+        - encoding_format
+        - type
+        type: object
+    AssociationTargetKind:
+      description: Whether metadata is stored on a source **file** identity or a **folder** URI (manual association).
+      enum:
+      - FILE
+      - FOLDER
+      type: string
+    CreateThumbnailsFailure:
+      description: A single thumbnail task queue submission that failed during CreateThumbnails.
+      properties:
+        error_message:
+          description: Human-readable description of why the submission failed.
+          maxLength: 4096
+          type: string
+        specification:
+          $ref: '#/components/schemas/ThumbnailSpecification'
+          description: The full specification that was attempted (caller-supplied or resolved from defaults).
+      required:
+      - specification
+      - error_message
+      type: object
+    CreateThumbnailsRequest:
+      description: Request body for `POST /v1alpha/thumbnails` — trigger thumbnail generation.
+      properties:
+        resource_address:
+          description: The resource_address of the source file to generate thumbnails for (required, non-empty).
+          maxLength: 2048
+          type: string
+        specifications:
+          description: |-
+            Optional thumbnail specifications. If absent or empty, the service fans out one task per
+            configured `THUMBNAIL_SIZES` entry using application defaults (identical to the
+            notification-driven path). Only `image_to_image` entries are supported; supplying any
+            other spec type returns 400. At most 1000 entries.
+          items:
+            $ref: '#/components/schemas/ThumbnailSpecification'
+          maxItems: 1000
+          type:
+          - array
+          - 'null'
+      required:
+      - resource_address
+      type: object
+    CreateThumbnailsResponse:
+      description: |-
+        Acceptance response for `POST /v1alpha/thumbnails`.
+        `failed` is empty on full success and populated on partial acceptance.
+      properties:
+        failed:
+          description: |-
+            Specifications that were not submitted. Empty on full acceptance.
+
+            Populated when dispatch fails after request validation, including publisher
+            failures. Invalid JPEG/WebP quality is rejected before storage lookup or dispatch.
+
+            Only ever a *partial* result: at least one specification was accepted,
+            because a call where none was returns `502` with an error body instead.
+
+            Do not compare this length against the request's `specifications`. When
+            that field is absent or empty the service fans out over its configured
+            `THUMBNAIL_SIZES`, so `failed` describes specifications the caller never
+            sent and can be longer than the list it did — an assertion of
+            `failed.length < specifications.length` fails against a conformant
+            deployment on that path.
+          items:
+            $ref: '#/components/schemas/CreateThumbnailsFailure'
+          maxItems: 1000
+          type: array
+      required:
+      - failed
+      type: object
+    CropStrategy:
+      enum:
+      - CENTER
+      - TOP
+      - BOTTOM
+      - LEFT
+      - RIGHT
+      - TOP_LEFT
+      - TOP_RIGHT
+      - BOTTOM_LEFT
+      - BOTTOM_RIGHT
+      - SMART
+      type: string
+    DisassociateFailure:
+      description: The targeted thumbnail when its disassociation failed.
+      properties:
+        error:
+          maxLength: 4096
+          type: string
+        resource_address:
+          maxLength: 2048
+          type: string
+        resource_identity:
+          maxLength: 2048
+          type:
+          - string
+          - 'null'
+      required:
+      - resource_address
+      - error
+      type: object
+    DisassociateRequest:
+      description: |-
+        Bundled parameters for a targeted disassociate, produced by each transport after
+        converting its protocol-specific request.
+
+        Removes the single thumbnail recorded on the association target whose
+        `thumbnail.resource_address` matches `thumbnail_resource_address`. Resource identities
+        are optional and do not participate in matching; only addresses locate and remove entries.
+
+        Auth is intentionally not part of this type, matching `AssociationRequest` — it is
+        transport metadata and is passed separately to `disassociate_thumbnail`.
+
+        The wire shape is the established HTTP query contract, which this type is
+        deserialized from directly rather than through a transport-local copy.
+      properties:
+        association_target_resource_address:
+          description: Address of the association target from which to remove the thumbnail.
+          example: https://example.blob.core.windows.net/container/sample-image.jpg
+          maxLength: 2048
+          type: string
+        association_target_resource_identity:
+          description: |-
+            Optional opaque identity of the association target. It does not participate in matching;
+            only the address is used to locate the entry.
+          maxLength: 2048
+          type:
+          - string
+          - 'null'
+        target_type:
+          default: FILE
+          oneOf:
+          - $ref: '#/components/schemas/AssociationTargetKind'
+            description: 'Type of association target: FILE or FOLDER. Optional; defaults to FILE.'
+        thumbnail_resource_address:
+          description: Address of the specific thumbnail to remove.
+          example: https://example.blob.core.windows.net/container/.thumbnails/sample-image.jpg.png
+          maxLength: 2048
+          type: string
+        thumbnail_resource_identity:
+          description: |-
+            Optional opaque identity of the thumbnail resource. It does not participate in matching;
+            only the address is used to locate the entry.
+          maxLength: 2048
+          type:
+          - string
+          - 'null'
+      required:
+      - association_target_resource_address
+      - thumbnail_resource_address
+      type: object
+    DisassociateThumbnailResponse:
+      description: Result of removing one targeted thumbnail association (ADR 0002 §5).
+      properties:
+        failed:
+          items:
+            $ref: '#/components/schemas/DisassociateFailure'
+          maxItems: 1
+          type: array
+        succeeded:
+          items:
+            $ref: '#/components/schemas/Resource'
+          maxItems: 1
+          type: array
+      required:
+      - succeeded
+      - failed
+      type: object
+    EncodingFormat:
+      enum:
+      - PNG
+      - JPEG
+      - GIF
+      - WEBP
+      type: string
+    ErrorResponse:
+      properties:
+        details: {}
+        error_message:
+          maxLength: 4096
+          type: string
+        source:
+          maxLength: 256
+          type: string
+      required:
+      - source
+      - error_message
+      type: object
+    GetThumbnailsRequest:
+      additionalProperties: false
+      properties:
+        association_target_resource_address:
+          example: https://example.blob.core.windows.net/container/sample-image.jpg
+          maxLength: 2048
+          type: string
+        crop_strategy:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CropStrategy'
+        encoding_format:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ImageEncodingFormat'
+        height:
+          format: int32
+          maximum: 8192
+          minimum: 1
+          type:
+          - integer
+          - 'null'
+        specification:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ThumbnailSpecificationType'
+        transform_type:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TransformType'
+        width:
+          format: int32
+          maximum: 8192
+          minimum: 1
+          type:
+          - integer
+          - 'null'
+      required:
+      - association_target_resource_address
+      type: object
+    GetThumbnailsResponse:
+      properties:
+        thumbnails:
+          items:
+            $ref: '#/components/schemas/ThumbnailEntry'
+          maxItems: 1000
+          type: array
+      required:
+      - thumbnails
+      type: object
+    HealthCheckResponse:
+      properties:
+        status:
+          maxLength: 256
+          type: string
+      required:
+      - status
+      type: object
+    ImageEncodingFormat:
+      enum:
+      - JPEG
+      - PNG
+      - GIF
+      - WEBP
+      type: string
+    ImageToImageSpecification:
+      properties:
+        crop_strategy:
+          $ref: '#/components/schemas/CropStrategy'
+        encoding_format:
+          $ref: '#/components/schemas/ImageEncodingFormat'
+        height:
+          format: int32
+          maximum: 8192
+          minimum: 1
+          type: integer
+        preserve_aspect_ratio:
+          description: |-
+            Optional flag controlling whether the source aspect ratio is preserved. Omission is
+            distinct from an explicit `false`: omitting the field applies the service's configured
+            default (THUMBNAIL_PRESERVE_ASPECT_RATIO), while `false` forces the requested
+            dimensions regardless of that default.
+          type:
+          - boolean
+          - 'null'
+        quality:
+          description: |-
+            Optional encode quality: must be between 1 and 100 for JPEG/WebP.
+            PNG/GIF do not apply this range. When omitted, the service applies
+            its configured default (THUMBNAIL_QUALITY).
+          format: int32
+          maximum: 2147483647
+          minimum: -2147483648
+          type:
+          - integer
+          - 'null'
+        transform_type:
+          $ref: '#/components/schemas/TransformType'
+        width:
+          format: int32
+          maximum: 8192
+          minimum: 1
+          type: integer
+      type: object
+    Resource:
+      description: |-
+        A storage resource (file or folder) identified by its address.
+
+        `resource_address` is always required and non-empty. `resource_identity` is
+        present for files and omitted for folders (folders have no identity concept).
+      properties:
+        resource_address:
+          maxLength: 2048
+          type: string
+        resource_identity:
+          maxLength: 2048
+          type:
+          - string
+          - 'null'
+      required:
+      - resource_address
+      type: object
+    TargetType:
+      enum:
+      - FILE
+      - FOLDER
+      type: string
+    ThumbnailEntry:
+      description: A single thumbnail entry in the GET /thumbnails response
+      properties:
+        association_target:
+          $ref: '#/components/schemas/Resource'
+        create_time:
+          format: date-time
+          maxLength: 64
+          type:
+          - string
+          - 'null'
+        specification:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/AssociationSpec'
+        target_type:
+          $ref: '#/components/schemas/TargetType'
+        thumbnail:
+          $ref: '#/components/schemas/Resource'
+      required:
+      - target_type
+      - association_target
+      - thumbnail
+      type: object
+    ThumbnailSpecification:
+      description: |-
+        HTTP request specification for `CreateThumbnails`. Uses the outer-keyed
+        `{"image_to_image": {...}}` shape. Only `image_to_image` is valid here;
+        MANUAL is rejected before any work queue submissions.
+      properties:
+        image_to_image:
+          allOf:
+          - $ref: '#/components/schemas/ImageToImageSpecification'
+      required:
+      - image_to_image
+      type: object
+    ThumbnailSpecificationType:
+      description: |-
+        Thumbnail specification variants supported by `GET /v1alpha/thumbnails`.
+
+        Add variants here as their query filters become implemented.
+      enum:
+      - IMAGE_TO_IMAGE
+      type: string
+    TransformType:
+      enum:
+      - SQUARE
+      - SCALE_BY_WIDTH
+      - SCALE_BY_HEIGHT
+      - CROP
+      - FIT
+      - SCALE_AND_CROP
+      - THUMBNAIL
+      - RESIZE
+      type: string
+  securitySchemes:
+    bearer_auth:
+      bearerFormat: JWT
+      description: Bearer token authentication compliant with RFC8725 JWT best practices. Token validation is delegated to upstream/downstream services.
+      scheme: bearer
+      type: http
+info:
+  contact:
+    name: NVIDIA
+  description: ''
+  license:
+    identifier: Apache-2.0
+    name: Apache-2.0
+  title: thumbnail-service
+  version: 0.1.0
+openapi: 3.1.0
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+          description: Service is ready (HTTP and gRPC both serving)
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+          description: gRPC side of the unified process is not currently serving
+      summary: |-
+        Readiness probe: the unified process is ready to serve traffic only when
+        both HTTP and gRPC are bound and serving.
+      tags:
+      - status
+  /health/live:
+    get:
+      operationId: liveHealthCheck
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+          description: Process is alive
+      summary: |-
+        Dependency-free liveness probe: returns 200 whenever the HTTP server is
+        accepting requests. Does not check gRPC or any outbound dependency so
+        Kubernetes liveness cannot restart the pod during transient gRPC hiccups
+        or graceful drain.
+      tags:
+      - status
+  /v1alpha/associations:
+    delete:
+      operationId: disassociateThumbnail
+      parameters:
+      - description: 'Type of association target: FILE or FOLDER. Optional; defaults to FILE.'
+        in: query
+        name: target_type
+        required: false
+        schema:
+          default: FILE
+          oneOf:
+          - $ref: '#/components/schemas/AssociationTargetKind'
+      - description: Address of the association target from which to remove the thumbnail.
+        example: https://example.blob.core.windows.net/container/sample-image.jpg
+        in: query
+        name: association_target_resource_address
+        required: true
+        schema:
+          maxLength: 2048
+          type: string
+      - description: |-
+          Optional opaque identity of the association target. It does not participate in matching;
+          only the address is used to locate the entry.
+        in: query
+        name: association_target_resource_identity
+        required: false
+        schema:
+          maxLength: 2048
+          type: string
+      - description: Address of the specific thumbnail to remove.
+        example: https://example.blob.core.windows.net/container/.thumbnails/sample-image.jpg.png
+        in: query
+        name: thumbnail_resource_address
+        required: true
+        schema:
+          maxLength: 2048
+          type: string
+      - description: |-
+          Optional opaque identity of the thumbnail resource. It does not participate in matching;
+          only the address is used to locate the entry.
+        in: query
+        name: thumbnail_resource_identity
+        required: false
+        schema:
+          maxLength: 2048
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisassociateThumbnailResponse'
+          description: Thumbnail removed, or was not associated with the target (idempotent). `succeeded` carries the removed thumbnail; both arrays are empty when the thumbnail was not found.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Invalid request - missing or unparseable query params
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: No Bearer token was provided, or the downstream storage service rejected the one that was (for example, an expired token)
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisassociateThumbnailResponse'
+          description: Removal failed, or the association target's metadata could not be enumerated. When the removal was attempted, `failed` carries the error detail; when enumeration itself failed, both arrays are empty.
+      security:
+      - bearer_auth: []
+      tags:
+      - thumbnails
+    post:
+      operationId: associateThumbnail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssociationRequest'
+        description: Thumbnail and association target resources to link
+        required: true
+      responses:
+        '204':
+          description: 'Thumbnail successfully associated with the source resource. No body: the association is readable from GET /v1alpha/thumbnails'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Invalid request - malformed resources or specification
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: No Bearer token was provided, or the downstream storage service rejected the one that was (for example, an expired token)
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Internal server error occurred while creating association
+      security:
+      - bearer_auth: []
+      tags:
+      - thumbnails
+  /v1alpha/thumbnails:
+    get:
+      operationId: getThumbnails
+      parameters:
+      - description: The resource_address to retrieve thumbnails for
+        in: query
+        name: association_target_resource_address
+        required: true
+        schema:
+          maxLength: 2048
+          type: string
+      - description: Optional thumbnail specification type filter; currently only IMAGE_TO_IMAGE is supported
+        in: query
+        name: specification
+        required: false
+        schema:
+          $ref: '#/components/schemas/ThumbnailSpecificationType'
+      - description: Optional image-to-image filter for an exact width in pixels
+        in: query
+        name: width
+        required: false
+        schema:
+          format: int32
+          maximum: 8192
+          minimum: 1
+          type: integer
+      - description: Optional image-to-image filter for an exact height in pixels
+        in: query
+        name: height
+        required: false
+        schema:
+          format: int32
+          maximum: 8192
+          minimum: 1
+          type: integer
+      - description: Optional image-to-image encoding format filter (PNG, JPEG, GIF, WEBP)
+        in: query
+        name: encoding_format
+        required: false
+        schema:
+          $ref: '#/components/schemas/ImageEncodingFormat'
+      - description: Optional image-to-image transform type filter (SQUARE, FIT, CROP, etc.)
+        in: query
+        name: transform_type
+        required: false
+        schema:
+          $ref: '#/components/schemas/TransformType'
+      - description: Optional image-to-image crop direction filter (CENTER, TOP, BOTTOM, etc.)
+        in: query
+        name: crop_strategy
+        required: false
+        schema:
+          $ref: '#/components/schemas/CropStrategy'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetThumbnailsResponse'
+          description: 'Successfully retrieved thumbnails for the specified resource; thumbnails is empty when none exist. Results are ordered by thumbnail resource_address and capped at 1000 entries: a target with more than 1000 thumbnails has the remainder discarded, not paginated. There is no continuation token, so a response of exactly 1000 entries may be incomplete.'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Invalid or unsupported query parameters
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Authentication required - valid Bearer token must be provided
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: The authenticated caller is not authorized to read the requested resource
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: The storage service could not complete the metadata query
+      security:
+      - bearer_auth: []
+      tags:
+      - thumbnails
+    post:
+      operationId: createThumbnails
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThumbnailsRequest'
+        description: Resource address and optional thumbnail specifications
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateThumbnailsResponse'
+          description: 'Thumbnail generation accepted. `failed` is empty on full acceptance and lists specifications whose dispatch failed after request validation, including publisher failures. At least one specification was accepted; a call where none was returns 502. Do not compare `failed.length` to the request''s `specifications.length`: absent or empty specifications fan out over the configured THUMBNAIL_SIZES. Acceptance does not prove generation completes.'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Invalid request — a blank resource_address, more than 1000 specifications, a specification carrying no image_to_image, a width/height outside [1, 8192], or JPEG/WebP quality outside [1, 100]. Refused before any storage call.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: No Bearer token was provided, or the downstream storage service rejected the one that was
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 'The token was accepted and the caller is not authorized to read resource_address. Distinct from 401: a new token will not help.'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: resource_address was not found in storage
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 'An upstream source Stat fault occurred, or every thumbnail dispatch failed. Missing source and access/authentication failures retain their separate 404/403/401 responses. A failed Stat submits nothing. A failed publish is not a guarantee that nothing was enqueued: the broker may have accepted it before its deadline.'
+      security:
+      - bearer_auth: []
+      tags:
+      - thumbnails
+tags:
+- description: Core thumbnail operations
+  name: thumbnails
+- description: Service Status
+  name: status
+

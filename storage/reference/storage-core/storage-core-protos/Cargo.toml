@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+description = "NVIDIA Omniverse Storage Core Protobufs"
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+name = "storage-core-protos"
+repository.workspace = true
+rust-version.workspace = true
+version = "0.29.0-alpha.1"
+
+[lib]
+doctest = false
+
+[dependencies]
+get-size2 = { version = "0.8.0", features = ["derive"] }
+prost = "0.14.4"
+prost-types = "0.14.4"
+serde = "1.0.229"
+time = { version = "0.3.55", features = ["formatting", "parsing"] }
+tonic = "0.14.6"
+tonic-prost = "0.14.6"
+utoipa = "5.5.0"
+
+[build-dependencies]
+protoc-bin-vendored = "3.2.0"
+tonic-prost-build = "0.14.6"
+
+# cargo-machete isn't great about handling dependencies in the generated code.
+[package.metadata.cargo-machete]
+ignored = ["get-size2", "prost", "prost-types", "protoc-bin-vendored", "tonic-prost", "tonic-prost-build", "utoipa"]
+
+[dev-dependencies]
+serde_json = "1.0.151"

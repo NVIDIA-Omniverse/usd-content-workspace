@@ -1,0 +1,174 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ============================================================================
+# Thumbnail Service Conformance Test — Kubernetes Job
+# ============================================================================
+# One-time Job that runs the black-box REST/gRPC conformance suite against
+# `conformanceTest.restUrl` / `conformanceTest.grpcUrl`. Installed on demand —
+# not a `helm.sh/hook: test` hook, and no pipeline installs this chart
+# automatically. See crates/thumbnail-conformance-test/README.md.
+# ============================================================================
+{{- include "conformance-test.validateServiceIdentity" . }}
+{{- if not .Values.conformanceTest.restUrl }}
+{{- fail "conformanceTest.restUrl is required for OpenAPI preflight in every suite, including grpc" }}
+{{- end }}
+{{- if and (ne .Values.conformanceTest.testSuite "rest") (not .Values.conformanceTest.grpcUrl) }}
+{{- fail "conformanceTest.grpcUrl is required when conformanceTest.testSuite is \"all\" or \"grpc\"" }}
+{{- end }}
+{{- if not .Values.conformanceTest.sourceFile }}
+{{- fail "conformanceTest.sourceFile is required: it must name an object that already exists in storage. The association cases fixture-sample their own metadata against this address, but CreateThumbnails resolves the source identity with a storage Stat and fails without it. The run also generates thumbnails from it that the suite cannot remove. And against a deployment that does not enforce the 1000-specification bound, the case checking that bound leaves one association per specification on this address, which can make its metadata too large to enumerate and break reads for it permanently. Name an object whose associations can be abandoned." }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "conformance-test.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "conformance-test.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  {{- if ne (toString .Values.job.ttlSecondsAfterFinished) "" }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  {{- end }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "conformance-test.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "conformance-test.serviceAccountName" . }}
+      restartPolicy: Never
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+      # Native sidecar (restartPolicy: Always, K8s 1.29+): runs alongside the
+      # conformance-test container; Kubernetes sends SIGTERM once the main
+      # container exits so the Job can reach Completed, matching the
+      # smoke-test Job's pattern. On older clusters restartPolicy is omitted
+      # so the initContainer still runs (just not as a true sidecar) rather
+      # than failing to render.
+      initContainers:
+        - name: {{ default (printf "%s-token-provisioner" .Chart.Name) .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.name }}
+          {{- if semverCompare ">=1.29-0" .Capabilities.KubeVersion.Version }}
+          restartPolicy: Always
+          {{- end }}
+          {{- (omit .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container "name" "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+            {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: token-exchange
+              mountPath: "/etc/secrets/access-token"
+      {{- end }}
+      containers:
+        - name: conformance-test
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TEST_SUITE
+              value: {{ .Values.conformanceTest.testSuite | quote }}
+            {{- if .Values.conformanceTest.restUrl }}
+            - name: REST_URL
+              value: {{ .Values.conformanceTest.restUrl | quote }}
+            {{- end }}
+            {{- if .Values.conformanceTest.grpcUrl }}
+            - name: GRPC_URL
+              value: {{ .Values.conformanceTest.grpcUrl | quote }}
+            - name: GRPC_TLS_ENABLED
+              value: {{ .Values.conformanceTest.grpcTlsEnabled | quote }}
+            {{- end }}
+            - name: SOURCE_FILE
+              value: {{ .Values.conformanceTest.sourceFile | quote }}
+            - name: READY_PATH
+              value: {{ .Values.conformanceTest.readyPath | quote }}
+            - name: HTTP_TIMEOUT
+              value: {{ .Values.conformanceTest.httpTimeout | quote }}
+            - name: WAIT_RETRIES
+              value: {{ .Values.conformanceTest.waitRetries | quote }}
+            - name: WAIT_INTERVAL
+              value: {{ .Values.conformanceTest.waitInterval | quote }}
+            # ----- Direct bearer token, read from an existing Secret -----
+            {{- if .Values.serviceIdentity.bearerToken.enabled }}
+            {{- with .Values.serviceIdentity.bearerToken }}
+            - name: BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretRef.name | quote }}
+                  key: {{ .secretRef.key | quote }}
+            {{- end }}
+            {{- end }}
+            # ----- OAuth2 client-credentials -----
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            {{- with .Values.serviceIdentity.clientCredentials }}
+            - name: OAUTH2_OPENID_CONFIGURATION_URI
+              value: {{ .openIdConfigurationUri | quote }}
+            - name: OAUTH2_CLIENT_ID
+              value: {{ .clientId | quote }}
+            {{- if .clientScope }}
+            - name: OAUTH2_CLIENT_SCOPE
+              value: {{ .clientScope | quote }}
+            {{- end }}
+            - name: OAUTH2_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .clientSecretRef.name | quote }}
+                  key: {{ .clientSecretRef.key | quote }}
+            {{- end }}
+            {{- end }}
+            # ----- Workload-identity: read the token from a sidecar-written file -----
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: ACCESS_TOKEN_FILE
+              value: {{ .Values.serviceIdentity.accessTokenFile.path | quote }}
+            {{- end }}
+          {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+          volumeMounts:
+            - name: token-exchange
+              readOnly: true
+              mountPath: "/etc/secrets/access-token"
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+      volumes:
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+      {{- end }}

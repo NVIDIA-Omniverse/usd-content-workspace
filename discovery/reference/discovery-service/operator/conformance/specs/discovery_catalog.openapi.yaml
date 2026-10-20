@@ -1,0 +1,100 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+openapi: 3.0.3
+info:
+  title: Auto-Discovery Catalog HTTP Conformance Profile
+  version: v2beta
+  description: >-
+    Test profile aligned with docs/service/docs/service-api.md and the current
+    operator implementation. Not an independently approved API standard and
+    not the target-service capabilities REST v1beta contract.
+paths:
+  /api/v2beta/services:
+    get:
+      responses:
+        '200':
+          description: Current catalog snapshot, including an empty catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+components:
+  schemas:
+    Catalog:
+      type: object
+      required: [schema-version, services]
+      properties:
+        schema-version:
+          type: integer
+          enum: [2]
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+    Service:
+      type: object
+      required: [name, capability_source]
+      properties:
+        name:
+          type: string
+        capability_source:
+          type: string
+          enum: [grpc]
+        rest:
+          $ref: '#/components/schemas/RestTransport'
+        grpc:
+          $ref: '#/components/schemas/GrpcTransport'
+    RestTransport:
+      type: object
+      required: [url, endpoints]
+      properties:
+        url:
+          type: string
+        endpoints:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [name, versions]
+            properties:
+              name:
+                type: string
+              versions:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/VersionDetail'
+    VersionDetail:
+      type: object
+      properties:
+        path:
+          type: string
+        service:
+          type: string
+    GrpcTransport:
+      type: object
+      required: [url, endpoints]
+      properties:
+        url:
+          type: string
+        endpoints:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [service]
+            properties:
+              service:
+                type: string

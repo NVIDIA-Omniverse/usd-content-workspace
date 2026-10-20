@@ -1,0 +1,437 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+replicaCount: 1
+
+image:
+  repository: nvcr.io/nvidia/omniverse/auto-discovery-service
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+  pullSecrets:
+    - name: regcred
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+rbac:
+  # Specifies whether RBAC resources (ClusterRole / ClusterRoleBinding) should be created.
+  # The discovery service needs permissions to list and watch Service objects in Kubernetes.
+  create: true
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  ports:
+    internal: 8080
+    external: 8081
+  annotations: {}
+
+  # @param service.nameOverride Name override for the Service object. If not set, uses the Chart name as the service name.
+  nameOverride: ""
+
+## Discovery service configuration (maps to config.rs)
+config:
+  ## @param config.kubeNamespace Namespace(s) watched for service discovery, as
+  ## a comma-separated string ("storage-api-dev,usdsearch") or a YAML list.
+  ## Defaults to the namespace where the Pod runs. Set this to explicitly
+  ## override the watched namespaces. The release's service account needs
+  ## list/watch on Services (and HTTPProxies) in every namespace listed; the
+  ## default ClusterRole (rbac.create) covers that.
+  ## If an annotated Service has the same name in more than one listed
+  ## namespace, only the first-listed namespace's Service is published and a
+  ## warning is logged.
+  kubeNamespace: ""
+
+  ## @param config.kubeContext
+  ## If set, uses the specified kubeconfig context to connect to the cluster.
+  ## Typically left empty when running in-cluster.
+  kubeContext: ""
+
+  ## @param config.reconcileInterval
+  ## Interval in seconds between discovery reconciliation loops.
+  reconcileInterval: 30
+
+  ## Annotation keys the service uses to identify and configure discovered services.
+  annotations:
+    ## @param config.annotations.discoveryEnabled
+    ## The annotation key that marks a Kubernetes Service as discoverable.
+    discoveryEnabled: "discovery.omniverse.nvidia.com/enabled"
+
+    ## @param config.annotations.grpcPort
+    ## The annotation key that specifies the gRPC port of a discovered service.
+    grpcPort: "discovery.omniverse.nvidia.com/grpc-port"
+
+    ## @param config.annotations.basePath
+    ## The annotation key that specifies the REST API base path of a discovered service.
+    basePath: "discovery.omniverse.nvidia.com/base-path"
+
+    ## @param config.annotations.visibility
+    ## The annotation key that controls which endpoints a discovered service is exposed on.
+    ## Accepted values on the target service: "internal", "external", or "both" (default: "both").
+    visibility: "discovery.omniverse.nvidia.com/visibility"
+
+    ## @param config.annotations.externalRestEndpoint
+    ## The annotation key that explicitly sets the external REST endpoint URL for a discovered service.
+    ## When set on a target service, HTTPProxy lookup is skipped and this value is used directly.
+    externalRestEndpoint: "discovery.omniverse.nvidia.com/external-rest-endpoint"
+
+    ## @param config.annotations.externalGrpcEndpoint
+    ## The annotation key that explicitly sets the external gRPC endpoint URL for a discovered service.
+    ## When set on a target service, HTTPProxy lookup is skipped and this value is used directly.
+    externalGrpcEndpoint: "discovery.omniverse.nvidia.com/external-grpc-endpoint"
+
+  v1Endpoints:
+    enabled: true
+    endpoints:
+
+       - name: "Storage Service"
+         idPrefix: "storage-service"
+         type: "storage"
+         endpoints:
+           grpc:
+             from:
+              - nvidia.omniverse.storage.fileobject.v1alpha.FileObjectService
+              - nvidia.omniverse.storage.fileobject.v1beta.FileObjectService
+           rest:
+             from:
+              - filefolder
+
+       - name: "Event Aggregation Service"
+         idPrefix: "event-aggregation-service"
+         type: "notification-aggregation"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.notifications.publisher.v1beta.EventPublishingService
+           rest:
+             from:
+               - notifications-publisher
+
+       - name: "Event Consumer Service"
+         idPrefix: "event-consumer-service"
+         type: "notification-consumer"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.notifications.consumer.v1beta.EventConsumerService
+           rest:
+             from:
+               - notifications-consumer
+
+       - name: "Legacy Live Edit Service"
+         idPrefix: "live-edit-service"
+         type: "live-service"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.live.v1alpha.LiveService
+
+       - name: "Live Edit Service"
+         idPrefix: "live-edit-service"
+         type: "live-edit"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.live.v1alpha.LiveService
+
+       - name: "Permission Service"
+         idPrefix: "permissions"
+         type: "permission"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.permission.v1beta.PermissionService
+           rest:
+             from:
+               - permission
+
+       - name: "User Info Service"
+         idPrefix: "userinfo"
+         type: "userinfo"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.userinfo.v1alpha.UserInfoService
+           rest:
+             from:
+               - userinfo
+
+       - name: "Thumbnail Service"
+         idPrefix: "thumbnail-service"
+         type: "thumbnail"
+         endpoints:
+           grpc:
+             from:
+               - nvidia.omniverse.thumbnail.v1alpha.ThumbnailService
+           rest:
+             from:
+               - thumbnail
+
+## Logs, metrics and traces configuration
+observability:
+  ## Logging configuration
+  logging:
+    ## @param observability.logging.level
+    ## Defines the log level for the service.
+    ## Supports tracing directives syntax, e.g. "info", "auto_discovery_service=debug,hyper=warn".
+    level: "info"
+
+    ## Structured logging configuration
+    structured:
+      ## @param observability.logging.structured.enabled
+      ## Enables JSON-structured logging of trace spans.
+      ## When disabled, the service uses human-readable pretty-printed logs.
+      enabled: false
+
+  ## @param observability.serviceName The service name defined in metrics and traces ("auto-discovery-service" by default).
+  serviceName: "auto-discovery-service"
+
+  ## @param observability.serviceScope The service scope defined in metrics and traces ("auto_discovery_service" by default).
+  serviceScope: "auto_discovery_service"
+
+  ## @param observability.tracing.enabled
+  ## Enables exporting trace spans to an OpenTelemetry collector.
+  ## When disabled, no tracing endpoint env vars are injected and the
+  ## service runs without span export.
+  ## @param observability.tracing.endpoint.grpc GRPC Exporter for trace spans. Only used when `observability.tracing.enabled` is true.
+  ## @param observability.tracing.samplingRatio
+  ## Defines the sampling ratio for traces sent to the collector
+  ## (the percentage of traces that would be sent).
+  ## Must be between 0 and 1. Only used when `observability.tracing.enabled` is true.
+  tracing:
+    enabled: false
+    endpoint:
+      grpc: ""
+    samplingRatio: "1.0"
+
+  ## @param observability.metrics.enabled
+  ## Enables exporting metrics to an OpenTelemetry collector.
+  ## When disabled, no metrics endpoint env var is injected and the
+  ## service runs without metric export.
+  ## @param observability.metrics.endpoint.grpc GRPC Exporter for OpenTelemetry metrics. Only used when `observability.metrics.enabled` is true.
+  metrics:
+    enabled: false
+    endpoint:
+      grpc: ""
+
+## @param extraVars Pass additional environment variables to the deployment. Useful for OpenTelemetry configuration and other custom environment variables.
+extraVars: {}
+
+## OpenID auth bootstrap configuration served at /api/{v1,v1alpha,v2,v2beta}/auth-config.
+## When enabled, openIdConfigurationUri and each clientRegistration must be
+## overridden with real values (placeholder defaults are rejected by the chart).
+openId:
+  ## @param openId.enabled Enable the auth-config endpoint.
+  enabled: false
+
+  ## @param openId.description Human-readable description returned in auth-config.
+  description: "OpenID Authentication"
+
+  ## @param openId.openIdConfigurationUri OpenID provider metadata URL.
+  ## Required when openId.enabled is true.
+  openIdConfigurationUri: ""
+
+  ## @param openId.clientRegistrations Client registrations returned in auth-config.
+  ## Required when openId.enabled is true. Each entry needs name, clientId, and scope.
+  clientRegistrations: []
+  #  - name: "default"
+  #    clientId: "your-client-id"
+  #    scope: "openid profile"
+
+## Ingress endpoints via Contour HTTPProxy objects
+httpProxy:
+  ## @param httpProxy.enabled Enable the ingress HTTP proxy
+  enabled: false
+
+  ## HTTPProxy endpoints to create. Each endpoint gets its own HTTPProxy resource
+  ## and routes to the specified port on the discovery service.
+  ## When empty, httpProxy.fqdn is used and routes to service.ports.external.
+  ## @param httpProxy.endpoints[].name Suffix used to make the HTTPProxy resource name unique
+  ## @param httpProxy.endpoints[].fqdn Fully qualified hostname for the endpoint
+  ## @param httpProxy.endpoints[].port Discovery service port exposed by the endpoint
+  endpoints: []
+  #  - name: internal
+  #    fqdn: discovery-internal.dev.example.com
+  #    port: 8080
+  #  - name: external
+  #    fqdn: dev.example.com
+  #    port: 8081
+
+  ## Default single-endpoint FQDN configuration, used when endpoints is empty.
+  fqdn:
+    ## @param httpProxy.fqdn.domain Base domain suffix used to render the HTTPProxy FQDN
+    domain: "nodomain.none"
+
+    ## @param httpProxy.fqdn.host Optional host prefix. When set, the final
+    ## hostname is "<host>.<domain>"; when empty, domain is the complete hostname.
+    host: ""
+
+  ## @param httpProxy.path The prefix for all routes of this service
+  path: "/"
+
+  ## Redirect exact matches of httpProxy.path (typically "/") to another host.
+  ## Contour proxies `/` to this service with auth disabled; the operator
+  ## itself returns the HTTP redirect. Contour's requestRedirectPolicy cannot
+  ## be used here because it ignores authPolicy.disabled and ext_authz returns
+  ## 401 before the redirect is issued.
+  rootRedirect:
+    ## @param httpProxy.rootRedirect.enabled Enable the root-path redirect
+    enabled: false
+
+    ## @param httpProxy.rootRedirect.target Redirect destination
+    target:
+      ## @param httpProxy.rootRedirect.target.fqdn Hostname written into Location
+      fqdn: ""
+
+      ## @param httpProxy.rootRedirect.target.path Path written into Location
+      path: "/"
+
+      ## @param httpProxy.rootRedirect.target.statusCode HTTP redirect status code
+      statusCode: 302
+
+  ## TLS configuration for the ingress
+  tls:
+    ## @param httpProxy.tls.enabled Enable TLS for the HTTP proxy
+    enabled: false
+
+    ## @param httpProxy.tls.secretName Name of the secret containing the TLS cert
+    secretName: ""
+
+    ## CertManager integration for automatic certificate provisioning
+    ## If enabled, will create a Certificate resource for CertManager, using
+    ## either the default TLS secret name or httpProxy.tls.secretName if
+    ## specified. This secret will be added as tls.secretName of the httpProxy
+    ## CR for Contour.
+    certManager:
+      ## @param httpProxy.tls.certManager.enabled Enable CertManager integration
+      enabled: false
+
+      ## Issuer reference for CertManager
+      issuerRef:
+        ## @param httpProxy.tls.certManager.issuerRef.name Name of the issuer
+        ## Required if certManager.enabled is true.
+        name: my-issuer
+
+        ## @param httpProxy.tls.certManager.issuerRef.kind Kind of the issuer
+        ## Required if certManager.enabled is true.
+        kind: my-issuer-kind
+
+  ## CORS policy configuration
+  ## Verbatim CORSPolicy setting of Envoy's HTTPProxy object
+  corsPolicy:
+    ## @param httpProxy.corsPolicy.allowCredentials Allow credentials in CORS
+    ## If true, allowOrigin cannot use wildcard.
+    allowCredentials: false
+
+    ## @param httpProxy.corsPolicy.allowOrigin Allowed origins for CORS requests
+    allowOrigin:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowHeaders Allowed headers for CORS requests
+    allowHeaders:
+      - "*"
+
+    ## @param httpProxy.corsPolicy.allowMethods Allowed HTTP methods for CORS
+    allowMethods:
+      - 'GET'
+
+    ## @param httpProxy.corsPolicy.exposeHeaders Exposed headers for CORS requests that clients are allowed to read
+    exposeHeaders:
+      - "*"
+
+  ## @param httpProxy.authExtension
+  ## If used, specifies the Envoy extension service name used to authenticate calls to this service
+  authExtension:
+    enabled: false
+
+    ## @param httpProxy.authExtension.responseTimeout Configures maximum time to wait for a check response from the auth extension.
+    responseTimeout: 2s
+
+    ## @param httpProxy.authExtension.extensionRef Specifies the extension resource that will authorize client requests.
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+
+  ## @param httpProxy.annotations
+  ## Annotations added to the HTTPProxy CRD
+  annotations: {}
+
+  timeoutPolicy:
+    ## @param httpProxy.timeoutPolicy.response
+    ## Timeout for receiving a response from the server after processing a request.
+    response: "10s"
+
+    ## @param httpProxy.timeoutPolicy.idle Timeout for idle connections
+    idle: "10s"
+
+## Default resources are sized for a namespace-scoped deployment with modest
+## service counts. Increase these for large namespaces or frequent reconciliation.
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /api/v2beta/services
+    port: internal
+readinessProbe:
+  httpGet:
+    path: /api/v2beta/services
+    port: internal
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+volumes: []
+
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

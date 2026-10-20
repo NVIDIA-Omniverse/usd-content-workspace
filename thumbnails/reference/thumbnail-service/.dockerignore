@@ -1,0 +1,17 @@
+.git
+.gitignore
+.cursor
+.pre-commit-cache
+.pytest_cache
+target
+coverage
+logs
+*.log
+.tmp_*
+.env
+.env.*
+!.env.example
+README.md
+docs
+tests
+scripts-notifications

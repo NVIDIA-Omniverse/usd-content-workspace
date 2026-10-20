@@ -1,0 +1,312 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "User Service",
+		"description": "Postman collection for the User Service REST API (Axum-based, backed by Microsoft Entra ID).\n\nSet the `baseUrl` and `bearerToken` collection variables before use.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "bearerToken",
+			"value": "<your-bearer-token>",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "<user-id>",
+			"type": "string"
+		},
+		{
+			"key": "groupId",
+			"value": "<group-id>",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{bearerToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/healthz",
+							"host": ["{{baseUrl}}"],
+							"path": ["healthz"]
+						},
+						"description": "Liveness probe. Returns 200 OK if the service is running."
+					},
+					"response": []
+				},
+				{
+					"name": "Readiness Check",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/readyz",
+							"host": ["{{baseUrl}}"],
+							"path": ["readyz"]
+						},
+						"description": "Readiness probe. Returns 200 OK if the service is ready, 503 Service Unavailable otherwise."
+					},
+					"response": []
+				}
+			],
+			"description": "Health and readiness probes (no authentication required)."
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/users/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "users", "me"]
+						},
+						"description": "Returns the user associated with the provided Bearer token."
+					},
+					"response": []
+				},
+				{
+					"name": "List Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/users",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "users"],
+							"query": [
+								{
+									"key": "email",
+									"value": "",
+									"description": "Filter by exact email address.",
+									"disabled": true
+								},
+								{
+									"key": "display_name",
+									"value": "",
+									"description": "Filter by display name. Append '*' for prefix match (e.g. 'John*').",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Page size (max 100, default 20).",
+									"disabled": true
+								},
+								{
+									"key": "cursor",
+									"value": "",
+									"description": "Pagination cursor from a previous response's next_cursor.",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List users with optional filtering and pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/users/{{userId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "users", "{{userId}}"]
+						},
+						"description": "Get a single user by their ID."
+					},
+					"response": []
+				},
+				{
+					"name": "List User Groups",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/users/{{userId}}/groups",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "users", "{{userId}}", "groups"],
+							"query": [
+								{
+									"key": "display_name",
+									"value": "",
+									"description": "Filter by display name. Append '*' for prefix match.",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Page size (max 100, default 20).",
+									"disabled": true
+								},
+								{
+									"key": "cursor",
+									"value": "",
+									"description": "Pagination cursor from a previous response's next_cursor.",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List groups that a user belongs to."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Group",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/users/{{userId}}/groups/{{groupId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "users", "{{userId}}", "groups", "{{groupId}}"]
+						},
+						"description": "Get a specific group for a specific user (confirms membership)."
+					},
+					"response": []
+				}
+			],
+			"description": "User-related endpoints."
+		},
+		{
+			"name": "Groups",
+			"item": [
+				{
+					"name": "List Groups",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/groups",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "groups"],
+							"query": [
+								{
+									"key": "display_name",
+									"value": "",
+									"description": "Filter by display name. Append '*' for prefix match.",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Page size (max 100, default 20).",
+									"disabled": true
+								},
+								{
+									"key": "cursor",
+									"value": "",
+									"description": "Pagination cursor from a previous response's next_cursor.",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List groups with optional filtering and pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Group by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/groups/{{groupId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "groups", "{{groupId}}"]
+						},
+						"description": "Get a single group by its ID."
+					},
+					"response": []
+				},
+				{
+					"name": "List Group Members",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/groups/{{groupId}}/users",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "groups", "{{groupId}}", "users"],
+							"query": [
+								{
+									"key": "email",
+									"value": "",
+									"description": "Filter by exact email address.",
+									"disabled": true
+								},
+								{
+									"key": "display_name",
+									"value": "",
+									"description": "Filter by display name. Append '*' for prefix match.",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Page size (max 100, default 20).",
+									"disabled": true
+								},
+								{
+									"key": "cursor",
+									"value": "",
+									"description": "Pagination cursor from a previous response's next_cursor.",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List users that are members of a group."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Group Member",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1alpha/groups/{{groupId}}/users/{{userId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1alpha", "groups", "{{groupId}}", "users", "{{userId}}"]
+						},
+						"description": "Get a specific user within a group (confirms membership and returns user details). Returns 404 if the user is not a member of the group."
+					},
+					"response": []
+				}
+			],
+			"description": "Group-related endpoints."
+		}
+	]
+}

@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.httpProxy.enabled -}}
+
+{{-  $proxies  := dict "rest" (dict 
+                                     "hostPrefix" ""
+                                     "targetSvc" (include "event-aggregation-service.servicename" $)
+                                     "targetPort" .Values.rest.port
+                                     "path" (.Values.httpProxy.path | default "/")
+                                     "protocol" ""
+                                     "proxySettings" (mustMergeOverwrite
+                                           (deepCopy $.Values.httpProxy)
+                                           (deepCopy $.Values.httpProxy.rest)
+                                        )
+
+                              )
+                      "grpc"  (dict
+                                     "hostPrefix" "grpc."
+                                     "targetSvc" (include "event-aggregation-service.servicename" $)
+                                     "targetPort" .Values.service.port
+                                     "protocol" "h2c"
+                                     "path" "/"
+                                     "proxySettings" (mustMergeOverwrite
+                                           (deepCopy $.Values.httpProxy)
+                                           (deepCopy $.Values.httpProxy.grpc)
+                                        )
+
+                              )
+                     
+-}}
+{{-  range $type, $config := $proxies }}
+{{-  $fqdn := print $config.hostPrefix  $config.proxySettings.fqdn.host "." $config.proxySettings.fqdn.domain  -}}
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ print (include "event-aggregation-service.fullname" $) "-" $type }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "event-aggregation-service.labels" $ | nindent 4 }}
+  {{- with $config.proxySettings.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  virtualhost:
+    fqdn: {{ $fqdn }}
+    {{- if $config.proxySettings.tls.enabled }}
+    tls:
+      secretName:  {{ include "event-aggregation-service.tls-secret-name" $ }}
+    {{- end }}
+    corsPolicy: {{ $config.proxySettings.corsPolicy | toYaml | nindent 6 }}
+
+    {{- if or $.Values.openId.enabled $config.proxySettings.authExtension.enabled }}
+    authorization:
+      responseTimeout: {{ $config.proxySettings.authExtension.responseTimeout }}
+      extensionRef:
+        name: {{ $config.proxySettings.authExtension.extensionRef.name }}
+        namespace: {{ $config.proxySettings.authExtension.extensionRef.namespace | default $.Release.Namespace }}
+    {{- end }}
+
+  routes:
+    - conditions:
+        - prefix: {{ $config.path }}
+      timeoutPolicy: {{ $config.proxySettings.timeoutPolicy | toYaml | nindent 8 }}
+      {{- with $config.proxySettings.responseHeadersPolicy }}
+      responseHeadersPolicy: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $config.targetSvc }}
+          port: {{ $config.targetPort }}
+          {{- ternary "" ((print "protocol: "  $config.protocol) | nindent 10) (empty $config.protocol) }}
+{{  end -}}
+{{- else -}}
+### HTTPProxy (ingress) is disabled, see .Values.httpProxy.enabled 
+{{- end }}

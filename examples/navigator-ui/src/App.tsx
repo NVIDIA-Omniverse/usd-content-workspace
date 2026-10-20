@@ -1,0 +1,58 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HTTPError } from "ky";
+import { ContextMenuProvider } from "mantine-contextmenu";
+import { MantineProvider, v8CssVariablesResolver } from "@mantine/core";
+import { AppConfigProvider } from "@/providers/AppConfigProvider";
+import { ModalsProvider } from "@/providers/ModalsProvider";
+import { Router } from "./Router";
+import { theme } from "./theme";
+
+import "@mantine/core/styles.css";
+import "mantine-contextmenu/styles.css";
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider theme={theme} forceColorScheme="dark" cssVariablesResolver={v8CssVariablesResolver}>
+        <ContextMenuProvider repositionOnRepeat>
+          <ModalsProvider>
+            <AppConfigProvider>
+              <Router />
+            </AppConfigProvider>
+          </ModalsProvider>
+        </ContextMenuProvider>
+      </MantineProvider>
+    </QueryClientProvider>
+  );
+}
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        const httpError = error as HTTPError;
+        if (httpError?.response?.status === 403 || httpError?.response?.status === 404) {
+          return false;
+        }
+        // Otherwise retry up to 3 times
+        return failureCount < 3;
+      },
+      staleTime: 1000 * 60 * 2,
+    },
+  },
+});

@@ -1,0 +1,207 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if .Values.thumbnailWorker.enabled }}
+{{- include "service.validateObservability" . }}
+{{- include "worker.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "worker.fullname" . }}
+  labels:
+    {{- include "worker.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.thumbnailWorker.autoscaling.enabled }}
+  replicas: {{ .Values.thumbnailWorker.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "worker.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "worker.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      # Long enough for the worker's own drain to finish. Cutting it short kills
+      # conversions mid-flight; their deliveries stay unacknowledged and come
+      # back, so nothing is lost, but the work is repeated for no reason.
+      terminationGracePeriodSeconds: {{ .Values.thumbnailWorker.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: thumbnail-worker
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.thumbnailWorker.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/app/task-worker"]
+          ports:
+            - containerPort: {{ .Values.workerRuntime.healthPort }}
+              name: health
+          {{- if .Values.thumbnailWorker.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.thumbnailWorker.startupProbe.path }}
+              port: {{ .Values.workerRuntime.healthPort }}
+            initialDelaySeconds: {{ .Values.thumbnailWorker.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.thumbnailWorker.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.thumbnailWorker.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.thumbnailWorker.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.thumbnailWorker.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.thumbnailWorker.livenessProbe.path }}
+              port: {{ .Values.workerRuntime.healthPort }}
+            initialDelaySeconds: {{ .Values.thumbnailWorker.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.thumbnailWorker.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.thumbnailWorker.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.thumbnailWorker.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.thumbnailWorker.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.thumbnailWorker.readinessProbe.path }}
+              port: {{ .Values.workerRuntime.healthPort }}
+            initialDelaySeconds: {{ .Values.thumbnailWorker.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.thumbnailWorker.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.thumbnailWorker.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.thumbnailWorker.readinessProbe.failureThreshold }}
+          {{- end }}
+          env:
+            - name: SERVICE_NAME
+              value: "thumbnail-task-worker"
+            - name: RUST_LOG
+              value: {{ .Values.observability.logging.level | quote }}
+            - name: OTEL_LOGS_EXPORTER
+              value: "console"
+            - name: HEALTH_PORT
+              value: {{ .Values.workerRuntime.healthPort | quote }}
+            - name: NOTIFICATIONS_EVENT_CONSUMER_ENDPOINT
+              value: {{ .Values.notifications.eventConsumer.endpoint | quote }}
+            {{- /*
+              WorkerEventQueue's id is derived at runtime by the worker binary from
+              these prefixes, the same way the orchestrator derives StorageEventQueue's
+              id. Helm injects no NOTIFICATIONS_QUEUE_ID for either component.
+            */}}
+            {{- /*
+              The worker parses this as a comma-separated string, so the list has
+              to be joined here rather than quoted directly — quoting a list would
+              render Go's `[a b]` and silently produce one nonsense prefix.
+            */}}
+            {{- $prefixes := include "chart.resourcePrefixes" . }}
+            {{- if $prefixes }}
+            - name: NOTIFICATIONS_QUEUE_RESOURCE_PREFIXES
+              value: {{ $prefixes | quote }}
+            {{- end }}
+            - name: STORAGE_GRPC_ENDPOINT
+              value: {{ .Values.storage.endpoint | quote }}
+            - name: THUMBNAIL_SERVICE_GRPC_ENDPOINT
+              value: {{ include "worker.thumbnailServiceGrpcEndpoint" . | quote }}
+            - name: MAX_CONCURRENT_CONVERSIONS
+              value: {{ .Values.workerRuntime.maxConcurrentConversions | quote }}
+            - name: REDELIVERY_RECYCLE_INTERVAL
+              value: {{ .Values.workerRuntime.redeliveryRecycleInterval | quote }}
+            - name: OUTBOUND_REQUEST_TIMEOUT
+              value: {{ .Values.workerRuntime.outboundRequestTimeout | quote }}
+            - name: SHUTDOWN_DRAIN_TIMEOUT
+              value: {{ .Values.workerRuntime.shutdownDrainTimeout | quote }}
+            - name: STREAM_TIMEOUT_SECS
+              value: {{ .Values.streaming.streamTimeoutSecs | quote }}
+            - name: MAX_RECONNECT_BACKOFF_SECONDS
+              value: {{ .Values.streaming.maxReconnectBackoffSecs | quote }}
+            {{/*
+              `int64` before `quote`, or these two arrive as floats. Helm parses
+              an unquoted 67108864 into a float64 and `quote` alone renders it
+              "6.7108864e+07", which the worker's integer parser rejects outright
+              — the pod crash-loops on "invalid digit found in string" before it
+              opens a connection. Only these two values are large enough to hit
+              it, and `int64` keeps them correct whether an operator writes the
+              number bare or quoted.
+            */}}
+            - name: MAX_SOURCE_BYTES
+              value: {{ .Values.workerRuntime.maxSourceBytes | int64 | quote }}
+            - name: MAX_DECODED_PIXELS
+              value: {{ .Values.workerRuntime.maxDecodedPixels | int64 | quote }}
+            - name: MAX_TRANSFORM_PEAK_BYTES
+              value: {{ .Values.workerRuntime.maxTransformPeakBytes | int64 | quote }}
+            {{- include "worker.identityEnv" . | nindent 12 }}
+            {{- include "service.otelEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.thumbnailWorker.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.thumbnailWorker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- include "worker.identityVolumeMounts" . | nindent 12 }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+        {{- $provisioner := merge (deepCopy .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container) (dict "securityContext" .Values.securityContext) }}
+        # Same token-exchange sidecar the orchestrator uses; the two share a principal.
+        - name: {{ .Chart.Name }}-worker-token-provisioner
+          {{- (omit $provisioner "name" "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+            {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: worker-token-exchange
+              mountPath: /etc/secrets/access-token
+        {{- end }}
+      volumes:
+        {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+        - name: worker-identity-secret
+          secret:
+            secretName: {{ include "worker.secretName" . }}
+        {{- end }}
+        {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+        - name: worker-token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

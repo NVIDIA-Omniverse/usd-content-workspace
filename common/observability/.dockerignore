@@ -1,0 +1,9 @@
+# sync me with .gitignore
+
+/target
+/codecov
+/scratch
+/.vscode
+
+*.profraw
+.DS_Store

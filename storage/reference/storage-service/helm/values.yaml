@@ -1,0 +1,1053 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Replica count for the storage service deployment.
+replicaCount: 1
+
+# Storage service backend type
+# Determines which cloud storage provider to use (S3 or Azure Blob Storage)
+# Valid values: "s3" | "azure"
+# Default: s3
+# Example: backend: azure
+# backend: <s3|azure>
+
+# Container image configuration
+image:
+  # Container image repository
+  # Example: "nvcr.io/omniverse/my-custom-storage"
+  repository: nvcr.io/nvidia/omniverse/storage-service
+
+  # Image tag/version
+  # Example: "1.0.0" | "latest" | "dev-20250121"
+  tag: "0.0.0"
+
+  # Image pull policy
+  # Valid values: "Always" | "IfNotPresent" | "Never"
+  # Example: "Always" (for dev environments to always pull latest)
+  pullPolicy: IfNotPresent
+
+  # Image pull secrets for private registries
+  # Example: pullSecrets: [{name: "my-registry-secret"}]
+  pullSecrets: []
+
+# Override the chart name (affects resource naming)
+# Example: nameOverride: "storage"
+nameOverride: ""
+
+# Override the full release name (takes precedence over nameOverride)
+# Example: fullnameOverride: "prod-storage-service"
+fullnameOverride: ""
+
+# Kubernetes Service Account configuration
+serviceAccount:
+  # Create a new service account
+  # Example: create: true (when RBAC permissions are needed)
+  create: false
+
+  # Automatically mount service account token in pods
+  # Example: automount: false (for enhanced security when SA not needed)
+  automount: false
+
+  # Annotations for the service account (useful for cloud provider IAM)
+  # Example: annotations: {"eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/storage-role"}
+  annotations: {}
+
+  # Name of existing service account to use (if create: false)
+  # Example: name: "pre-existing-sa"
+  name: ""
+
+# Annotations to add to pods
+# Useful for service mesh integration, monitoring, security policies
+# Example: podAnnotations: {"prometheus.io/scrape": "true", "vault.hashicorp.com/agent-inject": "true"}
+podAnnotations: {}
+
+# Labels to add to pods
+# Useful for organization, selectors, and operational grouping
+# Example: podLabels: {"team": "platform", "cost-center": "engineering"}
+podLabels: {}
+
+# Share the pod's process namespace so the app runs as a child of the pod's PID 1
+# (pause) instead of being PID 1 itself. This lets an externally-sent SIGABRT reach the
+# app so a core dump is produced (the kernel ignores unhandled default-action signals
+# sent to a PID 1).
+shareProcessNamespace: false
+
+# Security context for the entire pod (applies to all containers).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Security context for the container.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# Additional list of environment variables to set in the container.
+# Example:
+# extraEnvs:
+#   - name: "CUSTOM_VAR"
+#     value: "custom-value"
+#   - name: "SECRET_VAR"
+#     valueFrom:
+#       secretKeyRef:
+#         name: "my-secret"
+#         key: "password"
+extraEnvs: []
+
+# Additional list of sources to populate environment variables in the container.
+#
+# You can configure the OpenTelemetry (OTEL) runtime using the extraEnvFrom and extraEnvs parameters. These parameters
+# support the standard environment variables defined in the OTEL SDK specification: https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/.
+# Note that "otel" is currently the only supported exporter type.
+#
+# Example:
+# extraEnvFrom:
+#   - configMapRef:
+#       name: my-configmap-with-env-vars
+#       optional: true
+#   - secretRef:
+#       name: my-secret-with-env-vars
+#       optional: true
+extraEnvFrom: []
+
+# Observability configuration for OpenTelemetry (OTEL) metrics and tracing.
+#
+# Storage service uses gRPC as its OTEL transport protocol. Endpoints should point at an
+# OTLP-compatible collector (e.g. Grafana Alloy on port 4317).
+#
+# When observability.metrics.enabled is true it takes precedence over service.metrics.enabled
+# and OTLP push is used instead of Prometheus exposition.
+#
+# Example (production snippet):
+# observability:
+#   metrics:
+#     enabled: true
+#     endpoint:
+#       grpc: "http://grafana-k8s-monitoring-alloy-receiver.grafana-cloud.svc.cluster.local:4317"
+#     exportIntervalMs: 15000
+#   tracing:
+#     enabled: true
+#     endpoint:
+#       grpc: "http://grafana-k8s-monitoring-alloy-receiver.grafana-cloud.svc.cluster.local:4317"
+#     samplingRatio: "0.5"  # string; float 0-1 where 1 = 100% of traces exported
+observability:
+  metrics:
+    enabled: false
+    # OTLP metric export interval in milliseconds. 15 s matches Grafana's default evaluation
+    # interval so histogram_quantile(rate(...)) panels always have enough data points in the
+    # query window. The init-tracing-opentelemetry library defaults to 60 s without this.
+    exportIntervalMs: 15000
+    # OTLP collector endpoint. Required when enabled: true.
+    endpoint:
+      grpc: ""
+  tracing:
+    enabled: false
+    # OTLP collector endpoint. Required when enabled: true.
+    endpoint:
+      grpc: ""
+  logging:
+    structured:
+      # Emit logs as JSON (one JSON object per line) instead of human-readable text.
+      # Useful for log-aggregation pipelines that parse structured fields.
+      enabled: false
+  headers:
+    # Incoming request headers to copy onto permission service requests. See docs/helm/observability.rst.
+    forward: []
+
+# Additional list of containers to run alongside the main container as per
+# https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container.
+#
+# Containers declared here won't inherit any properties of the main container - you will need to specify the security
+# context and the limits manually.
+extraContainers: []
+
+# Additional list of init containers as per
+# https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container.
+#
+# Init containers declared here won't inherit any properties of the main container - you will need to specify the
+# security context and the limits manually.
+extraInitContainers: []
+
+# Additional list of volumes in the pod spec as per
+# https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes.
+extraVolumes: []
+
+# Additional list of volume mounts for the main container as per
+# https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes-1.
+extraVolumeMounts: []
+
+# Kubernetes Service configuration
+# Exposes the storage service endpoints within the cluster
+service:
+  # Service type - determines how the service is exposed
+  # Valid values: "ClusterIP" | "NodePort" | "LoadBalancer"
+  # Example: type: "LoadBalancer" (for external access)
+  type: ClusterIP
+
+  # gRPC service endpoint
+  grpc:
+    # Port for gRPC API
+    # Example: port: 50051 (custom gRPC port)
+    port: 8011
+
+  # REST API endpoint
+  rest:
+    # Port for REST API
+    # Example: port: 8080 (standard HTTP port)
+    port: 8012
+
+    # Serve the OpenAPI documents. See docs/helm/misc.rst.
+    serveOpenapi: true
+
+  # Prometheus server endpoint
+  metrics:
+    # Whether to enable the prometheus server explicitly. When disabled, the exporter will be configured according to
+    # the OTEL settings.
+    # Example: enabled: false
+    enabled: false
+
+    # Metrics server port.
+    # Example: port: 9999
+    port: 8013
+
+  # Additional annotations added to the Kubernetes service
+  annotations: {}
+
+  # Name override for service and service headless
+  nameOverride: ""
+
+# Enable external ingress via Contour's `httpproxy` objects
+httpProxy:
+  enabled: false
+
+  # Final ingress hostname will be composed as "<host>.<domain>".
+  fqdn:
+    host: "storage"
+    domain: "nodomain.none"
+
+  path: "/"
+
+  tls:
+    enabled: false
+
+    # Name of secret containing the TLS cert
+    secretName: ""
+
+    # If enabled, will create a Certificate resource for CertManager, using
+    # either default TLS secret name or one above (httpProxy.tls.secretName)
+    # if specified.
+    #
+    # This secret will be added as tls.secretName of the httpProxy CR for
+    # Contour.
+    certManager:
+      enabled: false
+      issuerRef:
+        name: my-issuer
+        kind: my-issuer-kind
+
+  # Verbatim CORSPolicy setting of envoy's HTTPProxy object
+  corsPolicy:
+    allowCredentials: false
+    # Override the list of allowed origins for the endpoint. If specified, the default origins won't be set.
+    allowOrigin: []
+    allowHeaders:
+      - "*"
+    allowMethods:
+      - "GET"
+      - "PUT"
+      - "POST"
+      - "HEAD"
+      - "PATCH"
+      - "DELETE"
+    exposeHeaders:
+      - "*"
+
+  # Override the default response headers policy. If specified, the default response headers won't be set.
+  # Example:
+  # responseHeadersPolicy:
+  #   set:
+  #     - name: Strict-Transport-Security
+  #       value: max-age=31536000; includeSubdomains; preload
+  #   remove:
+  #     - "X-Response-Id"
+  responseHeadersPolicy: {}
+
+  # Timeout policy for non-streaming HTTPProxy routes.
+  timeoutPolicy:
+    # The upstream timeout for the routes.
+    response: "90s"
+
+    # The idle timeout for the routes.
+    idle: "90s"
+
+  # Timeout poilicy for streaming HTTPProxy routes.
+  streamTimeoutPolicy:
+    response: "90s"
+    idle: "90s"
+
+  # Additional annotations for HTTPProxy CRD
+  annotations: {}
+
+  # Configuration of Envoy auth extension for
+  # this service.
+  authExtension:
+    enabled: false
+
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+
+    responseTimeout: 2s
+
+  # Per-protocol overrides for the HTTPProxy objects.
+  grpc: {}
+  rest: {}
+
+# Service identity configuration.
+serviceIdentity:
+  clientCredentials:
+    enabled: false
+    openIdConfigurationUri: ""
+    clientScope: ""
+    clientId: ""
+    clientSecretRef: 
+      name: ""
+      key: ""
+    extraHeaders: {}
+    extraBodyParams: {}
+  accessTokenFile:
+    # Defines if the service should read a pre-provisioned access token from a file instead of
+    # using an application-managed token provider.
+    enabled: false
+    path: "/etc/secrets/access-token/token"
+    provisionerSidecar:
+      # Full container spec; will be replicated verbatim, with one exception: volume mounts will
+      # get an ADDITIONAL volume called `token-exchange` to be able to comm token to the actual
+      # service this token provisioner sidecar is for.
+      container:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 32Mi
+
+# Application configuration
+# These settings are passed to the storage service runtime configuration
+config:
+  # Metrics configuration.
+  metrics:
+    # Optional override for the metric name prefix. Set to "" to emit bare names.
+    prefix: "storage"
+
+  # Shared L2 (Redis/Valkey) cache.
+  redis:
+    # Enable the optional L2 cache tier.
+    enabled: false
+
+    # Address of the Redis/Valkey server. Required when `enabled: true`.
+    # Example: address: "redis://my-redis.svc.cluster.local:6379"
+    address: ""
+
+    # Optional. Namespace prefix applied to every key the service writes
+    # to L2. Strongly recommended so two services running against the same
+    # Redis cluster cannot serve each other's cached responses.
+    # Example: namespace: "storage-service-prod"
+    namespace: "storage-service"
+
+    # Optional. Per-command timeout. Caps the blast radius of a degraded-
+    # but-reachable Redis instance. Set to "0ms" to disable.
+    commandTimeout: "100ms"
+
+    # Optional. Cap on the initial `wait_for_connect`.
+    connectTimeout: "10s"
+
+    # Optional. Capacity of the fred subscriber broadcast channel for L2
+    # invalidation pub/sub.
+    broadcastChannelCapacity: 1024
+
+    # Connection pool size.
+    poolSize: 8
+
+    # Maximum reconnect attempts after an established Redis connection drops.
+    # `0` means retry forever.
+    reconnectMaxAttempts: 0
+
+    # Initial exponential reconnect delay.
+    reconnectMinDelay: "100ms"
+
+    # Maximum exponential reconnect delay.
+    reconnectMaxDelay: "30s"
+
+    # Exponential reconnect multiplier. Must be greater than 1.
+    reconnectBase: 2
+
+    # Jitter added to each reconnect delay.
+    reconnectJitter: "50ms"
+
+  # Logging configuration
+  logging:
+    # Log level - controls verbosity
+    # Valid values: "trace" | "debug" | "info" | "warn" | "error"
+    # Example: level: "debug" (for development with detailed logs)
+    level: info
+
+    # Backtrace level for error stack traces
+    # 0 = disabled, higher values = more detailed backtraces
+    # Example: backtrace: 1 (enable backtraces for debugging)
+    backtrace: 0
+
+    # Additional logging targets for specific modules
+    # Format: "module1=level,module2=level"
+    # Example: extraTargets: "hyper=debug,tokio=trace"
+    extraTargets: ""
+
+  # Storage backend configurations
+  storage:
+    # Amazon S3 storage configuration
+    s3:
+      # Minimum object size to use redirect (presigned URL) for reads
+      # Smaller objects are proxied through the service, larger use presigned URLs
+      # Example: readRedirectSize: "512KiB" (redirect only larger files)
+      readRedirectSize: "256KiB"
+
+      # Maximum size for write requests through service body
+      # Larger writes use multipart upload or presigned URLs
+      # Example: writeBodyMaxSize: "5MiB"
+      writeBodyMaxSize: "2MiB"
+
+      # Maximum size for write redirects (presigned URLs)
+      # Beyond this, multipart upload is used
+      # Example: writeRedirectMaxSize: "100MiB"
+      writeRedirectMaxSize: "64MiB"
+
+      # Reject requests for buckets that are not configured under endpoints.
+      # See docs/helm/storage-backend.md.
+      allowUnconfiguredEndpoints: false
+
+      # Serve object native metadata.
+      nativeMetadataEnabled: false
+
+      # Fetch native metadata for each object listed by ListStat.
+      nativeMetadataListFanoutEnabled: false
+
+      # Timeout configurations for S3 operations
+      timeouts:
+        # Connection establishment timeout
+        # Example: connect: "30s"
+        connect: "60s"
+
+        # Read operation timeout
+        # Example: read: "120s"
+        read: "60s"
+
+        # Overall operation timeout
+        # Example: operation: "300s"
+        operation: "60s"
+
+        # Single operation attempt timeout
+        # Example: operationAttempt: "90s"
+        operationAttempt: "60s"
+
+        # Connection keep-alive timeout
+        # Example: keepalive: "120s"
+        keepalive: "60s"
+
+      # Presigned URL expiration settings
+      expiration:
+        # How long presigned URLs remain valid
+        # Example: presignedExpiration: "12h"
+        presignedExpiration: "24h"
+
+      # Bucket declarations.
+      endpoints: ~
+
+    # Azure Blob Storage configuration
+    azureBlob:
+      # Minimum object size for read redirects (SAS URLs)
+      # Example: readRedirectSize: "1MiB"
+      readRedirectSize: "256KiB"
+
+      # Maximum size for write requests in service body
+      # Example: writeBodyMaxSize: "4MiB"
+      writeBodyMaxSize: "2MiB"
+
+      # Maximum size for write redirects (SAS URLs)
+      # Example: writeRedirectMaxSize: "128MiB"
+      writeRedirectMaxSize: "64MiB"
+
+      # Reject requests for storage accounts that are not configured under endpoints.
+      # See docs/helm/storage-backend.md.
+      allowUnconfiguredEndpoints: false
+
+      # Serve blob native metadata.
+      nativeMetadataEnabled: false
+
+      # Timeout configurations for Azure Blob operations
+      timeouts:
+        # Connection establishment timeout
+        connect: "60s"
+
+        # Read operation timeout
+        read: "60s"
+
+        # Overall operation timeout
+        operation: "60s"
+
+        # Single operation attempt timeout
+        operationAttempt: "60s"
+
+        # Connection keep-alive timeout
+        keepalive: "60s"
+
+      # SAS (Shared Access Signature) URL expiration
+      expiration:
+        # How long SAS URLs remain valid
+        # Example: presignedExpiration: "6h"
+        presignedExpiration: "24h"
+
+      # Maximum idle HTTP connections per host kept by the underlying
+      # reqwest pool. Leave unset (the default) to use reqwest's built-in
+      # default; set to 0 to disable idle-connection pooling entirely; tune up
+      # when many concurrent SAS-signing operations cause connection churn
+      # against the same Azure endpoint.
+      # Example: poolMaxIdlePerHost: 32
+      poolMaxIdlePerHost: ~
+
+      # Bucket declarations.
+      endpoints: ~
+
+  # Permissions service integration
+  permissions:
+    # Enable external permissions service integration
+    # When enabled, all storage operations are authorized via the permissions service
+    # Example: enabled: true
+    enabled: false
+
+    # Permission service client settings (rest or grpc sub-object, see docs/helm/storage-permissions.md).
+    client:
+      # GRPC client settings.
+      grpc:
+        # Permission service gRPC endpoint. Defaults to the in-cluster service name.
+        endpoint: "http://permission-service:3010"
+
+      # REST client settings. Will take the precedence, if provided.
+      rest: ~
+
+    # Custom permissions action mapping (optional)
+    # Maps storage service operations to permission actions
+    # Operations (keys): stat, enumerate_versions, read, read_from_address, write, upload_part,
+    #   complete_multipart_upload, abort_multipart_upload, complete_redirect_upload, copy_from,
+    #   copy_to, delete, enumerate, list, list_stat, fetch_write_type_info,
+    #   list_top_level_addresses, get_metadata, update_metadata, delete_metadata, query_metadata.
+    # Actions (values): read, write, admin (or custom permission names)
+    # Default mapping: most read operations → "read", write operations → "write"
+    # Example:
+    # actionNames:
+    #   stat: "read"
+    #   read: "read"
+    #   write: "write"
+    #   delete: "admin"
+    #   update_metadata: "write"
+    actionNames: ~
+
+    # Batch size for permission check requests (optional)
+    # Maximum number of permission checks to include in a single batch request.
+    # The permission service has a limit (typically 100), and requests exceeding this
+    # will be automatically split into multiple batches.
+    # Example: batchSize: 100
+    batchSize: 100
+
+    # Include "acl" key when all metadata keys are requested (optional)
+    # When enabled, the "acl" key will be included in get_metadata responses
+    # when an empty list of keys is requested (which means "get all keys").
+    # Example: includeAclInAllKeys: true
+    includeAclInAllKeys: false
+
+  # Metadata backends.
+  metadata: ~
+
+  # Metadata cache settings.
+  metadataCache:
+    enabled: false
+    cacheCapacity: "1GiB"
+    cacheTimeToLive: "24h"
+    pageSizeLimit: "3MiB"
+    l2Enabled: false
+    l2ClaimTimeToLive: "30s"
+
+  # Storage event sources.
+  storageEvents: ~
+
+  # Notification client for publishing storage events
+  notificationClient:
+    # Enable event publishing to notification service
+    # Example: enabled: true
+    enabled: false
+
+    # Notification service endpoint URL (optional)
+    # Example: endpointUrl: "http://event-aggregation-service.default.svc.cluster.local:50051"
+    endpointUrl: http://event-aggregation-service:50051
+
+    # Maximum notifications per BatchPublishEvents request
+    batchSize: 100
+
+    # Event type mappings for storage operations
+    eventTypes:
+      # Event type for object creation
+      # Example: objectCreated: "storage.object.created"
+      objectCreated: "omni.storage.created"
+
+      # Event type for object deletion
+      # Example: objectDeleted: "storage.object.deleted"
+      objectDeleted: "omni.storage.deleted"
+
+      # Event type for synthetic directory creation
+      # Example: dirCreated: "storage.dir.created"
+      dirCreated: "omni.storage.dir_created"
+
+      # Event type for synthetic directory deletion
+      # Example: dirDeleted: "storage.dir.deleted"
+      dirDeleted: "omni.storage.dir_deleted"
+
+    # Timeout configuration
+    timeouts:
+      # Request timeout
+      # Example: request: "500ms"
+      request: "60s"
+
+      # Connect timeout
+      # Example: connect: "5m"
+      connect: "60s"
+
+    # Client credentials settings.
+    credentials: ~
+
+    connectionsPerHost: 4
+    dnsRefreshInterval: 5s
+    tcpKeepalive: 30s
+    http2KeepAliveInterval: 30s
+
+  # Synthetic directory events.
+  syntheticDirEvents:
+    # Enable synthetic directory event generation
+    # Example: enabled: true
+    enabled: true
+
+    # How often to flush the accumulated events to the notification service
+    # Example: flushInterval: "6s"
+    flushInterval: "6s"
+
+  # URL remapper for translating storage URLs
+  # Enables mapping from virtual URLs (e.g., omniverse://) to actual storage URLs
+  urlRemapper:
+    # Enable URL remapping
+    # Example: enabled: true
+    enabled: false
+
+    # Checkpoint metadata key (optional)
+    # Metadata field used to identify checkpoints
+    # Example: checkpointMetadataKey: "checkpoints"
+    checkpointMetadataKey: ~
+
+    # URL rewrite rules (optional)
+    rewriteRules: ~
+
+    # Surface rewrite-rule source URLs as synthetic subfolders in
+    # `list` / `list_stat`. See `docs/helm/url-remapper.md`.
+    exposeChildRulesAsFolders: false
+
+  # URL normalizer. See `docs/helm/url-normalizer.rst`.
+  urlNormalizer:
+    enabled: true
+
+  # Small object cache - in-memory cache for small files
+  # Reduces latency and backend requests for frequently accessed small objects
+  smallObjectCache:
+    # Enable small object caching
+    # Example: enabled: false (disable for debugging or testing)
+    enabled: true
+
+    # Enable the optional Redis/Valkey L2 tier for this cache.
+    l2Enabled: false
+
+    # Maximum total memory for cached objects
+    # Example: capacity: "2GiB"
+    capacity: 1GiB
+
+    # Maximum size of individual objects to cache
+    # Objects larger than this are not cached
+    # Example: smallObjectSize: "512KiB"
+    smallObjectSize: 256KiB
+
+    # Cache entry time-to-live
+    # How long cached objects remain valid
+    # Example: timeToLive: "30m"
+    timeToLive: 15m
+
+    # Channel capacity for concurrent read operations
+    # Controls how many in-flight reads can be queued
+    # Example: inFlightReadChannelCapacity: 50
+    inFlightReadChannelCapacity: 30
+
+    # Error types to cache (prevents repeated failed requests)
+    # Example: errors: ["AccessDenied", "NotFound", "RateLimitExceeded"]
+    errors:
+      - "AccessDenied"
+      - "NotFound"
+
+  # Stat cache - caches object metadata (size, mtime, etag, etc.)
+  # Reduces HEAD requests to storage backend
+  statCache:
+    # Enable stat caching
+    # Example: enabled: false
+    enabled: false
+
+    # Enable the optional Redis/Valkey L2 tier for this cache.
+    l2Enabled: false
+
+    # Maximum memory for cached metadata
+    # Example: capacity: "512MiB"
+    capacity: 1GiB
+
+    # Cache entry time-to-live
+    # Example: timeToLive: "5m"
+    timeToLive: 15m
+
+    # Invalidate cache on object updates
+    # Ensures cache consistency after write operations and storage notifications
+    # Example: invalidateOnUpdate: false (if eventual consistency is acceptable)
+    invalidateOnUpdate: true
+
+    # Error types to cache
+    # Example: errors: ["NotFound"]
+    errors:
+      - "AccessDenied"
+      - "NotFound"
+
+  # List cacahe - prefetches object metadata using list operations.
+  # Reduces HEAD requests to storage backend at the expense of invoking a list operation against the whole folder with
+  # that object.
+  listCache:
+    # Enable list cache
+    # Example: enabled: false
+    enabled: true
+
+    # Enable the optional Redis/Valkey L2 tier for this cache.
+    l2Enabled: false
+
+    # Cache capacity
+    # Example: capacity: 100MiB
+    capacity: 1GiB
+
+    # Cache entry time-to-live
+    # Example: timeToLive: 1h
+    timeToLive: 15m
+
+    # Invalidate cache on object updates
+    # Ensures cache consistency after write operations and storage notifications
+    # example: invalidateOnUpdate: true
+    invalidateOnUpdate: true
+
+    # Response page size limit in that the cache can return before sending a new page.
+    # Example: page_size_limit = "1MiB"
+    pageSizeLimit: 3MiB
+
+    # Error types to cache
+    # Example: errors: ["NotFound"]
+    errors:
+      - "AccessDenied"
+      - "NotFound"
+
+  # Additional HTTP headers configuration
+  additionalHeaders:
+    # Enable custom header injection
+    # Example: enabled: false
+    enabled: true
+
+    # Cache-Control header for general responses (optional)
+    # Example: cacheControl: "public, max-age=3600"
+    # cacheControl: ""
+
+    # Cache-Control header for API responses
+    # Controls caching behavior for clients and proxies
+    # Example: cacheControlApi: "public, max-age=3600" (allow 1hr caching)
+    cacheControlApi: "no-cache, no-store"
+
+    # Headers to propagate for distributed tracing
+    # These headers are forwarded through the request chain
+    # Example: tracingHeaderNames: ["x-request-id", "x-trace-id", "x-span-id"]
+    tracingHeaderNames:
+      - "x-request-id"
+
+  # Ingress throttling - limits concurrent inbound requests.
+  ingressThrottle:
+    enabled: true
+    maxConcurrency: 8192
+
+  # Ingress load shedding - rejects inbound requests when request concurrency limits
+  # are exceeded.
+  ingressLoadShed:
+    enabled: true
+
+  # Egress throttling - limits concurrent outbound connections
+  # Prevents overwhelming storage backends with too many concurrent requests
+  egressThrottle:
+    # Enable egress throttling
+    # Example: enabled: true (for rate-limited backends)
+    enabled: false
+
+    # Maximum concurrent outbound requests to storage backend
+    # Example: maxConcurrency: 1024 (for backends with stricter limits)
+    maxConcurrency: 4096
+
+  # Manifest layer.
+  manifest:
+    # Enable the manifest layer.
+    enabled: false
+
+    # Enable the optional Redis/Valkey L2 tier for the manifest cache.
+    l2Enabled: false
+
+    # Whether to error on non-manifest objects. If enabled, any object that is
+    # not a manifest object will result in an error.
+    errorOnNonManifestObjects: false
+
+    # Capacity size in bytes that the manifest cache can store before applying
+    # eviction policy.
+    cacheCapacity: 1GiB
+
+    # Maximum time that objects can exist in the cache.
+    cacheTimeToLive: 24h
+
+    # Log a warning when cache utilization exceeds this percentage.
+    cacheCapacityWarnPct: 95
+
+    # Maximum response size in bytes before a new stream response is sent.
+    pageSizeLimit: 3MiB
+
+# Kubernetes resource requests and limits
+# Defines CPU, memory, and storage allocation for the storage service pod
+resources:
+  # Requested resources - guaranteed to be available
+  requests:
+    # CPU request - minimum CPU cores
+    # Can be fractional (e.g., 0.5, 2.5)
+    # Example: cpu: 4 (for lower-spec environments)
+    cpu: 8
+
+    # Memory request - minimum memory
+    # Example: memory: "4Gi"
+    memory: "2Gi"
+
+    # Ephemeral storage request (temporary disk space)
+    # Used for caching, temp files, logs
+    # Example: ephemeral-storage: "512Mi"
+    ephemeral-storage: 256Mi
+
+  # Resource limits - maximum resources the pod can use
+  limits:
+    # CPU limit - maximum CPU cores
+    # Pod is throttled if it exceeds this
+    # Example: cpu: 16 (allow bursting up to 16 cores)
+    cpu: 8
+
+    # Memory limit - maximum memory
+    # Pod is OOM-killed if it exceeds this
+    # Should account for all caches (smallObjectCache + statCache + metadata cache)
+    # Example: memory: "4Gi"
+    memory: "4Gi"
+
+    # Ephemeral storage limit
+    # Pod is evicted if it exceeds this
+    # Example: ephemeral-storage: "2Gi"
+    ephemeral-storage: 1Gi
+
+# Node selector for pod placement
+# Constrains pods to run on nodes with specific labels
+# Example:
+# nodeSelector:
+#   disktype: ssd
+#   kubernetes.io/arch: amd64
+#   zone: us-west-1a
+nodeSelector: {}
+
+# Tolerations - allows pods to schedule on nodes with matching taints
+# Useful for dedicated node pools, GPU nodes, or special hardware
+# Example:
+# tolerations:
+#   - key: "dedicated"
+#     operator: "Equal"
+#     value: "storage"
+#     effect: "NoSchedule"
+#   - key: "nvidia.com/gpu"
+#     operator: "Exists"
+#     effect: "NoSchedule"
+tolerations: []
+
+# Affinity and anti-affinity rules
+# Controls pod placement preferences and requirements
+# Example (spread pods across nodes for HA):
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#       - weight: 100
+#         podAffinityTerm:
+#           labelSelector:
+#             matchExpressions:
+#               - key: app.kubernetes.io/name
+#                 operator: In
+#                 values:
+#                   - storage-service
+#           topologyKey: kubernetes.io/hostname
+affinity: {}
+
+# Readiness and liveness probe configuration for the main container.
+probes:
+  liveness:
+    periodSeconds: 5
+    failureThreshold: 6
+  readiness:
+    periodSeconds: 5
+    failureThreshold: 6
+
+# Smoke test configuration
+# Runs automated tests to verify storage service functionality after deployment
+# Tests are executed via Helm hooks (post-install, post-upgrade)
+tests:
+  # Enable smoke tests
+  # When enabled, tests run automatically after helm install/upgrade
+  # Example: enabled: true
+  enabled: false
+
+  # ServiceAccount used by the smoke-test pod. Separate from the main
+  # storage-service SA so the test runs under its own AAD identity — the
+  # smoke-test is a client of storage-service, not the service itself.
+  # Configure `azure.workload.identity/client-id` here to bind the
+  # Job to a dedicated Managed Identity (with its own federated credential
+  # for subject `system:serviceaccount:<namespace>:<sa-name>`).
+  serviceAccount:
+    # Whether to create the SA. Set to false to bind to a pre-existing SA
+    # via `name` below.
+    create: true
+    # Override the generated SA name. Defaults to `<fullname>-test-smoke`.
+    name: ""
+    # Annotations on the SA (e.g. workload-identity client-id).
+    annotations: {}
+    # Automatically mount the SA's API credentials.
+    automount: true
+
+  # Workload-identity for the smoke-test pod. Independent from the main
+  # service's serviceIdentity.
+  serviceIdentity:
+    accessTokenFile:
+      ## @param tests.serviceIdentity.accessTokenFile.enabled Enable the access-token-file flow for smoke-test.
+      enabled: false
+
+      provisionerSidecar:
+        # Container spec for the token-provisioner sidecar. Rendered as a
+        # K8s 1.29+ native sidecar (an initContainer with
+        # `restartPolicy: Always`). The chart adds a `token-exchange`
+        # volumeMount; `name` is controlled by the chart.
+        container: {}
+        # Example:
+        # container:
+        #   image: nvcr.io/.../client-credentials-sidecar:0.0.4
+        #   env:
+        #     - name: AZURE_TENANT_ID
+        #       value: <tenant-uuid>
+        #     - name: OAUTH2_CLIENT_ID
+        #       value: <client-id>
+        #     - name: OAUTH2_SCOPE
+        #       value: <resource-app-id>/.default
+        #     - name: AUTH_MODE
+        #       value: workload-identity
+        #     - name: TOKEN_OUTPUT_PATH
+        #       value: /etc/secrets/access-token/token
+
+  # Base resource path for test operations
+  # This is the storage URL prefix where tests will create/read/delete test objects
+  # Example: storageApiResourceBase: "https://mybucket.s3.amazonaws.com/test-data/"
+  storageApiResourceBase: ""
+
+  # Optional override. If set, used for smoke tests; else default: ingress URLs from httpProxy.fqdn when ingress on, in-cluster when off.
+  grpcStorageEndpoint: ""
+  httpStorageEndpoint: ""
+
+  # Run only gRPC tests
+  # When true (and runRestTests is false), only gRPC tests are executed
+  # Example: runGrpcTests: true
+  runGrpcTests: true
+
+  # Run only REST tests
+  # When true (and runGrpcTests is false), only REST tests are executed
+  # Example: runRestTests: true
+  runRestTests: true
+
+  # TTL for completed smoke-test Job (seconds). Keep Job and Pods so logs are available for debugging.
+  # 0 = delete immediately (not recommended: failed jobs disappear before you can inspect them).
+  # Default 30 min (1800) allows time to review logs and investigate errors. Set to 0 only if you must.
+  ttlSecondsAfterFinished: 1800
+
+  # Authentication configuration for tests
+  auth:
+    # Microsoft Identity Platform token endpoint URL
+    # Example:
+    # microsoftUrl:
+    #   value: "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token"
+    # Or from secret:
+    # microsoftUrl:
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: auth-secret
+    #       key: microsoft-url
+    microsoftUrl: {}
+
+    # Authentication credentials (client_id:client_secret format)
+    # Example:
+    # credentials:
+    #   value: "client-id:client-secret"
+    # Or from secret:
+    # credentials:
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: auth-secret
+    #       key: credentials
+    credentials: {}
+
+    # OAuth2 scope for authentication
+    # Example:
+    # scope:
+    #   value: "api://my-app/.default"
+    scope: {}
+
+## Smoke test base image configuration
+## Used for running helm test without building a custom test image.
+## See SMOKE_TESTS.md in the project root for smoke test documentation.
+smokeTest:
+  image:
+    ## @param smokeTest.image.repository Smoke test base image repository
+    repository: nvcr.io/nvidia/omniverse/smoke-test-base
+    ## @param smokeTest.image.tag Smoke test base image tag
+    tag: "1.0.5"
+    ## @param smokeTest.image.pullPolicy Image pull policy. Allowed values: Always, IfNotPresent, Never
+    pullPolicy: IfNotPresent
+    ## @param smokeTest.image.pullSecrets Pull secrets for the smoke test image
+    pullSecrets: []
+    #  - name: secret

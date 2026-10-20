@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="400" viewBox="0 0 1180 400" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333333"/>
+    </marker>
+    <marker id="mg" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#76b900"/>
+    </marker>
+  </defs>
+  <style>
+    .domain { fill: none; stroke: #999999; stroke-width: 1.5; stroke-dasharray: 8 4; rx: 10; }
+    .box { fill: #ffffff; stroke: #333333; stroke-width: 1.5; rx: 6; }
+    .svc { fill: #eef6df; stroke: #76b900; stroke-width: 2; rx: 6; }
+    .queue { fill: #f4f4f4; stroke: #666666; stroke-width: 1.5; rx: 6; }
+    .title { font-weight: bold; font-size: 14px; fill: #111111; }
+    .sub { font-size: 11.5px; fill: #444444; }
+    .lbl { font-size: 11.5px; fill: #222222; }
+    .dom { font-size: 12px; font-weight: bold; fill: #666666; }
+    .flow { stroke: #333333; stroke-width: 1.5; fill: none; marker-end: url(#m); }
+    .event { stroke: #76b900; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; marker-end: url(#mg); }
+  </style>
+
+  <!-- Ack domain 1 -->
+  <rect class="domain" x="20" y="20" width="540" height="230"/>
+  <text class="dom" x="35" y="42">Acknowledgement domain 1 — StorageEventQueue</text>
+  <text class="sub" x="35" y="60">ACK means: generate work was durably published (not that a thumbnail exists)</text>
+
+  <rect class="box" x="40" y="90" width="170" height="60"/>
+  <text class="title" x="125" y="114" text-anchor="middle">Storage service</text>
+  <text class="sub" x="125" y="134" text-anchor="middle">omni.storage.created / deleted</text>
+
+  <rect class="queue" x="40" y="180" width="170" height="64"/>
+  <text class="title" x="125" y="202" text-anchor="middle">StorageEventQueue</text>
+  <text class="sub" x="125" y="220" text-anchor="middle">thumbnail-service-storage-</text>
+  <text class="sub" x="125" y="234" text-anchor="middle">&lt;sha256&gt;</text>
+
+  <rect class="svc" x="270" y="90" width="270" height="145"/>
+  <text class="title" x="405" y="114" text-anchor="middle">Thumbnail Service</text>
+  <text class="sub" x="405" y="136" text-anchor="middle">eligibility checks</text>
+  <text class="sub" x="405" y="154" text-anchor="middle">THUMBNAIL_PATH_TEMPLATE → destination</text>
+  <text class="sub" x="405" y="172" text-anchor="middle">one event per THUMBNAIL_SIZES entry</text>
+  <text class="sub" x="405" y="196" text-anchor="middle">retryable publish failure → NACK</text>
+  <text class="sub" x="405" y="214" text-anchor="middle">permanent failure → ACK</text>
+
+  <line class="event" x1="125" y1="150" x2="125" y2="178"/>
+  <line class="event" x1="210" y1="207" x2="268" y2="207"/>
+  <text class="lbl" x="239" y="199" text-anchor="middle">consume</text>
+
+  <!-- Ack domain 2 -->
+  <rect class="domain" x="690" y="20" width="460" height="230"/>
+  <text class="dom" x="705" y="42">Acknowledgement domain 2 — WorkerEventQueue</text>
+  <text class="sub" x="705" y="60">ACK means: converted, uploaded, and associated (or permanently rejected)</text>
+
+  <rect class="queue" x="710" y="90" width="180" height="64"/>
+  <text class="title" x="800" y="112" text-anchor="middle">WorkerEventQueue</text>
+  <text class="sub" x="800" y="130" text-anchor="middle">thumbnail-service-worker-</text>
+  <text class="sub" x="800" y="144" text-anchor="middle">&lt;sha256&gt;</text>
+
+  <rect class="svc" x="940" y="90" width="190" height="145"/>
+  <text class="title" x="1035" y="114" text-anchor="middle">Thumbnail task-worker</text>
+  <text class="sub" x="1035" y="136" text-anchor="middle">download → convert → upload</text>
+  <text class="sub" x="1035" y="154" text-anchor="middle">AssociateThumbnail (gRPC)</text>
+  <text class="sub" x="1035" y="178" text-anchor="middle">success / permanent → ACK</text>
+  <text class="sub" x="1035" y="196" text-anchor="middle">retryable → deferred NACK (60 s)</text>
+  <text class="sub" x="1035" y="214" text-anchor="middle">poison exhausts → platform DLQ</text>
+
+  <line class="event" x1="540" y1="117" x2="708" y2="117"/>
+  <text class="lbl" x="625" y="108" text-anchor="middle">PublishEvent</text>
+  <text class="lbl" x="625" y="140" text-anchor="middle">omni.thumbnail.generate</text>
+  <line class="event" x1="890" y1="117" x2="938" y2="117"/>
+
+  <!-- Association call back -->
+  <path class="flow" d="M 940 225 C 860 300, 500 300, 405 237"/>
+  <text class="lbl" x="672.5" y="290" text-anchor="middle">AssociateThumbnail → association metadata → omni.thumbnail.associated</text>
+
+  <!-- Digest note -->
+  <rect class="box" x="205" y="320" width="760" height="60"/>
+  <text class="title" x="585" y="343" text-anchor="middle">Both queue ids hash the same sorted NOTIFICATIONS_QUEUE_RESOURCE_PREFIXES</text>
+  <text class="sub" x="585" y="365" text-anchor="middle">matching digests across -storage- and -worker- mean the two Deployments agree on their configuration; differing digests mean one is stale</text>
+</svg>
