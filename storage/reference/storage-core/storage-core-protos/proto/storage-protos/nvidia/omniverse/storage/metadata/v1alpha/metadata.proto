@@ -1,0 +1,213 @@
+// SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+package nvidia.omniverse.storage.metadata.v1alpha;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "pb.api.nvidia.com/omniverse/storage/metadata/v1alpha;storage";
+option java_multiple_files = true;
+option java_outer_classname = "MetadataProto";
+option java_package = "com.nvidia.omniverse.storage.metadata.v1alpha";
+
+// The MetadataService provides methods to set and retrieve metadata for data objects.
+service MetadataService {
+  // Get metadata for a specific URI
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
+
+  // Update metadata for a specific URI
+  rpc UpdateMetadata(UpdateMetadataRequest) returns (UpdateMetadataResponse);
+
+  // Apply a batch of UpdateMetadata requests in a single round-trip.
+  //
+  // Best-effort, per-entry semantics: each entry is processed independently
+  // with the same rules as a single UpdateMetadata call. The server is free
+  // to fan entries out concurrently (no ordering guarantee), so callers must
+  // avoid conflicting writes to the same (uri, user_metadata_key) within a
+  // single batch -- the resulting state is one of the conflicting writes,
+  // but which one is undefined.
+  //
+  // The RPC itself returns OK at the transport level when the request is
+  // well-formed; per-entry failures are reported on the corresponding
+  // UpdateMetadataBatchEntryResult inside an UpdateMetadataBatchResponse
+  // page, so the caller can see exactly which entries succeeded and which
+  // failed (and retry only the failed ones). The operation is not
+  // transactional.
+  //
+  // Why a server-streamed response (rather than a single unary message): a
+  // batch is a long-running, fan-out operation -- the server may dispatch
+  // entries to different metadata stores in parallel and we don't want to
+  // hold back already-finished results until the slowest entry completes.
+  // Streaming pages lets the server emit results as they complete, which
+  // bounds tail latency and lets clients start retrying / progress-bar-ing
+  // mid-batch. Page sizes are a server-side choice; the same shape is used
+  // by other paged streaming endpoints (e.g., List / EnumerateVersions).
+  // Within a page, entries may appear in any order, and pages themselves
+  // may interleave entries from different parts of the input; callers
+  // correlate each result back to its originating request by
+  // `request_index` -- the position of the entry in the
+  // `UpdateMetadataBatchRequest.requests` array -- not by position in the
+  // stream.
+  rpc UpdateMetadataBatch(UpdateMetadataBatchRequest) returns (stream UpdateMetadataBatchResponse);
+
+  // Delete metadata for a specific URI
+  rpc DeleteMetadata(DeleteMetadataRequest) returns (DeleteMetadataResponse);
+}
+
+// The GetMetadata defines the input parameters for the Stat() operation
+message GetMetadataRequest {
+  // The Resource URI
+  string uri = 1;
+  // A list of metadata keys to retrieve. Omitting the value or passing an empty
+  // array will cause service to retrieve all metadata keys.
+  repeated string user_metadata_keys = 2;
+}
+
+// The response of the GetMetadata operation
+message GetMetadataResponse {
+  // Metadata. Specifications for each piece of metadata are defined separately.
+  map<string, UserMetadataValue> user_metadata = 1;
+}
+
+// UpdateMetadataRequest is the request message for setting metadata for a given uri.
+message UpdateMetadataRequest {
+  // The Resource URI
+  string uri = 1;
+  // The identifier of a client
+  string user_metadata_key = 2;
+  // The opaque metadata specified separately
+  // NOTE: we're not reusing UserMetadataValue, because the etag is optional here,
+  // as the input value, while it's not as the return value
+  google.protobuf.Value user_metadata = 3;
+  // If-Match metadata key Etag
+  optional string expected_etag = 4;
+}
+
+// SetMetadataResponse is the response for SetMetadata request.
+message UpdateMetadataResponse {
+  // Metadata key Etag
+  string etag = 1;
+}
+
+// UpdateMetadataBatchRequest carries the entries to apply. Each entry is
+// processed independently with the same semantics as a single UpdateMetadata
+// call (including its own optional expected_etag); the operation is not
+// transactional and the server is free to apply entries concurrently. The
+// position of each entry in the `requests` array is the entry's
+// `request_index`, which the server echoes back on the matching
+// UpdateMetadataBatchEntryResult so callers can correlate results to
+// requests without relying on stream order.
+message UpdateMetadataBatchRequest {
+  // The metadata update entries to apply. The server may process them in
+  // any order; callers correlate responses to requests by the entry's
+  // position in this array (echoed back as
+  // `UpdateMetadataBatchEntryResult.request_index`).
+  repeated UpdateMetadataRequest requests = 1;
+}
+
+// UpdateMetadataBatchResponse is one streamed page of per-entry results
+// from an UpdateMetadataBatch operation. The server is free to choose
+// the page size and how many pages it emits; callers should treat the
+// stream as N >= 1 messages, each carrying some subset of the per-entry
+// results. The same shape as the other paged streaming endpoints
+// (List / EnumerateVersions).
+message UpdateMetadataBatchResponse {
+  // Per-entry results carried by this page, in no particular order.
+  // Callers match each result to the originating request entry by
+  // `request_index` (the position of the entry in
+  // `UpdateMetadataBatchRequest.requests`).
+  repeated UpdateMetadataBatchEntryResult results = 1;
+}
+
+// UpdateMetadataBatchEntryResult describes the outcome of a single entry
+// in an UpdateMetadataBatch operation. It is carried inside an
+// UpdateMetadataBatchResponse page.
+message UpdateMetadataBatchEntryResult {
+  // Exactly one of `success` or `error` is set, mirroring the success / failure
+  // outcome that an equivalent single-entry UpdateMetadata call would have
+  // produced.
+  oneof outcome {
+    // The success outcome: the metadata key was updated and
+    // `success.etag` carries the new ETag (same shape as a successful
+    // UpdateMetadata).
+    UpdateMetadataResponse success = 1;
+    // The failure outcome: a per-entry error description. The transport-level
+    // RPC still returns OK; clients must inspect `error` to detect partial
+    // failures.
+    UpdateMetadataBatchEntryError error = 2;
+  }
+  // Zero-based index of the originating entry in
+  // `UpdateMetadataBatchRequest.requests`. The server may pack results
+  // into pages in any order, so callers should match by this field rather
+  // than by position within a page. Each request entry has exactly one
+  // result, so `request_index` is unique across the entire response
+  // stream.
+  uint32 request_index = 3;
+}
+
+// UpdateMetadataBatchEntryError is a per-entry error description for a
+// failed batch entry. The `code` enum is a closed set of outcomes that
+// `UpdateMetadataBatch` may report; each one mirrors the gRPC status
+// code that the equivalent single-entry `UpdateMetadata` call would have
+// returned (the values are numerically aligned with `google.rpc.Code` /
+// `grpc::StatusCode`).
+message UpdateMetadataBatchEntryError {
+  // Per-entry error codes reported by UpdateMetadataBatch. The set is
+  // intentionally small: it covers only the failure modes a single
+  // UpdateMetadata call can produce on this service. The portion of the
+  // name after the `CODE_` prefix is numerically aligned with
+  // `google.rpc.Code` / `grpc::StatusCode` (and matches its name) so the
+  // values round-trip cleanly if a gateway re-maps them to a gRPC status
+  // on a per-entry-retry path. `CODE_UNSPECIFIED = 0` is the proto3 zero
+  // value and must not be sent by servers.
+  enum Code {
+    // Default proto3 zero value. Servers must not emit this; it exists
+    // only so a missing/zeroed field is detectable.
+    CODE_UNSPECIFIED = 0;
+    // The caller supplied an invalid argument (e.g., malformed URI,
+    // unsupported value). Mirrors gRPC INVALID_ARGUMENT (3).
+    CODE_INVALID_ARGUMENT = 3;
+    // The target resource or metadata key does not exist. Mirrors gRPC
+    // NOT_FOUND (5).
+    CODE_NOT_FOUND = 5;
+    // The caller lacks permission to update metadata on this entry's
+    // resource. Mirrors gRPC PERMISSION_DENIED (7).
+    CODE_PERMISSION_DENIED = 7;
+    // The entry's `expected_etag` did not match the current ETag on the
+    // server (optimistic-locking failure). Mirrors gRPC
+    // FAILED_PRECONDITION (9).
+    CODE_FAILED_PRECONDITION = 9;
+    // The server hit an internal error while applying this entry.
+    // Mirrors gRPC INTERNAL (13).
+    CODE_INTERNAL = 13;
+    // The metadata store backing this entry was temporarily unavailable;
+    // a retry is permitted. Mirrors gRPC UNAVAILABLE (14).
+    CODE_UNAVAILABLE = 14;
+  }
+  // Per-entry status code; see `Code` for the closed set of values.
+  Code code = 1;
+  // Human-readable diagnostic message describing the failure.
+  string message = 2;
+}
+
+// DeleteMetadataRequest is the request message for deleting metadata for a given uri.
+message DeleteMetadataRequest {
+  // The Resource URI
+  string uri = 1;
+  // The identifier of a client
+  string user_metadata_key = 2;
+  // If-Match metadata key Etag
+  optional string expected_etag = 3;
+}
+
+// SetMetadataResponse is the response for SetMetadata request.
+message DeleteMetadataResponse {}
+
+// A combination of metadata value and etag for that metadata
+message UserMetadataValue {
+  // The metadata value
+  google.protobuf.Value value = 1;
+  // Metadata key ETag
+  string etag = 2;
+}

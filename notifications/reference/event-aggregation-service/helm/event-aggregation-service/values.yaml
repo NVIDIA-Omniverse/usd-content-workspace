@@ -1,0 +1,967 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default values for event-aggregation-service.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## @param replicaCount Number of event-aggregation-service pod replicas to deploy.
+## Default: 1. Type: integer. Optional.
+replicaCount: 1
+## Container image configuration
+image:
+  ## @param image.repository Container image repository for the service.
+  ## Default: nvcr.io/nvidia/omniverse/event-aggregation-service.
+  ## Required. Type: string.
+  repository: nvcr.io/nvidia/omniverse/event-aggregation-service
+  ## @param image.pullPolicy Image pull policy for the container.
+  ## Default: IfNotPresent. Type: string.
+  ## Allowed values: Always, Never, IfNotPresent. Optional.
+  pullPolicy: IfNotPresent
+  ## @param image.tag Container image tag to deploy.
+  ## Default: "0.0.0" (overrides the chart appVersion). Type: string.
+  ## Optional.
+  tag: "1.7.0"
+  ## @param image.pullSecrets Pull secrets for images.
+  ## Default: none
+  ## Optional.
+  pullSecrets: []
+  # - name: secret
+  # - name: secret
+  # ...
+## @param nameOverride String to partially override the release name.
+## Default: "" (uses chart name). Type: string. Optional.
+nameOverride: ""
+## @param fullnameOverride String to fully override the release name.
+## Default: "" (uses chart name and release name). Type: string. Optional.
+fullnameOverride: ""
+## Service account configuration
+serviceAccount:
+  ## @param serviceAccount.create Whether to create a service account.
+  ## Default: true. Type: boolean. Optional.
+  create: true
+  ## @param serviceAccount.automount Whether to automatically mount the
+  ## service account API credentials. Default: false. Type: boolean. Optional.
+  automount: false
+  ## @param serviceAccount.annotations Annotations to add to the service
+  ## account. Default: {}. Type: object. Optional.
+  annotations: {}
+  ## @param serviceAccount.name Name of the service account to use.
+  ## Default: "" (generated from fullname template if create is true).
+  ## Type: string. Optional.
+  name: ""
+## @param podAnnotations Annotations to add to the pods.
+## Default: {}. Type: object. Optional.
+podAnnotations: {}
+## @param podLabels Labels to add to the pods.
+## Default: {}. Type: object. Optional.
+podLabels: {}
+## @param podSecurityContext Security context for the pod.
+## Default: runAsNonRoot with user 1000. Type: object. Optional.
+## Example: {"fsGroup": 2000}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+## @param securityContext Security context for the container.
+## Default: restricted security context. Type: object. Optional.
+## Example: {"runAsNonRoot": true, "runAsUser": 1000}
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+## Kubernetes service configuration
+service:
+  ## @param service.type Kubernetes service type for the gRPC service.
+  ## Default: ClusterIP. Type: string.
+  ## Allowed values: ClusterIP, NodePort, LoadBalancer. Optional.
+  type: ClusterIP
+  ## @param service.port Port number for the gRPC service.
+  ## Default: 50051. Type: integer. Maps to OMNI_EVENTS_GRPC_PORT.
+  ## Optional.
+  port: 50051
+  ## @param service.annotations Annotations to add to the Service object.
+  ## Default: {}. Type: object. Optional. Set per-environment, e.g. to
+  ## opt into the v2 Discovery operator scan with
+  ## discovery.omniverse.nvidia.com/enabled: "true".
+  annotations: {}
+  ## @param service.nameOverride An override for default service names. 
+  ## Optional.
+  nameOverride: ""
+## External ingress via Contour's httpproxy objects
+httpProxy:
+  ## @param httpProxy.enabled Enable the ingress HTTP proxy
+  ## Type: boolean. Default: false
+  enabled: false
+  ## FQDN configuration for the ingress
+  ## Final ingress hostname will be composed as "<host>.<domain>"
+  fqdn:
+    ## @param httpProxy.fqdn.host Host component of the FQDN
+    ## Type: string. Default: event-aggregation
+    host: "event-aggregation"
+    ## @param httpProxy.fqdn.domain Domain component of the FQDN
+    ## Type: string. Default: nodomain.none
+    domain: "nodomain.none"
+  ## @param httpProxy.path The prefix for all routes of this service
+  ## Type: string. Default: /. If a route is available on /v1/myroute and this
+  ## path equals /api, the route will become /api/v1/myroute
+  path: "/"
+  ## TLS configuration for the ingress
+  tls:
+    ## @param httpProxy.tls.enabled Enable TLS for the HTTP proxy
+    ## Type: boolean. Default: false
+    enabled: false
+    ## @param httpProxy.tls.secretName Name of the secret containing the TLS cert
+    ## Type: string. Optional. Default: ""
+    secretName: ""
+    ## CertManager integration for automatic certificate provisioning
+    ## If enabled, will create a Certificate resource for CertManager, using
+    ## either the default TLS secret name or httpProxy.tls.secretName if
+    ## specified. This secret will be added as tls.secretName of the httpProxy
+    ## CR for Contour.
+    ##
+    ## NOTE: The certManager value is included here for convenience.
+    ##       Using certManager at the service level will create one cert request
+    ##       per service. In a production environment, it may be better to make
+    ##       one single cert request per cluster.
+    certManager:
+      ## @param httpProxy.tls.certManager.enabled Enable CertManager integration
+      ## Type: boolean. Default: false
+      enabled: false
+      ## Issuer reference for CertManager
+      issuerRef:
+        ## @param httpProxy.tls.certManager.issuerRef.name Name of the issuer
+        ## Type: string. Required if certManager.enabled is true.
+        ## Default: my-issuer
+        name: my-issuer
+        ## @param httpProxy.tls.certManager.issuerRef.kind Kind of the issuer
+        ## Type: string. Required if certManager.enabled is true.
+        ## Default: ClusterIssuer
+        kind: ClusterIssuer
+  ## Response headers added to every route on this HTTPProxy.
+  ## Used to set security headers like HSTS.
+  responseHeadersPolicy:
+    ## @param httpProxy.responseHeadersPolicy.set Response headers to set
+    ## Type: array of {name, value} objects. Default: HSTS with 1 year
+    ## max-age and includeSubDomains.
+    set:
+      - name: Strict-Transport-Security
+        value: "max-age=31536000; includeSubDomains"
+  ## CORS policy configuration
+  ## Verbatim CORSPolicy setting of Envoy's HTTPProxy object
+  corsPolicy:
+    ## @param httpProxy.corsPolicy.allowCredentials Allow credentials in CORS
+    ## Type: boolean. Default: false. If true, allowOrigin cannot use wildcard.
+    allowCredentials: false
+    ## @param httpProxy.corsPolicy.allowOrigin Allowed origins for CORS requests
+    ## Type: array of strings. Default: ["*"]. Use specific origins if
+    ## allowCredentials is true.
+    allowOrigin:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowHeaders Allowed headers for CORS requests
+    ## Type: array of strings. Default: ["*"]
+    allowHeaders:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowMethods Allowed HTTP methods for CORS
+    ## Type: array of strings. Default: ["GET", "POST"]. Must include all
+    ## methods used by the API.
+    allowMethods:
+      - 'GET'
+      - 'POST'
+    ## @param httpProxy.corsPolicy.exposeHeaders Headers exposed to browser JS
+    ## Type: array of strings. Default: ["*"]. Controls which response headers
+    ## the browser's JavaScript can access via Access-Control-Expose-Headers.
+    exposeHeaders:
+      - "*"
+  ## Timeout policy for the HTTPProxy routes.
+  timeoutPolicy:
+    ## @param httpProxy.timeoutPolicy.response Time the proxy
+    ## will wait for the server to begin sending a response after
+    ## a request has been fully received. This limit applies at
+    ## both the client-to-proxy and proxy-to-backend hops.
+    response: "15s"
+    ## @param httpProxy.timeoutPolicy.idle Maximum duration of
+    ## inactivity allowed on an open connection before the proxy
+    ## closes it. For HTTP/1.1 this is the gap between
+    ## request/response bytes; for HTTP/2 it is the idle time on
+    ## the stream.
+    idle: "15s"
+  ## @param httpProxy.annotations Additional annotations for HTTPProxy resource
+  ## Type: object. Default: {}. Useful for adding custom routing, rate limiting,
+  ## or other HTTPProxy annotations at deploy time without chart changes.
+  annotations: {}
+  ## Envoy external authorization extension configuration for
+  ## this service.
+  authExtension:
+    ## @param httpProxy.authExtension.enabled Enable Envoy external
+    ## authorization for the HTTP proxy.
+    ## Type: boolean. Default: false.
+    enabled: false
+    ## Extension reference for the authorization service.
+    extensionRef:
+      ## @param httpProxy.authExtension.extensionRef.name Name of
+      ## the ExtensionService resource.
+      ## Type: string. Default: "auth-extension".
+      name: "auth-extension"
+      ## @param httpProxy.authExtension.extensionRef.namespace
+      ## Namespace of the ExtensionService resource.
+      ## Type: string. Default: "" (uses the release namespace).
+      namespace: ""
+    ## @param httpProxy.authExtension.responseTimeout Timeout for
+    ## the authorization response from the extension service.
+    ## Type: string. Default: "2s".
+    responseTimeout: 2s
+  ## Per-protocol overrides for the HTTPProxy objects. Any values
+  ## set here are deep-merged on top of the shared httpProxy
+  ## settings above (timeoutPolicy, corsPolicy, annotations,
+  ## etc.), allowing you to customize each protocol's proxy
+  ## without duplicating the common configuration.
+  ## Example — give gRPC a longer response timeout:
+  ##   grpc:
+  ##     timeoutPolicy:
+  ##       response: "30s"
+  grpc: {}
+  rest: {}
+## Logging configuration
+logging:
+  ## @param logging.level Logging level for the service.
+  ## Default: INFO. Type: string. Maps to env var OMNI_EVENTS_LOG_LEVEL.
+  ## Allowed values: DEBUG, INFO, WARNING, ERROR, CRITICAL. Optional.
+  level: INFO
+## REST API configuration
+rest:
+  ## @param rest.enabled Whether the REST API is enabled.
+  ## Default: true. Type: boolean. Maps to env var
+  ## OMNI_EVENTS_REST_API_ENABLED. When disabled, only gRPC is available.
+  ## Optional.
+  enabled: true
+  ## @param rest.port Port number for the REST API server.
+  ## Default: 8000. Type: integer. Maps to env var
+  ## OMNI_EVENTS_REST_PORT. Optional.
+  port: 8000
+  ## @param rest.corsAllowOrigins Browser origins the service's own CORS
+  ## middleware admits, with credentials allowed.
+  ## Default: [] (no CORS middleware, so browsers get no
+  ## Access-Control-Allow-Origin header from the service). Type: list of
+  ## strings, or null. Write each entry exactly as a browser sends the Origin
+  ## header: http or https, an ASCII host (punycode for an internationalized
+  ## name), no default port (:80 for http, :443 for https), and no path or
+  ## trailing slash, such as https://app.example.com. The chart refuses at
+  ## render only "*" and "null" (which credentialed CORS must never admit), a
+  ## value that is not a list (a plain string included), and an entry that is
+  ## not a string; a malformed origin renders, and the service refuses it at
+  ## startup. Maps to env var OMNI_EVENTS_CORS_ALLOW_ORIGINS (rendered as
+  ## JSON). This is separate from httpProxy.corsPolicy, which Envoy applies at
+  ## the ingress. Optional.
+  corsAllowOrigins: []
+  ## @param rest.maxRequestBytes Largest REST request body accepted, in bytes.
+  ## Default: 4194304 (4 MiB). Type: integer. Maps to env var
+  ## OMNI_EVENTS_REST_MAX_REQUEST_BYTES. A larger request is refused with 413
+  ## before it is authenticated or parsed, so no event is published. Kept well
+  ## under RabbitMQ's 16 MiB max_message_size default because the published
+  ## message is not the request body: it is re-serialized with escaped
+  ## non-ASCII characters and given extra fields, so a 4 MiB body can publish
+  ## as roughly 12 MiB. Raise this only alongside the broker's
+  ## max_message_size. Must be greater than 0 -- the service rejects 0 and
+  ## negative values at settings load. This value is also the per-request
+  ## memory the service retains for a body it is still deciding on; one
+  ## further chunk may be transiently examined and discarded, bounded by the
+  ## ASGI server's flow control (uvicorn pauses reading at a 64 KiB
+  ## high-water mark, so ~128 KiB was observed in practice). It is read once
+  ## at startup; the chart's checksum/config annotation rolls the pods on
+  ## upgrade, so no manual restart is needed. Optional.
+  maxRequestBytes: 4194304
+## Observability configuration for OpenTelemetry (OTEL) metrics and tracing.
+##
+## This is the standardized, workspace-wide `observability` schema (metrics and
+## tracing, both disabled by default). The Event Aggregation Service exports
+## telemetry over OTLP/gRPC, so it reads endpoints from the `.endpoint.grpc`
+## fields and ignores `.endpoint.http` (the http fields are accepted only for
+## schema uniformity across services).
+##
+## When either observability.metrics.enabled or observability.tracing.enabled is
+## true, this block takes precedence over the legacy `telemetry` block below and
+## is translated into the OMNI_EVENTS_* env vars the service consumes. When both
+## are disabled, the legacy `telemetry` block is used, so existing values render
+## identically (fully backward compatible).
+##
+## Example (production snippet):
+## observability:
+##   metrics:
+##     enabled: true
+##     endpoint:
+##       grpc: "http://grafana-k8s-monitoring-alloy-receiver.grafana-cloud.svc.cluster.local:4317"
+##   tracing:
+##     enabled: true
+##     endpoint:
+##       grpc: "http://grafana-k8s-monitoring-alloy-receiver.grafana-cloud.svc.cluster.local:4317"
+observability:
+  metrics:
+    ## @param observability.metrics.enabled Enable OTLP metrics export.
+    ## Type: boolean. Default: false. When true, takes precedence over the
+    ## legacy telemetry.enabled and maps to OMNI_EVENTS_METRICS_ENABLED.
+    ## Note: log export is enabled whenever either signal is on, so enabling
+    ## metrics alone still ships logs (reusing the metrics endpoint here).
+    enabled: false
+    ## Endpoints for the OTLP-compatible collector (e.g. Grafana Alloy).
+    endpoint:
+      ## @param observability.metrics.endpoint.grpc OTLP/gRPC metrics endpoint.
+      ## Type: string. Maps to OMNI_EVENTS_OTLP_METRICS_ENDPOINT.
+      ## Required when observability.metrics.enabled is true.
+      grpc: ""
+      ## @param observability.metrics.endpoint.http OTLP/HTTP metrics endpoint.
+      ## Type: string. Ignored by this service (gRPC transport only). Optional.
+      http: ""
+  tracing:
+    ## @param observability.tracing.enabled Enable OTLP trace export.
+    ## Type: boolean. Default: false. When true, takes precedence over the
+    ## legacy telemetry.enabled and maps to OMNI_EVENTS_TRACING_ENABLED.
+    ## Note: log export is enabled whenever either signal is on and reuses the
+    ## tracing endpoint, so enabling metrics alone still ships logs.
+    enabled: false
+    ## Endpoints for the OTLP-compatible collector (e.g. Grafana Alloy).
+    endpoint:
+      ## @param observability.tracing.endpoint.grpc OTLP/gRPC traces endpoint.
+      ## Type: string. Maps to OMNI_EVENTS_OTLP_TRACING_ENDPOINT.
+      ## Required when observability.tracing.enabled is true.
+      grpc: ""
+      ## @param observability.tracing.endpoint.http OTLP/HTTP traces endpoint.
+      ## Type: string. Ignored by this service (gRPC transport only). Optional.
+      http: ""
+    ## NOTE: the standardized schema also defines observability.tracing.samplingRatio,
+    ## but it is intentionally omitted here: the notification-common library this
+    ## service uses does not read it (all traces are always exported). Add it only
+    ## once the library honors it, to avoid exposing a knob that silently does nothing.
+## Legacy telemetry configuration (DEPRECATED).
+## Superseded by the standardized `observability` block above, which takes
+## precedence whenever observability.metrics or observability.tracing is
+## enabled. Retained for backward compatibility; prefer `observability`.
+telemetry:
+  ## @param telemetry.enabled Whether telemetry (tracing, metrics, logs) is
+  ## enabled. Default: false. Type: boolean. Maps to env var
+  ## OMNI_EVENTS_TELEMETRY_ENABLED. Optional.
+  enabled: false
+  ## @param telemetry.otlp_tracing_endpoint OTLP-compatible endpoint for
+  ## sending traces. Default:
+  ## "otel-collector.observability.svc.cluster.local:4317". Type: string.
+  ## Maps to env var OMNI_EVENTS_OTLP_TRACING_ENDPOINT.
+  ## Required if telemetry.enabled is true.
+  otlp_tracing_endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  ## @param telemetry.otlp_metrics_endpoint OTLP-compatible endpoint for
+  ## sending metrics. Default:
+  ## "otel-collector.observability.svc.cluster.local:4317". Type: string.
+  ## Maps to env var OMNI_EVENTS_OTLP_METRICS_ENDPOINT.
+  ## Required if telemetry.enabled is true.
+  otlp_metrics_endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  ## @param telemetry.otlp_logs_endpoint OTLP-compatible endpoint for sending
+  ## logs. Default: "otel-collector.observability.svc.cluster.local:4317".
+  ## Type: string. Maps to env var OMNI_EVENTS_OTLP_LOGS_ENDPOINT.
+  ## Required if telemetry.enabled is true.
+  otlp_logs_endpoint: "otel-collector.observability.svc.cluster.local:4317"
+## Permissions service configuration
+permissions:
+  ## @param permissions.enabled Enable authorization (permission) enforcement
+  ## Type: boolean. Default: false.
+  ## When disabled, all permission checks short-circuit to "allowed", even if
+  ## authentication is enabled via principalSource. When enabled, principalSource
+  ## must not be "disabled" (authorization requires an authenticated principal).
+  ## Maps to OMNI_EVENTS_PERMISSIONS_ENABLED env var.
+  enabled: false
+  ## @param permissions.endpoint Endpoint URL of the permissions service.
+  ## Default: "http://permission-service:3000". Type: string. Required when
+  ## permissions.enabled is true and ignored otherwise.
+  ## Maps to env var OMNI_EVENTS_PERMISSIONS_ENDPOINT.
+  endpoint: "http://permission-service:3000"
+  ## @param permissions.ttl_seconds Time-to-live in seconds for the
+  ## permissions cache. Default: 600 (10 minutes). Type: integer.
+  ## Maps to env var OMNI_EVENTS_PERMISSIONS_TTL_SECONDS. Optional.
+  ttl_seconds: 600
+## @param principalSource Single first-class auth gate selecting how the
+## principal (caller identity) is derived and whether a token is required.
+## Type: string. Allowed values:
+## - "" (empty, the default) - let the chart choose. An explicit value always
+##   wins; left empty, the chart selects `jwt` when OpenID is configured, that
+##   is, when openId.openIdConfigurationUri is set AND the JWT audience list
+##   (openId.additionalJwtAudience plus the clientId of the "default" entry in
+##   openId.clientRegistrations) is non-empty. Otherwise the render fails with
+##   a message naming both fixes. The chart never selects `jwtUnverified`.
+## - `disabled` - authentication is off; no principal is derived and no token
+##   is required. permissions.enabled must be false in this mode. Use it for
+##   local and test runs.
+## - `jwtUnverified` - derive the principal from the JWT without verifying its
+##   signature, issuer, audience, or expiry. Requires allowUnverifiedJwt: true;
+##   see that value for when this is safe.
+## - `jwt` - validate incoming tokens as JWTs using public keys pulled from the
+##   identity provider (requires openId.openIdConfigurationUri and at least one
+##   JWT audience).
+## - `opaque` - validate incoming tokens via the IdP /userinfo endpoint
+##   (requires openId.openIdConfigurationUri).
+## - `userInfoService` - derive the principal from the external user-info service
+##   (requires userInfoService.uri).
+## An auth configuration the service would refuse at startup (a missing
+## requirement above, permissions.enabled with `disabled` or without
+## permissions.endpoint, or an unknown value) fails the render instead of
+## crash-looping the pod.
+## Default: "" (chart-selected, see above).
+## Maps to OMNI_EVENTS_PRINCIPAL_SOURCE env var.
+principalSource: ""
+## @param allowUnverifiedJwt Explicit opt-in for principalSource jwtUnverified.
+## Type: boolean or null (unquoted). Default: null.
+## jwtUnverified trusts any token that reaches the pod, so the service refuses
+## to start in that mode unless this opt-in is set
+## (OMNI_EVENTS_ALLOW_UNVERIFIED_JWT). The chart never sets it by itself: it
+## renders true only when you set allowUnverifiedJwt: true together with an
+## explicit principalSource: jwtUnverified, and it fails the render when either
+## is set without the other, or when this is not a boolean (a quoted "false"
+## included).
+## Set it only when every path to the pods verifies tokens first. The Envoy
+## auth extension covers only traffic through this chart's HTTPProxy: the
+## Service is ClusterIP by default, and an in-cluster caller that reaches it directly
+## bypasses the extension and is trusted with whatever token it sends. A
+## NetworkPolicy (or an equivalent control) that leaves the Service reachable
+## only through the verifying proxy is therefore required. Otherwise use
+## principalSource: jwt.
+allowUnverifiedJwt: null
+## User-info service configuration.
+## Consulted only when principalSource is "userInfoService".
+userInfoService:
+  ## @param userInfoService.uri Base URI of the external user-info service used
+  ## to derive the principal when principalSource is "userInfoService".
+  ## Type: string. Maps to OMNI_EVENTS_USER_INFO_SERVICE_URI env var.
+  ## Default: http://userinfo-service:8080
+  uri: http://userinfo-service:8080
+## OpenID IDP and related auth settings.
+## These values configure the OIDC provider used when principalSource is "jwt"
+## or "opaque" (token verification, audiences, discovery URI, etc.), and with
+## principalSource left empty, openIdConfigurationUri plus a JWT audience is
+## what makes the chart select "jwt". Authentication behavior is gated by
+## principalSource (not openId.enabled), and authorization enforcement by
+## permissions.enabled.
+openId:
+  ## @param openId.enabled
+  ## Puts the Envoy auth extension in front of both HTTPProxy routes (with
+  ## httpProxy.enabled); httpProxy.authExtension.enabled, or its per-protocol
+  ## override under httpProxy.rest or httpProxy.grpc, does the same for one
+  ## route or both. Also rendered as the infra-only
+  ## OMNI_EVENTS_OPENID_ENABLED. It does not choose how the service itself
+  ## authenticates callers; principalSource does.
+  ## Type: boolean. Default: false.
+  enabled: false
+  ## @param openId.tokenVerificationType
+  ## Defines how auth tokens are validated by the service:
+  ## - `jwt` - validates incoming tokens as JWT using public keys pulled from the identity provider
+  ## - `opaque` - validates incoming tokens using /userinfo endpoint from the identity provider
+  tokenVerificationType: "jwt"
+  ## @param openId.principalIdClaim
+  ## The JWT/userinfo claim used as the principal (user) identity.
+  ## Default "sub". Set to "oid" for Azure AD tenant-wide object IDs.
+  ## WARNING: changing this on an existing deployment orphans all
+  ## previously-created durable queues (their names embed the hashed
+  ## principal id). Treat as a one-way, deploy-time choice.
+  principalIdClaim: "sub"
+  ## @param openId.openIdConfigurationUri
+  ## The endpoint from the identity provider to retrieve OpenID Connect Metadata (/.well-known/openid-configuration).
+  ## https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+  ## The metadata includes other IdP endpoints such as jwks_uri, token_endpoint and userinfo_endpoint.
+  openIdConfigurationUri: ""
+  ## @param openId.clientRegistrations
+  ## Client registrations (will be used to create a set of allowed audience).
+  ## Audience is the expected value of `aud` claim in JWTs passed in the Authorization header.
+  clientRegistrations: []
+  # - name: "default"
+  #   clientId: "some_client_id"
+  #   scope: "a b c"
+
+  ## @param openId.additionalJwtAudience
+  ## List of additional audience allowed.
+  ## Type: list of strings. null or an empty string mean no extra audience;
+  ## any other kind (a non-empty plain string included) fails the render.
+  ## Audience is the expected value of `aud` claim in JWTs passed in the Authorization header.
+  additionalJwtAudience: []
+  # -  <client id>
+## @param authContextTtl Time-to-live in seconds for cached auth context.
+## Type: integer. Default: 1800 (30 minutes).
+## Controls how long validated token/user contexts are cached before
+## re-validation against the identity provider.
+## Maps to OMNI_EVENTS_AUTH_CONTEXT_TTL env var.
+authContextTtl: 1800
+## @param envSecretName Name of the Kubernetes secret containing sensitive
+## environment variables. Default: event-aggregation-env. Type: string.
+## Required. Must contain key 'rabbitmq_uri' with the RabbitMQ connection
+## string in the format: amqp://<user>:<pass>@<host>:<port>/<vhost>.
+## Maps to env var OMNI_EVENTS_RABBITMQ_URI.
+envSecretName: event-aggregation-env
+## RabbitMQ channel pool configuration
+## The channel pool manages RabbitMQ connections for publishing events.
+## Unlike the Event Consumer Service (which holds channels for long-lived
+## streaming connections), this service uses channels only for the brief
+## duration of each publish request (milliseconds). Channels are immediately
+## returned to the pool after each request completes.
+rabbitmq:
+  ## @param rabbitmq.channel_pool_size Channel count at which packing begins.
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_SIZE env var.
+  ## Default: 25. While channel_overflow_enabled is true (the default), this is
+  ## NOT a cap on concurrent publish operations: channel_pool_size x
+  ## channel_client_limit is the THRESHOLD at which the overflow band engages.
+  ## Below the threshold the pool grows toward channel_pool_size, keeping
+  ## channel_client_limit honored as written; at the threshold further
+  ## checkouts are packed onto the least-loaded open channel instead of being
+  ## refused. Raising this defers packing (more open channels, less
+  ## co-tenancy); it does not raise a ceiling, because the overflow band has
+  ## no ceiling. Set channel_overflow_enabled to false to make
+  ## channel_pool_size x channel_client_limit a hard cap again.
+  channel_pool_size: 25
+  ## @param rabbitmq.channel_pool_min_size Minimum channels to pre-create.
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_MIN_SIZE env var.
+  ## Default: 5. Pre-creating channels avoids cold-start latency on first
+  ## requests. Set lower than channel_pool_size to allow dynamic growth.
+  channel_pool_min_size: 5
+  ## @param rabbitmq.channel_client_limit Packing target for clients per channel.
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_CLIENT_LIMIT env var.
+  ## Default: 1. While channel_overflow_enabled is true this is a packing
+  ## TARGET, not an isolation guarantee: once the pool is full and no channel
+  ## is under the limit, a checkout is admitted onto the least-loaded open
+  ## channel anyway and that channel's client count rises past this value.
+  ## At 1 the pool opens a new channel per concurrent publish until
+  ## channel_pool_size channels are open, and only then packs -- which is the
+  ## most isolation this setting can buy while overflow is on, so raising it
+  ## above 1 would only make packing start earlier for no gain.
+  ## For strict per-request isolation, set channel_overflow_enabled to false
+  ## and raise channel_pool_size to the concurrency you want to admit; the
+  ## pool then refuses beyond channel_pool_size x channel_client_limit rather
+  ## than packing.
+  ## Note: The Event Consumer Service uses 8 because streaming clients hold
+  ## channels for long periods; that tradeoff doesn't apply here.
+  channel_client_limit: 1
+  ## @param rabbitmq.channel_overflow_enabled Admit checkouts past the packing threshold.
+  ## Type: boolean. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_OVERFLOW_ENABLED env
+  ## var. Default: true, matching the notification-common default, so this
+  ## chart value preserves currently deployed behavior rather than silently
+  ## changing it. When true, a burst arriving after every channel is open and
+  ## at channel_client_limit is packed onto the least-loaded open channel
+  ## instead of failing; the tradeoff is blast radius, since a channel-level
+  ## error fails every publish in flight on that channel. When false, the pool
+  ## is strict one-tier: the same state waits up to channel_wait_ms and then
+  ## fails the publish, so channel_pool_size x channel_client_limit becomes a
+  ## hard cap on concurrent publishes.
+  channel_overflow_enabled: true
+  ## @param rabbitmq.channel_wait_ms Channel acquisition timeout in milliseconds.
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_WAIT_MS env var.
+  ## Default: 500. Upper bound on how long a publish waits to acquire a
+  ## channel before the publish fails. With channel_overflow_enabled true,
+  ## a full pool packs rather than waits, so this bounds the wait for channel
+  ## CREATION (that is, it only bites when the broker or connection is in
+  ## trouble), not the wait for a free slot. With overflow false it is also
+  ## the wait for a free slot on a saturated pool.
+  channel_wait_ms: 500
+## @param resources Resource requests and limits for the container.
+## Default: Sets sensible defaults for CPU and memory. Type: object.
+## Optional.
+## Example: {"limits": {"cpu": "500m", "memory": "512Mi"},
+## "requests": {"cpu": "250m", "memory": "256Mi"}}
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+## Liveness probe configuration
+## Uses the "liveness" gRPC health service which always returns
+## SERVING as long as the process is responsive. This avoids
+## killing pods that are otherwise healthy.
+livenessProbe:
+  ## @param livenessProbe.grpc.port Port for the gRPC liveness probe.
+  ## Default: 50051. Type: integer. Must match service.port. Required.
+  grpc:
+    port: 50051
+    service: liveness
+## Readiness probe configuration
+readinessProbe:
+  ## @param readinessProbe.grpc.port Port for the gRPC readiness probe.
+  ## Default: 50051. Type: integer. Must match service.port. Required.
+  grpc:
+    port: 50051
+## Graceful shutdown configuration
+## On pod deletion the kubelet sends SIGTERM, and the shutdown runs in three
+## phases in this order. FIRST the service keeps serving normally for
+## settleDelaySeconds -- readiness still SERVING, both the gRPC and the REST
+## listener still admitting requests -- so the endpoint change that deletion
+## triggers has time to propagate before anything is refused. THEN it opens the
+## RabbitMQ connector's drain (begin_draining() -> drain_non_durable(), bounded
+## by drainWindowSeconds and polled every drainPollIntervalSeconds); both
+## servers keep serving through that window too, because nothing in this
+## service reads the connector's draining flag and the gRPC health service
+## keeps reporting SERVING. LAST, once the window closes, the shutdown event
+## stops the gRPC and REST servers and the connector is closed after that.
+## The drain span is usually near-zero: the drain returns as soon as the
+## non-durable pool's in-flight checkouts reach zero, so drainWindowSeconds is
+## a BOUND on the wait, not serving time the chart buys -- see the knob's own
+## comment below.
+## terminationGracePeriodSeconds is the kubelet's SIGKILL deadline and must
+## cover all three phases.
+## INVARIANT: terminationGracePeriodSeconds >= settleDelaySeconds +
+## drainWindowSeconds + 10s post-drain teardown. At the shipped defaults
+## 60 >= 15 + 5 + 10 = 30, leaving 30s of margin. The render guard in
+## deployment.yaml enforces it; the terminationGracePeriodSeconds entry below
+## carries the full derivation. These knobs size that budget.
+shutdown:
+  ## @param shutdown.drainWindowSeconds Bounded non-durable drain window in seconds
+  ## Type: float. Maps to OMNI_EVENTS_SHUTDOWN_DRAIN_WINDOW_SECONDS env var.
+  ## Default: 5.0. Upper bound on how long shutdown waits, once the settle
+  ## below has elapsed, for the pool's in-flight publish checkouts to fall to
+  ## zero before the connector is marked closing and closed. For this
+  ## publisher the window's ONLY effect is to defer that closing flip past
+  ## checkouts already in flight: Publisher.publish re-reads the connector's
+  ## closing flag AFTER it has acquired a channel, and a publish that loses
+  ## that race returns a failed publishing result to the caller rather than
+  ## being retried. Because a publish is a millisecond-scale operation, the
+  ## expected cost of this window is close to zero -- the pool drains early
+  ## and shutdown proceeds immediately. It is set to 5.0 to match the gRPC
+  ## server's stop grace, so the two shutdown legs are budgeted alike.
+  ## Tradeoff: a LONGER window protects more in-flight publishes but adds dead
+  ## time to pod deletion whenever the pool does not drain early; a window of
+  ## 0 makes the closing flip simultaneous with the start of the drain and
+  ## fails any publish that is mid-checkout.
+  ## Do NOT size this window as de-route coverage: the drain returns as soon as
+  ## the non-durable pool's in-flight checkout count reaches zero -- immediately
+  ## if it is already zero at the start of the drain, which for this publisher
+  ## is the common case -- so the servers usually stop within milliseconds of
+  ## the drain starting no matter how large this window is. It bounds only how long
+  ## shutdown WAITS on checkouts already in flight; the propagation gap is what
+  ## settleDelaySeconds below covers.
+  ## INVARIANT: terminationGracePeriodSeconds MUST be >= settleDelaySeconds +
+  ## drainWindowSeconds + 10s post-drain teardown -- covering this window alone
+  ## is NOT enough, because the settle runs before the drain and the server
+  ## teardown after it. An operator who RAISES this must raise the grace period
+  ## to match; deployment.yaml fails the render if the invariant does not hold.
+  drainWindowSeconds: 5.0
+  ## @param shutdown.drainPollIntervalSeconds Drain re-read interval in seconds
+  ## Type: float. Maps to OMNI_EVENTS_SHUTDOWN_DRAIN_POLL_INTERVAL_SECONDS env
+  ## var. Default: 0.5. How often, during the drain window above, the shutdown
+  ## path re-reads the non-durable pool's in-flight checkout count to decide
+  ## whether the pool has drained early. A smaller interval detects an
+  ## early-drained pool sooner (shutdown finishes faster) at the cost of more
+  ## frequent polls; it has no effect once the drain window elapses. Must be
+  ## greater than 0 -- notification-common rejects 0 at settings load.
+  drainPollIntervalSeconds: 0.5
+  ## @param shutdown.settleDelaySeconds Endpoint-settle delay in seconds after SIGTERM
+  ## Type: float. Maps to OMNI_EVENTS_SHUTDOWN_SETTLE_DELAY_SECONDS env var.
+  ## Default: 15.0. On SIGTERM the application keeps serving normally for this
+  ## long before it begins draining, so the endpoint change has time to
+  ## propagate first. For the whole delay the pod still ADMITS new publishes on
+  ## both the gRPC and the REST entry point -- readiness is still SERVING and
+  ## draining is not yet engaged. A value of 0 skips the phase entirely and the
+  ## drain begins immediately on SIGTERM.
+  ##
+  ## WHAT this delay protects: every path into this service is readiness-gated.
+  ## service.yaml does not set publishNotReadyAddresses, so the moment the pod
+  ## goes Terminating its endpoint's ready flag flips false, and that change has
+  ## to reach every consumer of the EndpointSlice -- in-cluster clients watching
+  ## it directly, and Contour, which propagates it over xDS to Envoy for the
+  ## HTTPProxy path -- before the app stops serving. This delay is the budget
+  ## for that propagation, and it is the ONLY thing in this chart that covers
+  ## it: the HTTPProxy in templates/http-proxy.yaml carries no retryPolicy, so
+  ## a request Envoy dispatches to an already-stopped pod is not re-placed.
+  ##
+  ## Tradeoff: size it to comfortably COVER worst-case EndpointSlice
+  ## propagation (single-digit to low-tens of seconds) but no larger -- it is
+  ## dead time added to every pod deletion and rollout, so it trades rollout
+  ## speed for hand-off cleanliness. 15.0 matches the Event Consumer Service
+  ## chart, which is sized to the same propagation reasoning.
+  ## INVARIANT: terminationGracePeriodSeconds MUST be >= settleDelaySeconds +
+  ## drainWindowSeconds + 10s post-drain teardown; this whole delay is consumed
+  ## before the drain even begins, so an operator who RAISES this must raise the
+  ## grace period to match.
+  settleDelaySeconds: 15.0
+  ## @param shutdown.terminationGracePeriodSeconds Pod termination grace period in seconds
+  ## Type: integer (seconds). Default: 60. Sets the Deployment pod spec's
+  ## terminationGracePeriodSeconds -- the total budget, measured from pod
+  ## deletion, that Kubernetes allows before SIGKILL. That budget is spent in
+  ## order: first the settleDelaySeconds settle, during which the pod serves
+  ## normally, then the up-to-drainWindowSeconds app drain, then the post-drain
+  ## server teardown. The grace period must cover ALL THREE or the kubelet
+  ## SIGKILLs the pod before it has finished and the graceful hand-off is lost.
+  ## INVARIANT (holds at the shipped defaults): terminationGracePeriodSeconds >=
+  ## settleDelaySeconds + drainWindowSeconds + 10s post-drain teardown.
+  ## At defaults: 60 >= 15 + 5 + 10 = 30, leaving 30s of margin.
+  ## An operator who LOWERS this, RAISES settleDelaySeconds, or RAISES
+  ## drainWindowSeconds must keep this invariant true; deployment.yaml fails the
+  ## render if it does not hold.
+  ## Before that guard runs, a non-numeric, empty, negative, or non-finite
+  ## value is refused by the same render-time bounds check that covers the
+  ## float knobs above, under its own message; a fractional value is refused
+  ## as not a whole number of seconds.
+  ##
+  ## The 10s teardown term is a fixed property of the application's shutdown
+  ## implementation, not a knob. Once the drain ends, the gRPC server's 5s stop
+  ## grace and the REST teardown run concurrently; the REST leg's longest step
+  ## is the 5s lifespan shutdown sleep, so with no open REST connection the
+  ## whole teardown is about 5s and 10s covers it with margin. After BOTH legs
+  ## return, the connector close runs. It is normally sub-second, and the
+  ## roughly 5s of slack the 10s term carries over those ~5s concurrent legs is
+  ## what absorbs it -- at every grace value the guard admits, including one
+  ## exactly at the invariant's floor. What the 10s term does NOT bound is that
+  ## close blocking on an unresponsive broker; that tail is covered only by
+  ## whatever margin the grace period leaves above the floor -- 30s at the
+  ## shipped defaults, zero at the floor itself -- so a deployment that has
+  ## seen a blocked close should raise this value.
+  ##
+  ## RESIDUAL the invariant does NOT cover: the REST teardown also waits for
+  ## open connections to close, and that wait is unbounded. A publish is a
+  ## millisecond-scale request, so this is not a concern for this service's own
+  ## routes, but a client holding a connection open past teardown can still
+  ## push the tail past the 10s term. Raise this value above the invariant's
+  ## floor if that applies to your deployment.
+  terminationGracePeriodSeconds: 60
+## Autoscaling configuration
+autoscaling:
+  ## @param autoscaling.enabled Whether to enable horizontal pod autoscaling.
+  ## Default: false. Type: boolean. Optional.
+  enabled: false
+  ## @param autoscaling.minReplicas Minimum number of replicas for
+  ## autoscaling. Default: 1. Type: integer. Optional.
+  minReplicas: 1
+  ## @param autoscaling.maxReplicas Maximum number of replicas for
+  ## autoscaling. Default: 100. Type: integer. Optional.
+  maxReplicas: 100
+  ## @param autoscaling.targetCPUUtilizationPercentage Target CPU
+  ## utilization percentage for autoscaling. Default: 80. Type: integer.
+  ## Optional.
+  targetCPUUtilizationPercentage: 70
+  # @param autoscaling.targetMemoryUtilizationPercentage Target memory utilization percentage for autoscaling. Type: integer. Optional.
+  # targetMemoryUtilizationPercentage: 70
+## @param volumes Additional volumes to mount in the deployment.
+## Default: []. Type: array of volume objects. Optional.
+## Example: [{"name": "foo", "secret": {"secretName": "mysecret",
+## "optional": false}}]
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+## @param volumeMounts Additional volume mounts for the container.
+## Default: []. Type: array of volumeMount objects. Optional.
+## Example: [{"name": "foo", "mountPath": "/etc/foo", "readOnly": true}]
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+## @param nodeSelector Node labels for pod assignment.
+## Default: {}. Type: object. Optional.
+## Example: {"disktype": "ssd"}
+nodeSelector: {}
+## @param tolerations Tolerations for pod assignment.
+## Default: []. Type: array of toleration objects. Optional.
+## Example: [{"key": "key1", "operator": "Equal", "value": "value1",
+## "effect": "NoSchedule"}]
+tolerations: []
+## @param affinity Affinity rules for pod assignment.
+## Default: {}. Type: object. Optional.
+## Example: {"nodeAffinity": {...}}
+affinity: {}
+## Secrets Store CSI Driver configuration
+secrets:
+  csi:
+    ## @param secrets.csi.enabled Whether to enable the Secrets Store CSI
+    ## Driver for mounting secrets from external secret stores (e.g., Azure
+    ## Key Vault, AWS Secrets Manager). Default: false. Type: boolean.
+    ## Optional.
+    enabled: false
+    ## @param secrets.csi.secretProviderClassName Name of the
+    ## SecretProviderClass resource to use for mounting secrets.
+    ## Default: "". Type: string. Required if secrets.csi.enabled is true.
+    secretProviderClassName: ""
+    ## @param secrets.csi.volumeName Name of the volume for the secrets
+    ## mount. Default: "secrets-store-inline". Type: string. Optional.
+    volumeName: "secrets-store-inline"
+    ## @param secrets.csi.mountPath Path where secrets will be mounted in
+    ## the container. Default: "/mnt/secrets-store". Type: string. Optional.
+    mountPath: "/mnt/secrets-store"
+## Smoke test base image configuration
+## Used for running helm test without building a custom test image.
+## The smoke tests themselves are configured, and their auth and permission
+## needs described, in the `tests` block below.
+smokeTest:
+  image:
+    ## @param smokeTest.image.repository Smoke test base image repository
+    repository: nvcr.io/nvidia/omniverse/smoke-test-base
+    ## @param smokeTest.image.tag Smoke test base image tag
+    tag: "1.0.1"
+    ## @param smokeTest.image.pullPolicy Image pull policy. Allowed values: Always, IfNotPresent, Never
+    pullPolicy: IfNotPresent
+    ## @param smokeTest.image.pullSecrets Pull secrets for the smoke test image
+    pullSecrets: []
+    #  - name: secret
+  ## @param smokeTest.podLabels Labels applied to the smoke-test pod only (not the main Deployment).
+  ## Required for workload-identity: the Azure mutating webhook injects the
+  ## projected token volume/env only into pods carrying
+  ## `azure.workload.identity/use: "true"`. Falls back to `.Values.podLabels`
+  ## when unset.
+  podLabels: {}
+  # Example:
+  # podLabels:
+  #   azure.workload.identity/use: "true"
+## Test suite configuration (smoke tests)
+## Deploys a test pod that runs smoke tests against the Event Aggregation Service
+## (publish single/batch events via REST and gRPC).
+##
+## Summary:
+## - Enable: tests.enabled: true (then helm install/upgrade or helm test <release>).
+## - Auth: When the service requires a token (principalSource is not "disabled"),
+##   give the test pod a Bearer token in one of two ways, never both: tests.auth
+##   (OAuth client credentials) or the token-file flow, which
+##   tests.serviceIdentity.accessTokenFile.enabled turns on and which needs
+##   tests.serviceIdentity.accessTokenFile.provisionerSidecar.container (the
+##   sidecar that writes the token file).
+## - Permissions: When permissions.enabled is true, the permissions service must
+##   allow the test principal to perform "publish-event" on EventType
+##   "omni.storage.created" (single-event publish) and "test.batch.publish"
+##   (batch publish). For example, as Cedar-style policies, one per event type:
+##     permit(
+##       principal == Principal::"principal-id-goes-here",
+##       action == Action::"event-aggregation-service:publish-event",
+##       resource == EventType::"omni.storage.created"
+##     );
+##     permit(
+##       principal == Principal::"principal-id-goes-here",
+##       action == Action::"event-aggregation-service:publish-event",
+##       resource == EventType::"test.batch.publish"
+##     );
+tests:
+  ## @param tests.enabled Enable/disable test suite.
+  ## Default: false. Type: boolean. Optional.
+  ## Example: enabled: true (to run tests on helm install/upgrade)
+  enabled: false
+  ## Dedicated ServiceAccount for the smoke-test Job. Separate from the
+  ## main service SA so the test runs under its own AAD identity — the
+  ## smoke-test is a client of event-aggregation-service, not the service
+  ## itself.
+  serviceAccount:
+    ## Whether to create the SA. Set to false to bind to a pre-existing SA
+    ## via `name` below.
+    create: true
+    ## Override the generated SA name. Defaults to `<fullname>-test-smoke`.
+    name: ""
+    ## Annotations on the SA (e.g. `azure.workload.identity/client-id`).
+    annotations: {}
+    ## Automatically mount the SA's API credentials.
+    automount: true
+  ## Workload-identity for the smoke-test pod. Independent from the main
+  ## service's identity — the smoke-test has its own SA (above) and its
+  ## own sidecar toggle here.
+  serviceIdentity:
+    accessTokenFile:
+      ## @param tests.serviceIdentity.accessTokenFile.enabled Enable the access-token-file flow for smoke-test.
+      enabled: false
+      provisionerSidecar:
+        ## Container spec for the token-provisioner sidecar. Rendered as a
+        ## K8s 1.29+ native sidecar (an initContainer with
+        ## `restartPolicy: Always`). The chart adds a `token-exchange`
+        ## volumeMount; `name` and `restartPolicy` are controlled by the
+        ## chart and any values supplied here for those keys are ignored.
+        ##
+        ## CONTRACT: the sidecar MUST write the token to
+        ## `/etc/secrets/access-token/token` — that path is hardcoded in
+        ## the test container's read side (SMOKE_TESTS_ACCESS_TOKEN_FILE_PATH).
+        ## Set the sidecar's `TOKEN_OUTPUT_PATH` env to exactly that path;
+        ## a mismatch makes the test wait the full 30s and then fail.
+        container: {}
+        # Example:
+        # container:
+        #   image: nvcr.io/.../client-credentials-sidecar:0.0.4
+        #   env:
+        #     - name: AZURE_TENANT_ID
+        #       value: <tenant-uuid>
+        #     - name: OAUTH2_CLIENT_ID
+        #       value: <client-id>
+        #     - name: OAUTH2_SCOPE
+        #       value: <resource-app-id>/.default
+        #     - name: AUTH_MODE
+        #       value: workload-identity
+        #     - name: TOKEN_OUTPUT_PATH
+        #       value: /etc/secrets/access-token/token
+  ## @param tests.runGrpcTests Enable or disable gRPC tests.
+  ## Default: true. Type: boolean. Optional.
+  runGrpcTests: true
+  ## @param tests.runRestTests Enable or disable REST tests.
+  ## Default: true. Type: boolean. Optional.
+  runRestTests: true
+  ## @param tests.ttlSecondsAfterFinished Seconds after the smoke test Job completes
+  ## (Succeeded or Failed) before it is cleaned up. 0 = do not delete automatically.
+  ## Default: 900 (15 minutes). Type: integer.
+  ttlSecondsAfterFinished: 900
+  ## @param tests.timeout Request timeout in seconds.
+  ## Default: "". Type: string. Optional.
+  ## Example: "30"
+  timeout: ""
+  ## @param tests.grpcSkipTls Skip TLS verification for gRPC connections.
+  ## Default: "". Type: string. Optional.
+  ## Example: "true"
+  grpcSkipTls: ""
+  ## @param tests.restSkipTls Skip TLS verification for REST (requests) connections.
+  ## Default: "". Type: string. Optional.
+  ## Example: "true"
+  restSkipTls: ""
+  ## Event Aggregation Service endpoints (optional override).
+  ## If set — always used. If not set — default: when httpProxy.enabled use ingress URLs
+  ## (gRPC: https://grpc.<fqdn>, REST: https://<fqdn><path>; or http when TLS off);
+  ## when ingress off use in-cluster: http://<service>.<namespace>.svc.cluster.local:<port>.
+  ## @param tests.grpcAggregationEndpoint gRPC endpoint override.
+  ## Example: "https://grpc.event-aggregation.example.com"
+  grpcAggregationEndpoint: ""
+  ## @param tests.restAggregationEndpoint REST endpoint override.
+  ## Example: "https://event-aggregation.example.com"
+  restAggregationEndpoint: ""
+  ## Token authentication for smoke tests (optional).
+  ## Required when the service requires a token (principalSource is not "disabled")
+  ## and the token-file flow (tests.serviceIdentity.accessTokenFile.enabled) is
+  ## not used.
+  ## The tests use OAuth 2.0 client credentials to obtain a Bearer token and send
+  ## it on REST and gRPC requests. Each property accepts the standard Kubernetes
+  ## EnvVar schema: "value" (inline) or "valueFrom" (secret/configMap).
+  ## See: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#envvar-v1-core
+  ##
+  ## Obtaining credentials (e.g. Microsoft Entra / Azure AD):
+  ## 1. Create an app registration; create a client secret under Certificates & secrets.
+  ## 2. Grant the app the required API permission (and admin consent if needed).
+  ## 3. microsoftUrl: OpenID discovery URL, e.g.
+  ##    https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration
+  ## 4. credentials: string "client_id:client_secret" (no spaces). Prefer valueFrom
+  ##    secretKeyRef to avoid storing secrets in values.
+  ## 5. scope: e.g. "<client-id>/.default" or your API scope.
+  ##
+  ## Permissions: If permissions.enabled is true, the principal identified by this
+  ## token must have "publish-event" permission on EventType "omni.storage.created"
+  ## and "test.batch.publish". The `tests` block summary above has a policy example.
+  auth:
+    ## OIDC discovery URL (returns JSON with token_endpoint). Used to get access token.
+    microsoftUrl: {}
+    # value: "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration"
+    # -- OR --
+    # valueFrom:
+    #   secretKeyRef:
+    #     name: "my-secret"
+    #     key: "microsoft-url"
+
+    ## Client credentials in the form client_id:client_secret. Prefer valueFrom.
+    credentials: {}
+    # value: "client_id:client_secret"
+    # -- OR --
+    # valueFrom:
+    #   secretKeyRef:
+    #     name: "my-secret"
+    #     key: "credentials"
+
+    ## OAuth scope requested when obtaining the token (e.g. "<client-id>/.default").
+    scope: {}
+    # value: "<client-id>/.default"
+    # -- OR --
+    # valueFrom:
+    #   secretKeyRef:
+    #     name: "my-secret"
+    #     key: "scope"

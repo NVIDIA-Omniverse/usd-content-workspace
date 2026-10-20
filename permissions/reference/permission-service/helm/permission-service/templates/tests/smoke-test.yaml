@@ -1,0 +1,163 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if .Values.smokeTest.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "permissions.fullname" . }}-smoke-test"
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  {{- if gt (int (.Values.smokeTest.ttlSecondsAfterFinished | default 0)) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.smokeTest.ttlSecondsAfterFinished }}
+  {{- end }}
+  backoffLimit: 0
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- $podLabels := merge (deepCopy (.Values.smokeTest.podLabels | default dict)) .Values.podLabels }}
+      labels:
+        {{- include "permissions.smokeTestLabels" . | nindent 8 }}
+        {{- with $podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- $pullSecrets := .Values.smokeTest.image.pullSecrets | default .Values.image.pullSecrets }}
+      {{- include "permissions.imagePullSecrets" ( dict "images" (list (dict "pullSecrets" $pullSecrets))) | nindent 6 }}
+      serviceAccountName: {{ include "permissions.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+      initContainers:
+        - name: {{ .Chart.Name }}-token-provisioner
+          restartPolicy: Always
+            {{- (omit .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+              {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+                {{- toYaml . | nindent 12 }}
+              {{- end }}
+            - name: token-exchange
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+      {{- end }}
+      containers:
+        - name: smoke-test
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.smokeTest.image.repository | default .Values.image.repository }}:{{ .Values.smokeTest.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.smokeTest.image.pullPolicy | default .Values.image.pullPolicy }}
+          env:
+            {{- /* If set, use smokeTest.serviceUrl as-is; else default: ingress URL from httpProxy when ingress on, in-cluster when off. */}}
+            {{- $ingressEnabled := .Values.httpProxy.enabled }}
+            {{- $serviceName := include "permissions.servicename" . }}
+            {{- $namespace := .Release.Namespace }}
+            {{- $httpPort := .Values.service.ports.http }}
+            {{- $inCluster := printf "http://%s.%s.svc.cluster.local:%v" $serviceName $namespace $httpPort }}
+            {{- $defaultUrl := $inCluster }}
+            {{- if $ingressEnabled }}
+              {{- $scheme := ternary "https" "http" .Values.httpProxy.tls.enabled }}
+              {{- $fqdn := printf "%s.%s" .Values.httpProxy.fqdn.host .Values.httpProxy.fqdn.domain }}
+              {{- $defaultUrl = printf "%s://%s%s" $scheme $fqdn (.Values.httpProxy.path | default "/") }}
+            {{- end }}
+            {{- $serviceUrl := .Values.smokeTest.serviceUrl | default $defaultUrl }}
+            - name: SERVICE_URL
+              value: {{ $serviceUrl | quote }}
+            - name: DATABASE_TYPE
+              value: "{{ .Values.database.type }}"
+            {{- if .Values.database.init.policies }}
+            - name: INIT_POLICIES_FILE
+              value: "/etc/permission-config/policies.yaml"
+            {{- end }}
+            - name: WAIT_RETRIES
+              value: "{{ .Values.smokeTest.waitRetries | default 10 }}"
+            - name: WAIT_INTERVAL
+              value: "{{ .Values.smokeTest.waitInterval | default 5 }}"
+            - name: HELM
+              value: "true"
+            - name: OPENID_CONFIGURATION
+              value: "{{ .Values.openId.openIdConfigurationUri }}"
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: ENABLE_CLIENT_CREDENTIALS
+              value: "true"
+            - name: CLIENT_CREDENTIALS_OPENID_CONFIGURATION
+              value: "{{ .Values.serviceIdentity.clientCredentials.openIdConfigurationUri | default .Values.openId.openIdConfigurationUri }}"
+            - name: CLIENT_ID
+              value: "{{ .Values.serviceIdentity.clientCredentials.clientId }}"
+            - name: CLIENT_SCOPE
+              value: "{{ .Values.serviceIdentity.clientCredentials.clientScope }}"
+            - name: CLIENT_SECRET_FILE
+              value: "/etc/secrets/client-credentials/{{ .Values.serviceIdentity.clientCredentials.clientSecretRef.key }}"
+            - name: CLIENT_CREDENTIALS_EXTRA_HEADERS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraHeaders | toJson | quote }}
+            - name: CLIENT_CREDENTIALS_EXTRA_BODY_PARAMS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraBodyParams | toJson | quote }}
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: ENABLE_ACCESS_TOKEN_FILE
+              value: "true"
+            - name: ACCESS_TOKEN_FILE_PATH
+              value: {{ .Values.serviceIdentity.accessTokenFile.path }}
+            - name: ACCESS_TOKEN_FILE_POLL_INTERVAL
+              value: {{ .Values.serviceIdentity.accessTokenFile.pollInterval | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- if or .Values.database.init.policies .Values.database.init.services }}
+            - name: permission-config-files
+              readOnly: true
+              mountPath: "/etc/permission-config"
+            {{- end }}
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: client-credentials-secret
+              readOnly: true
+              mountPath: "/etc/secrets/client-credentials"
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: token-exchange
+              readOnly: true
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+            {{- end }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.smokeTest.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        {{- if or .Values.database.init.policies .Values.database.init.services }}
+        - name: permission-config-files
+          configMap:
+            name: {{ include "permissions.fullname" . }}-config-files
+        {{- end }}
+        {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+        - name: client-credentials-secret
+          secret:
+            secretName: {{ .Values.serviceIdentity.clientCredentials.clientSecretRef.name }}
+        {{- end }}
+        {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      restartPolicy: Never
+{{- end }}

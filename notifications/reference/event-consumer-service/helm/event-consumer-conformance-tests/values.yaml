@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default values for event-consumer-conformance-tests.
+
+## Container image configuration
+image:
+  ## @param image.repository Conformance tests container image repository
+  ## Type: string. Required.
+  repository: nvcr.io/nvidia/omniverse/event-consumer-conformance-tests
+  ## @param image.pullPolicy Image pull policy
+  ## Allowed values: Always, Never, IfNotPresent. Default: IfNotPresent
+  pullPolicy: IfNotPresent
+  ## @param image.tag Image tag to deploy
+  ## Overrides the chart appVersion.
+  tag: "0.0.0"
+  ## @param image.pullSecrets Pull secrets for images.
+  pullSecrets: []
+
+## @param nameOverride String to override the chart name
+nameOverride: ""
+## @param fullnameOverride String to fully override the generated name
+fullnameOverride: ""
+
+## ServiceAccount configuration
+serviceAccount:
+  ## @param serviceAccount.create Whether to create a ServiceAccount
+  create: true
+  ## @param serviceAccount.annotations Annotations for the ServiceAccount
+  annotations: {}
+  ## @param serviceAccount.name ServiceAccount name (auto-generated if empty)
+  name: ""
+
+## @param podAnnotations Annotations to add to the test pod
+podAnnotations: {}
+
+## @param podLabels Additional labels for the test pod
+podLabels: {}
+
+## @param securityContext Container security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+## Service under test connection settings
+service:
+  ## @param service.grpcEndpoint gRPC endpoint of the Event Consumer Service to test
+  ## Format: host:port
+  grpcEndpoint: "event-consumer-service:50052"
+  ## @param service.restEndpoint REST base URL of the Event Consumer Service to test
+  restEndpoint: "http://event-consumer-service:8000"
+  ## @param service.healthEndpoint Health endpoint used to wait for service readiness
+  healthEndpoint: "http://event-consumer-service:8000/api/v1beta/health"
+
+## Authentication settings
+auth:
+  ## @param auth.existingSecretName Name of a Kubernetes Secret in the release
+  ## namespace whose value is the bearer token used for authenticated calls.
+  ## Leave empty to run the suite without an Authorization header.
+  ## Create the Secret yourself, e.g.:
+  ##   kubectl create secret generic conformance-auth --from-literal=token=<bearer-token>
+  existingSecretName: ""
+  ## @param auth.existingSecretKey Key within the Secret whose value is the token.
+  existingSecretKey: "token"
+  ## @param auth.required Set to true to run auth-error test cases.
+  ## Only enable this when the service has authentication enabled.
+  required: false
+
+## Timeout settings
+timeouts:
+  ## @param timeouts.stream Seconds to wait for the first SSE event
+  stream: "10.0"
+  ## @param timeouts.request Seconds for non-streaming HTTP requests
+  request: "30.0"
+
+## Resource requests and limits for the test Job pod
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+## @param restartPolicy Restart policy for the Job pod (Never or OnFailure)
+restartPolicy: Never
+
+## @param backoffLimit Number of retries before considering the Job failed
+backoffLimit: 0
+
+## @param ttlSecondsAfterFinished Seconds to keep the completed Job for log inspection
+## Set to 0 to delete immediately, or null to keep indefinitely.
+ttlSecondsAfterFinished: 600

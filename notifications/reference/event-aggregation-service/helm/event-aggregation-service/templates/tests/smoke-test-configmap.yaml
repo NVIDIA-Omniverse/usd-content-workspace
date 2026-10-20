@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "event-aggregation-service.fullname" . }}-smoke-tests
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed,before-hook-creation
+data:
+  # Empty __init__.py for package structure (mounted multiple times)
+  __init__.py: ""
+  # Test configuration
+  pytest.ini: |
+{{ .Files.Get "files/tests/pytest.ini" | indent 4 }}
+  # Test files
+  conftest.py: |
+{{ .Files.Get "files/tests/conftest.py" | indent 4 }}
+  utils.py: |
+{{ .Files.Get "files/tests/utils.py" | indent 4 }}
+  notification_grpc_helpers.py: |
+{{ .Files.Get "files/tests/notification_grpc_helpers.py" | indent 4 }}
+  notification_rest_helpers.py: |
+{{ .Files.Get "files/tests/notification_rest_helpers.py" | indent 4 }}
+  test_notification_grpc.py: |
+{{ .Files.Get "files/tests/smoke-tests/test_notification_grpc.py" | indent 4 }}
+  test_notification_rest.py: |
+{{ .Files.Get "files/tests/smoke-tests/test_notification_rest.py" | indent 4 }}
+  # Publisher gRPC stubs
+  event_publisher_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/notifications/publisher/v1beta/event_publisher_pb2.py" | indent 4 }}
+  event_publisher_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/notifications/publisher/v1beta/event_publisher_pb2_grpc.py" | indent 4 }}
+{{- end }}

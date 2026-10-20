@@ -1,0 +1,61 @@
+{
+  "service": "CapabilitiesService",
+  "method": "ListServices",
+  "input": {
+    "equals": {}
+  },
+  "output": {
+    "data": {
+      "services": [
+        {
+          "service_name": "fileobject",
+          "grpc_services": [
+            {
+              "endpoints": [
+                {
+                  "service_name": "nvidia.omniverse.storage.fileobject.v1.FileObjectService"
+                }
+              ]
+            }
+          ],
+          "rest_services": [
+            {
+              "endpoints": [
+                {
+                  "name": "fileobject",
+                  "versions": [
+                    {
+                      "version": "v1",
+                      "url_detail": {
+                        "path": "/api/v1/fileobject"
+                      }
+                    },
+                    {
+                      "version": "v1alpha",
+                      "url_detail": {
+                        "path": "/api/v1alpha/fileobject"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "service_name": "filefolder",
+          "grpc_services": [
+            {
+              "endpoints": [
+                {
+                  "service_name": "nvidia.omniverse.storage.filefolder.v1.FileFolderService"
+                }
+              ]
+            }
+          ],
+          "rest_services": []
+        }
+      ]
+    }
+  }
+}

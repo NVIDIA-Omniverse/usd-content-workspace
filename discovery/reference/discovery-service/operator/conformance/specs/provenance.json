@@ -1,0 +1,8 @@
+{
+  "operator_revision": "a1fe0c7d295acc7b5cbe110af704a016a1af6493",
+  "discovery_protos_revision": "649f6f9e3be72587a86e60f6032645da4e5078ae",
+  "grpc_contract": "nvidia.omniverse.discovery.capabilities.v2beta.CapabilitiesService",
+  "rest_capabilities_contract": "v1beta",
+  "catalog_contract": "v2beta (/api/v2beta/services), schema-version 2; draft OpenAPI transcription of service-api.md",
+  "canonical_capabilities_openapi_sha256": "4662fcfc153195bde33858baa2f089946a7d631e4bc50de06ac0c6c22dd77453"
+}

@@ -1,0 +1,1665 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default values for event-consumer-service.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## @param replicaCount Number of Event Consumer Service replicas to deploy
+## Type: integer. Default: 1. Optional. Inert whenever
+## channelPoolAutoscaling.enabled is true (the chart default): the Deployment
+## omits spec.replicas entirely in that case and the autoscaler owns the
+## replica count, so this value only takes effect when autoscaling is disabled.
+## When autoscaling IS disabled this value additionally supplies
+## OMNI_EVENTS_SCALER_MAX_REPLICAS, the divisor that apportions the fleet-wide
+## broker memory budget into a per-pod non-durable stream cap. An operator who
+## scales the Deployment past this number by hand (kubectl scale) must raise
+## replicaCount to their true ceiling too, or the fleet's aggregate admission
+## can exceed the broker memory budget.
+replicaCount: 1
+## Container image configuration
+image:
+  ## @param image.repository Event Consumer Service container image repository
+  ## Type: string. Required. Default: nvcr.io/nvidia/omniverse/event-consumer-service
+  repository: nvcr.io/nvidia/omniverse/event-consumer-service
+  ## @param image.pullPolicy Image pull policy
+  ## Type: string. Allowed values: Always, Never, IfNotPresent. Default: IfNotPresent
+  pullPolicy: IfNotPresent
+  ## @param image.tag Image tag to deploy
+  ## Type: string. Required. Overrides the chart appVersion.
+  tag: "1.12.0"
+  ## @param image.pullSecrets Pull secrets for images.
+  ## Default: none
+  ## Optional.
+  pullSecrets: []
+  # - name: secret
+  # - name: secret
+  # ...
+## @param nameOverride String to override the chart name
+## Type: string. Optional. Default: ""
+nameOverride: ""
+## @param fullnameOverride String to fully override the generated name
+## Type: string. Optional. Default: ""
+fullnameOverride: ""
+## ServiceAccount configuration
+serviceAccount:
+  ## @param serviceAccount.create Specifies whether a service account should be created
+  ## Type: boolean. Default: true
+  create: true
+  ## @param serviceAccount.automount Automatically mount ServiceAccount API credentials
+  ## Type: boolean. Default: false
+  automount: false
+  ## @param serviceAccount.annotations Annotations to add to the service account
+  ## Type: object. Optional. Default: {}
+  annotations: {}
+  ## @param serviceAccount.name Name of the service account to use
+  ## Type: string. Optional. If not set and create is true, a name is generated
+  name: ""
+## @param podAnnotations Annotations to add to the pod
+## Type: object. Optional. Default: {}
+podAnnotations: {}
+## @param podLabels Labels to add to the pod
+## Type: object. Optional. Default: {}
+podLabels: {}
+## @param podSecurityContext Security context for the pod
+## Type: object. Optional. Default: runAsNonRoot with user 1000
+## Example: { fsGroup: 2000 }
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+## @param securityContext Security context for the container
+## Type: object. Optional. Default: restricted security context
+## Example: { capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+## Kubernetes service configuration
+service:
+  ## @param service.type Kubernetes service type
+  ## Type: string. Allowed values: ClusterIP, NodePort, LoadBalancer. Default: ClusterIP
+  type: ClusterIP
+  ## @param service.annotations Annotations to add to the main Service metadata
+  ## Type: object. Optional. Set per-environment, e.g. to opt this Service into
+  ## discovery (discovery.omniverse.nvidia.com/enabled: "true"). Default: {}
+  annotations: {}
+  ## gRPC service configuration
+  grpc:
+    ## @param service.grpc.port gRPC service port
+    ## Type: integer. Required. Maps to OMNI_EVENTS_GRPC_PORT env var. Default: 50051
+    port: 50051
+    ## @param service.grpc.healthCheckingEnabled Enable the gRPC health checking service
+    ## Type: boolean. Maps to OMNI_EVENTS_GRPC_HEALTH_CHECKING_ENABLED env var.
+    ## Default: true
+    healthCheckingEnabled: true
+  ## REST API service configuration
+  rest:
+    ## @param service.rest.enabled Enable the REST API HTTP service
+    ## Type: boolean. Maps to OMNI_EVENTS_REST_API_ENABLED env var. Default: true
+    enabled: true
+    ## @param service.rest.port REST API HTTP service port
+    ## Type: integer. Maps to OMNI_EVENTS_REST_PORT env var. Default: 8000
+    port: 8000
+    ## @param service.rest.corsAllowOrigins Browser origins the service's own
+    ## CORS middleware admits, with credentials allowed.
+    ## Type: array of strings, or null. Default: [] (no CORS middleware, so
+    ## browsers get no Access-Control-Allow-Origin header from the service).
+    ## Write each entry exactly as a browser sends the Origin header: http or
+    ## https, an ASCII host (punycode for an internationalized name), no
+    ## default port (:80 for http, :443 for https), and no path or trailing
+    ## slash, such as https://app.example.com. The chart refuses at render
+    ## only "*", "null", a value that is not a list (for example a plain
+    ## string), and an entry that is not a string (a YAML null included); a
+    ## malformed origin renders, and the service refuses it at startup.
+    ## Maps to OMNI_EVENTS_CORS_ALLOW_ORIGINS env var (rendered as JSON). This
+    ## is separate from httpProxy.corsPolicy, which Envoy applies at the
+    ## ingress.
+    corsAllowOrigins: []
+  ## @param service.nameOverride An override for default service names. 
+  ## Optional.
+  nameOverride: ""
+## External ingress via Contour's httpproxy objects
+httpProxy:
+  ## @param httpProxy.enabled Enable the ingress HTTP proxy
+  ## Type: boolean. Default: false
+  enabled: false
+  ## FQDN configuration for the ingress
+  ## Final ingress hostname will be composed as "<host>.<domain>"
+  fqdn:
+    ## @param httpProxy.fqdn.host Host component of the FQDN
+    ## Type: string. Default: event-consumer
+    host: "event-consumer"
+    ## @param httpProxy.fqdn.domain Domain component of the FQDN
+    ## Type: string. Default: nodomain.none
+    domain: "nodomain.none"
+  ## @param httpProxy.path The prefix for all routes of this service
+  ## Type: string. Default: /. If a route is available on /v1/myroute and this
+  ## path equals /api, the route will become /api/v1/myroute
+  path: "/"
+  ## TLS configuration for the ingress
+  tls:
+    ## @param httpProxy.tls.enabled Enable TLS for the HTTP proxy
+    ## Type: boolean. Default: false
+    enabled: false
+    ## @param httpProxy.tls.secretName Name of the secret containing the TLS cert
+    ## Type: string. Optional. Default: ""
+    secretName: ""
+    ## CertManager integration for automatic certificate provisioning
+    ## If enabled, will create a Certificate resource for CertManager, using
+    ## either the default TLS secret name or httpProxy.tls.secretName if
+    ## specified. This secret will be added as tls.secretName of the httpProxy
+    ## CR for Contour.
+    ##
+    ## NOTE: The certManager value is included here for convenience.
+    ##       Using certManager at the service level will create one cert request
+    ##       per service. In a production environment, it may be better to make
+    ##       one single cert request per cluster.
+    certManager:
+      ## @param httpProxy.tls.certManager.enabled Enable CertManager integration
+      ## Type: boolean. Default: false
+      enabled: false
+      ## Issuer reference for CertManager
+      issuerRef:
+        ## @param httpProxy.tls.certManager.issuerRef.name Name of the issuer
+        ## Type: string. Required if certManager.enabled is true.
+        ## Default: my-issuer
+        name: my-issuer
+        ## @param httpProxy.tls.certManager.issuerRef.kind Kind of the issuer
+        ## Type: string. Required if certManager.enabled is true.
+        ## Default: ClusterIssuer
+        kind: ClusterIssuer
+  ## Timeout policy for the HTTPProxy routes that serve standard
+  ## (non-streaming) requests — i.e. normal REST API calls and
+  ## unary gRPC RPCs. SSE streaming endpoints and streaming gRPC
+  ## RPCs (ConsumeDurableEvents, ConsumeDurableEventsWithAcks,
+  ## ConsumeNonDurableEvents, ManageDeadLetteredEvents) use
+  ## separate, longer timeouts that are hardcoded in the HTTPProxy
+  ## template: response: 240m / idle: 240m for the gRPC streaming
+  ## routes, response: 240m / idle: 40s for the SSE routes. Those
+  ## streaming routes' other policies -- the load-balancing strategy
+  ## and the retryPolicy -- are configured in the httpProxy.streaming
+  ## block below. The catch-all route these timeouts apply to also
+  ## carries its own, much narrower retryPolicy, configured in the
+  ## httpProxy.unary block below.
+  timeoutPolicy:
+    ## @param httpProxy.timeoutPolicy.response Time the proxy
+    ## allows for the upstream response to complete after the
+    ## request has been fully received. The clock runs until the
+    ## response has been processed in full, so it spans the whole
+    ## exchange, including any retries, and it applies at both the
+    ## client-to-proxy and proxy-to-backend hops.
+    ##
+    ## This timeout also caps the catch-all route's
+    ## httpProxy.unary.retryPolicy attempts: it bounds the whole
+    ## request including its retries rather than each attempt
+    ## separately, so all of the attempts run inside this one budget.
+    ## Shortening it reduces how much of the retry sequence can
+    ## actually be spent.
+    response: "10s"
+    ## @param httpProxy.timeoutPolicy.idle Maximum duration of
+    ## inactivity allowed on an open connection before the proxy
+    ## closes it. For HTTP/1.1 this is the gap between
+    ## request/response bytes; for HTTP/2 it is the idle time on
+    ## the stream.
+    idle: "10s"
+  ## Policies applied ONLY to the long-lived streaming routes: the SSE
+  ## routes (/api/v1beta/events/stream and /api/v1/events/stream, which
+  ## also match their -durable siblings) and the streaming gRPC
+  ## RPCs (ConsumeDurableEvents, ConsumeDurableEventsWithAcks,
+  ## ConsumeNonDurableEvents, ManageDeadLetteredEvents). None of these
+  ## keys touch the non-streaming catch-all route: it carries no
+  ## load-balancing strategy at all, and its retryPolicy is the separate,
+  ## much narrower httpProxy.unary block below. Every key here is
+  ## per-protocol overridable under httpProxy.grpc / httpProxy.rest —
+  ## e.g. httpProxy.grpc.streaming.retryPolicy.count.
+  streaming:
+    loadBalancerPolicy:
+      ## @param httpProxy.streaming.loadBalancerPolicy.strategy Envoy load
+      ## balancing strategy for the streaming routes
+      ## Type: string. Default: RoundRobin. Allowed: RoundRobin,
+      ## WeightedLeastRequest, Random, Cookie, RequestHash, or "" to omit
+      ## the policy entirely (Contour's own default is RoundRobin, so ""
+      ## and RoundRobin are equivalent).
+      ##
+      ## RequestHash needs a requestHashPolicies list to hash on, which
+      ## this chart does not expose, so setting it silently degrades to
+      ## RoundRobin -- as does any unknown strategy string, because
+      ## Contour never errors on a strategy value.
+      ##
+      ## Steering only — this never changes admission. A pod admits new
+      ## streams until it reaches its memory-safe stream cap no matter how
+      ## those streams arrive, so the strategy is best-effort load
+      ## placement, never a limit.
+      ##
+      ## RoundRobin (the default) is do-no-harm: 1/N placement across the
+      ## ready pods, skew-neutral.
+      ##
+      ## WeightedLeastRequest is the recommendation for predominantly
+      ## PROXIED deployments — it equalizes true load, and a freshly
+      ## scaled-up pod (zero Envoy-visible streams) absorbs new arrivals
+      ## immediately, so scale-out bites at once.
+      ##
+      ## Caveat, the invisible-load magnet: Envoy counts only the streams
+      ## it routed itself. Cluster-internal clients that reach the service
+      ## directly hold streams Envoy cannot see, so in a sticky-heavy
+      ## fleet least-request is anti-correlated with true load — the pod
+      ## carrying the most invisible streams looks emptiest and becomes a
+      ## magnet for new external streams until its visible count reaches
+      ## parity, which is strictly worse than RoundRobin for that profile.
+      ## Operator signal for choosing: the per-pod stream gauges. Visible
+      ## sticky skew means keep RoundRobin.
+      ##
+      ## Cluster-split note: any non-default strategy gives the streaming
+      ## routes their own Envoy cluster, because Contour hashes the
+      ## strategy into the cluster name (Clustername()), separate from the
+      ## catch-all route's cluster — a separate connection pool and a
+      ## different cluster stats name, which matters to anyone reading
+      ## Envoy per-cluster dashboards. RoundRobin and "" both normalize to
+      ## Contour's default and produce no split.
+      strategy: RoundRobin
+    retryPolicy:
+      ## @param httpProxy.streaming.retryPolicy.enabled Retry a pod's
+      ## capacity refusal onto a fresh load-balancer selection
+      ## Type: boolean. Default: true.
+      ##
+      ## A capacity refusal is pod-local, and the API contract already
+      ## instructs clients to reconnect until they land on a pod with
+      ## capacity (event_consumer.proto:40-42 and :101-103 say exactly
+      ## that) — the retry policy performs that documented remedy
+      ## without a client-visible error when the refusal arrives as a
+      ## trailers-only RESOURCE_EXHAUSTED before any response commits
+      ## and the pre-admission request bytes fit Envoy's ~1 MiB retry
+      ## buffer, as a fresh load-balancer selection that can land on
+      ## another pod — likely, but never a guaranteed different pod.
+      ## The retry conditions are fixed by the chart to mirror the
+      ## service's error contract (RESOURCE_EXHAUSTED on gRPC, 503 on
+      ## REST) and are not operator-tunable.
+      ##
+      ## Retries are bounded. At fleet-wide saturation they exhaust and
+      ## the client sees the documented 503 / RESOURCE_EXHAUSTED and backs
+      ## off, which is the correct outcome: the remaining band is
+      ## deliberately reserved for pinned traffic.
+      ##
+      ## perTryTimeout is deliberately not exposed. Envoy applies it to
+      ## the initial attempt as well as to the retries, so any value
+      ## shorter than a stream's lifetime would cut healthy long-lived
+      ## streams; these routes run a 240m response timeout and must leave
+      ## it unset.
+      enabled: true
+      ## @param httpProxy.streaming.retryPolicy.count Maximum retry
+      ## attempts per request
+      ## Type: integer. Default: 2, i.e. up to three placement attempts in
+      ## total.
+      ##
+      ## Raising count gives a shed stream more placement attempts, each
+      ## an independent load-balancer selection that may reland on the
+      ## same pod, but it amplifies load during a fleet-wide saturation
+      ## event: every attempt is another upstream request, and on these
+      ## routes another per-pod capacity read. What it does NOT multiply
+      ## is ext_authz calls — the auth extension
+      ## (httpProxy.authExtension.enabled) runs in the listener's HTTP
+      ## filter chain, ahead of the router filter that performs the
+      ## retries, so the authorization decision is made once per client
+      ## request however many upstream attempts follow. The upstream
+      ## amplification also applies on the durable paths, where
+      ## saturation is more likely to be fleet-correlated because the
+      ## durable pool is small and per-pod.
+      ##
+      ## There is no count value that turns retries off: Contour maps
+      ## count: 0 (and unset) to Envoy's default of one retry. Prefer
+      ## enabled: false to turn retries off, so the retryPolicy block is
+      ## omitted outright. This render requires Contour v1.14 or later.
+      count: 2
+  ## Policy applied ONLY to the non-streaming catch-all route — the unary
+  ## REST calls and unary gRPC RPCs, which includes the durable-queue
+  ## create, update and delete operations.
+  ##
+  ## Why a retry is safe here even though these operations are not
+  ## idempotent: the two conditions the chart retries on are both
+  ## provably-unsent. connect-failure is a failed or timed-out TCP connect
+  ## to the selected pod; refused-stream is an upstream REFUSED_STREAM
+  ## reset, which a gRPC server's graceful GOAWAY produces for any stream
+  ## numbered above its last-stream-id. In both cases no application ever
+  ## saw the request, so replaying it on a fresh pod selection cannot
+  ## duplicate work. That covers most of a rolling upgrade: while an old
+  ## pod is terminating there is a short window in which Envoy still
+  ## selects it but its servers have already stopped, and every unary call
+  ## landing in that window would otherwise surface to the client as a 503.
+  ##
+  ## The two are not the complete set of provably-unsent conditions Envoy
+  ## defines — reset-before-request is another, and Contour's enum accepts
+  ## it from v1.31 — they are the two this chart retries on. The residual,
+  ## stated plainly: the REST leg is HTTP/1.1 and has no refused-stream
+  ## analogue, so a pooled keep-alive connection to a terminating pod that
+  ## Envoy finds dead at dispatch (response flag UC) is not retried by the
+  ## proxy and still reaches the client. Widening the list is a separate
+  ## evaluation, not something to change here ad hoc.
+  ##
+  ## The condition list is deliberately much narrower than the streaming
+  ## routes' policy above and is NOT operator-tunable. 5xx,
+  ## retriable-status-codes, reset and gateway-error are all excluded on
+  ## purpose: each of them can retry a request the application already
+  ## processed — an app-generated 503 (a capacity refusal, say) may follow
+  ## work that was really done, and on a unary route Envoy cannot tell
+  ## that case from an undelivered one. Only connect-level failure is
+  ## provably unprocessed.
+  ##
+  ## Note the asymmetry with the timeouts for this same route: they live
+  ## at httpProxy.timeoutPolicy, not here.
+  ##
+  ## Like every other key under httpProxy, this block is per-protocol
+  ## overridable under httpProxy.grpc / httpProxy.rest via the
+  ## deep-merge — e.g. httpProxy.rest.unary.retryPolicy.count: 5 raises
+  ## the count on the REST proxy alone and leaves gRPC at the shared
+  ## value.
+  unary:
+    retryPolicy:
+      ## @param httpProxy.unary.retryPolicy.enabled Retry unary requests
+      ## that Envoy could not deliver to the selected pod
+      ## Type: boolean. Default: true.
+      ##
+      ## When true, the catch-all route renders a retryPolicy whose
+      ## retryOn is exactly [connect-failure, refused-stream]. When
+      ## false, the retryPolicy block is omitted from that route
+      ## outright — that is the only off-switch; see the count note
+      ## below. Setting it false makes a unary call that arrives during
+      ## a rolling upgrade's residual pod-deletion window fail with a
+      ## 503 the client must retry itself.
+      ##
+      ## The conditions themselves are fixed by the chart. An EMPTY
+      ## retryOn is not "no conditions" — Contour substitutes 5xx, which
+      ## is precisely the unsafe policy this block rules out — so both
+      ## conditions are always emitted explicitly when enabled.
+      ##
+      ## perTryTimeout is deliberately not exposed, matching the
+      ## streaming policy: Envoy applies it to the initial attempt too.
+      enabled: true
+      ## @param httpProxy.unary.retryPolicy.count Maximum retry
+      ## attempts per unary request
+      ## Type: integer. Default: 3, i.e. up to four delivery attempts in
+      ## total.
+      ##
+      ## Sized to survive several consecutive selections of terminating
+      ## pods during a rollout, where multiple old pods can be shutting
+      ## down at once. Each attempt is an independent load-balancer
+      ## selection that may reland on an unhealthy pod, so raising it
+      ## multiplies upstream attempts and is not free. It does not
+      ## multiply ext_authz calls — the auth extension
+      ## (httpProxy.authExtension.enabled) runs in the listener's HTTP
+      ## filter chain, ahead of the router filter that performs the
+      ## retries, so the authorization decision is made once per client
+      ## request however many upstream attempts follow.
+      ##
+      ## There is no count value that turns retries off: Contour maps
+      ## count: 0 (and unset) to Envoy's default of one retry. Prefer
+      ## enabled: false to turn retries off, so the retryPolicy block is
+      ## omitted outright. This render requires Contour v1.14 or later.
+      ##
+      ## The attempts run inside httpProxy.timeoutPolicy.response
+      ## (default 10s), which bounds the whole request including its
+      ## retries rather than each attempt separately. Raising count
+      ## without checking it against that timeout buys nothing, and
+      ## tightening that timeout shortens the sequence.
+      count: 3
+  ## Response headers added to every route on this HTTPProxy.
+  ## Used to set security headers like HSTS.
+  responseHeadersPolicy:
+    ## @param httpProxy.responseHeadersPolicy.set Response headers to set
+    ## Type: array of {name, value} objects. Default: HSTS with 1 year
+    ## max-age and includeSubDomains.
+    set:
+      - name: Strict-Transport-Security
+        value: "max-age=31536000; includeSubDomains"
+  ## CORS policy configuration
+  ## Verbatim CORSPolicy setting of Envoy's HTTPProxy object
+  corsPolicy:
+    ## @param httpProxy.corsPolicy.allowCredentials Allow credentials in CORS
+    ## Type: boolean. Default: false. If true, allowOrigin cannot use wildcard.
+    allowCredentials: false
+    ## @param httpProxy.corsPolicy.allowOrigin Allowed origins for CORS requests
+    ## Type: array of strings. Default: ["*"]. Use specific origins if
+    ## allowCredentials is true.
+    allowOrigin:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowHeaders Allowed headers for CORS requests
+    ## Type: array of strings. Default: ["*"]
+    allowHeaders:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowMethods Allowed HTTP methods for CORS
+    ## Type: array of strings. Default: ["GET", "POST", "DELETE", "PATCH"].
+    ## Must include all methods used by the API (GET for streaming, POST/DELETE/
+    ## PATCH for durable queue management).
+    allowMethods:
+      - 'GET'
+      - 'POST'
+      - 'DELETE'
+      - 'PATCH'
+    ## @param httpProxy.corsPolicy.exposeHeaders Headers exposed to browser JS
+    ## Type: array of strings. Default: ["*"]. Controls which response headers
+    ## the browser's JavaScript can access via Access-Control-Expose-Headers.
+    exposeHeaders:
+      - "*"
+  ## @param httpProxy.annotations Additional annotations for HTTPProxy resource
+  ## Type: object. Default: {}. Useful for adding custom routing, rate limiting,
+  ## or other HTTPProxy annotations at deploy time without chart changes.
+  annotations: {}
+  ## @param httpProxy.authExtension Envoy auth extension for this service's
+  ## HTTPProxy objects. Each HTTPProxy (rest and grpc) gets the extension's
+  ## authorization block when openId.enabled is true or its merged
+  ## authExtension.enabled (httpProxy.authExtension.enabled, overridable per
+  ## protocol under httpProxy.rest / httpProxy.grpc) is true. It verifies only
+  ## the requests that come through the HTTPProxy, never in-cluster calls to the
+  ## Service, and it does not change the service's own principalSource.
+  authExtension:
+    enabled: false
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+    responseTimeout: 2s
+  ## Per-protocol overrides for the HTTPProxy objects. Any values
+  ## set here are deep-merged on top of the shared httpProxy
+  ## settings above (timeoutPolicy, streaming, unary, corsPolicy,
+  ## annotations, etc.), allowing you to customize each protocol's proxy
+  ## without duplicating the common configuration.
+  ## Example — give gRPC a longer response timeout:
+  ##   grpc:
+  ##     timeoutPolicy:
+  ##       response: "30s"
+  ## Example — raise the unary retry count on REST only:
+  ##   rest:
+  ##     unary:
+  ##       retryPolicy:
+  ##         count: 5
+  grpc: {}
+  rest: {}
+## Logging configuration
+logging:
+  ## @param logging.level Logging level for the service
+  ## Type: string. Allowed values: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  ## Maps to OMNI_EVENTS_LOG_LEVEL env var. Default: INFO
+  level: INFO
+## @param envSecretName Name of the Kubernetes secret containing sensitive env vars
+## Type: string. Required. Secret must contain RABBITMQ_URI and optionally REDIS_URI.
+## Created via: kubectl create secret generic event-consumer-env --from-literal=...
+envSecretName: event-consumer-env
+## Observability configuration for OpenTelemetry (OTEL) metrics and tracing.
+##
+## This is the standardized, workspace-wide `observability` schema (metrics and
+## tracing, both disabled by default). The Event Consumer Service exports
+## telemetry over OTLP/gRPC, so it reads endpoints from the `.endpoint.grpc`
+## fields and ignores `.endpoint.http` (the http fields are accepted only for
+## schema uniformity across services).
+##
+## When either observability.metrics.enabled or observability.tracing.enabled is
+## true, this block takes precedence over the legacy `telemetry` block below and
+## is translated into the OMNI_EVENTS_* env vars the service consumes. When both
+## are disabled, the legacy `telemetry` block is used, so existing values render
+## identically (fully backward compatible).
+##
+## Example (production snippet):
+## observability:
+##   metrics:
+##     enabled: true
+##     endpoint:
+##       grpc: "http://grafana-k8s-monitoring-alloy-receiver.grafana-cloud.svc.cluster.local:4317"
+##   tracing:
+##     enabled: true
+##     endpoint:
+##       grpc: "http://grafana-k8s-monitoring-alloy-receiver.grafana-cloud.svc.cluster.local:4317"
+observability:
+  metrics:
+    ## @param observability.metrics.enabled Enable OTLP metrics export.
+    ## Type: boolean. Default: false. When true, takes precedence over the
+    ## legacy telemetry.enabled and maps to OMNI_EVENTS_METRICS_ENABLED.
+    ## Note: log export is enabled whenever either signal is on, so enabling
+    ## metrics alone still ships logs (reusing the metrics endpoint here).
+    enabled: false
+    ## Endpoints for the OTLP-compatible collector (e.g. Grafana Alloy).
+    endpoint:
+      ## @param observability.metrics.endpoint.grpc OTLP/gRPC metrics endpoint.
+      ## Type: string. Maps to OMNI_EVENTS_OTLP_METRICS_ENDPOINT.
+      ## Required when observability.metrics.enabled is true.
+      grpc: ""
+      ## @param observability.metrics.endpoint.http OTLP/HTTP metrics endpoint.
+      ## Type: string. Ignored by this service (gRPC transport only). Optional.
+      http: ""
+  tracing:
+    ## @param observability.tracing.enabled Enable OTLP trace export.
+    ## Type: boolean. Default: false. When true, takes precedence over the
+    ## legacy telemetry.enabled and maps to OMNI_EVENTS_TRACING_ENABLED.
+    ## Note: log export is enabled whenever either signal is on and reuses the
+    ## tracing endpoint, so enabling metrics alone still ships logs.
+    enabled: false
+    ## Endpoints for the OTLP-compatible collector (e.g. Grafana Alloy).
+    endpoint:
+      ## @param observability.tracing.endpoint.grpc OTLP/gRPC traces endpoint.
+      ## Type: string. Maps to OMNI_EVENTS_OTLP_TRACING_ENDPOINT.
+      ## Required when observability.tracing.enabled is true.
+      grpc: ""
+      ## @param observability.tracing.endpoint.http OTLP/HTTP traces endpoint.
+      ## Type: string. Ignored by this service (gRPC transport only). Optional.
+      http: ""
+    ## NOTE: the standardized schema also defines observability.tracing.samplingRatio,
+    ## but it is intentionally omitted here: the notification-common library this
+    ## service uses does not read it (all traces are always exported). Add it only
+    ## once the library honors it, to avoid exposing a knob that silently does nothing.
+## Legacy telemetry configuration (DEPRECATED).
+## Superseded by the standardized `observability` block above, which takes
+## precedence whenever observability.metrics or observability.tracing is
+## enabled. Retained for backward compatibility; prefer `observability`.
+telemetry:
+  ## @param telemetry.enabled Enable telemetry (traces, metrics, logs)
+  ## Type: boolean. Maps to OMNI_EVENTS_TELEMETRY_ENABLED env var. Default: false
+  enabled: false
+  ## @param telemetry.otlp_tracing_endpoint OTLP-compatible endpoint for traces
+  ## Type: string. Required if telemetry.enabled is true.
+  ## Maps to OMNI_EVENTS_OTLP_TRACING_ENDPOINT env var.
+  otlp_tracing_endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  ## @param telemetry.otlp_metrics_endpoint OTLP-compatible endpoint for metrics
+  ## Type: string. Required if telemetry.enabled is true.
+  ## Maps to OMNI_EVENTS_OTLP_METRICS_ENDPOINT env var.
+  otlp_metrics_endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  ## @param telemetry.otlp_logs_endpoint OTLP-compatible endpoint for logs
+  ## Type: string. Required if telemetry.enabled is true.
+  ## Maps to OMNI_EVENTS_OTLP_LOGS_ENDPOINT env var.
+  otlp_logs_endpoint: "otel-collector.observability.svc.cluster.local:4317"
+## RabbitMQ connection pool configuration
+rabbitmq:
+  ## @param rabbitmq.channel_client_limit Target number of clients per channel
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_CLIENT_LIMIT env var.
+  ## Default: 8. Lower values provide more isolation between clients (reduced blast
+  ## radius from channel errors), while higher values allow more concurrent clients
+  ## per pod. On the DURABLE pool this is a strict bound. On the NON-DURABLE pool
+  ## it is a packing TARGET: with channel_overflow_enabled (the default), a stream
+  ## arriving when every channel is already at the limit is packed onto the
+  ## least-loaded channel instead of being refused. So channel_pool_size *
+  ## channel_client_limit is the SOFT THRESHOLD -- the quantity readiness and the
+  ## autoscaler key on -- and admission refuses no one there. The per-pod
+  ## admission ceiling is the memory cap: OMNI_EVENTS_BROKER_STREAM_MEMORY_BUDGET_MIB
+  ## divided by OMNI_EVENTS_SCALER_MAX_REPLICAS, or the absolute override
+  ## OMNI_EVENTS_MAX_NON_DURABLE_STREAMS_PER_POD when it is set. CAUTION: raising
+  ## this far enough to push the soft threshold above that cap inverts the band
+  ## and collapses the shed tier (rabbitmq.max_re_routable_streams_per_pod) onto
+  ## the cap. At the shipped pairing (this default of 8 with channel_prefetch_count
+  ## 15 and the default broker memory budget) the computed cap sits far above the
+  ## 100 * 8 = 800 soft threshold, so the band is not inverted; but raising
+  ## channel_prefetch_count back to 500 at this client_limit of 8 collapses the
+  ## cap below 800 and inverts the band.
+  channel_client_limit: 8
+  ## @param rabbitmq.channel_overflow_enabled Allow the non-durable pool to pack past channel_client_limit
+  ## Type: boolean. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_OVERFLOW_ENABLED env var.
+  ## Default: true. Applies to the NON-DURABLE pool only -- the durable pool is
+  ## strict by construction and ignores this setting. When true,
+  ## channel_client_limit is a packing TARGET rather than a hard bound: once
+  ## every channel is at the limit and the pool cannot grow, a new stream is
+  ## packed onto the least-loaded existing channel instead of being refused, so
+  ## a pinned (sticky) connection's burst is absorbed rather than rejected.
+  ## Admission stays bounded by the memory-safe per-pod stream cap.
+  channel_overflow_enabled: true
+  ## @param rabbitmq.channel_pool_size Maximum size of the RabbitMQ channel pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_SIZE env var.
+  ## Default: 100
+  channel_pool_size: 100
+  ## @param rabbitmq.channel_pool_min_size Minimum size of the RabbitMQ channel pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_MIN_SIZE env var.
+  ## Default: 75
+  channel_pool_min_size: 75
+  ## @param rabbitmq.readiness_min_available_channels Minimum available channels
+  ## for the readiness probe to pass.
+  ## Type: integer. Maps to OMNI_EVENTS_READINESS_MIN_AVAILABLE_CHANNELS env var.
+  ## Default: 80. The unit is non-durable STREAM slots (not channels); the name
+  ## is historical, kept from the Epic 2 Task 2 contract because renaming the
+  ## OMNI_EVENTS_ var would silently revert tuned deployments. At the shipped
+  ## defaults this is an 800 soft threshold - 80 reserve = 720 usable slots in
+  ## the scaling signal. The channel pool metrics endpoint subtracts this value
+  ## from channels_total so that the autoscaler's view stays conservative and it
+  ## reacts before the soft threshold is reached. The reserve shapes the SCALING
+  ## SIGNAL, not admission: going unready removes the pod from the
+  ## readiness-gated main Service (cluster-internal traffic) but not from the
+  ## -envoy Service the HTTPProxy routes through, so the slots within the reserve
+  ## do serve -- pinned streams up to the memory cap, re-routable ones up to the
+  ## shed threshold (rabbitmq.max_re_routable_streams_per_pod).
+  readiness_min_available_channels: 80
+  ## @param rabbitmq.channel_prefetch_count QoS prefetch applied per non-durable consumer
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_PREFETCH_COUNT env var.
+  ## Default: 15. Applied via set_qos with global_=False, so the prefetch window is
+  ## per non-durable STREAM (consumer), not per channel. It is the dominant
+  ## broker-memory lever AND the divisor in the computed per-pod stream cap: each
+  ## admitted stream's worst case is prefetch * 1800 B + 5120 B held on the broker
+  ## (32,120 B at prefetch 15 versus ~883 kB at prefetch 500), so LOWERING this
+  ## RAISES the per-pod cap under the same broker budget, at the cost of a smaller
+  ## in-flight buffer per stream. A value of 0 means UNLIMITED to set_qos: it is
+  ## accepted, but the per-stream footprint is then undefined and the cap becomes
+  ## incomputable (the service logs a WARNING and computes no memory cap), so a 0
+  ## here requires also setting rabbitmq.max_non_durable_streams_per_pod.
+  channel_prefetch_count: 15
+  ## @param rabbitmq.broker_stream_memory_budget_mib Fleet-wide broker memory budget for non-durable prefetch buffers
+  ## Type: integer. Maps to OMNI_EVENTS_BROKER_STREAM_MEMORY_BUDGET_MIB env var.
+  ## Default: 1024. Stated in MiB and covering the WHOLE FLEET, not one pod: the
+  ## per-pod stream cap divides this budget by OMNI_EVENTS_SCALER_MAX_REPLICAS
+  ## (supplied by the chart from channelPoolAutoscaling.maxReplicas, or replicaCount
+  ## when autoscaling is disabled -- see OMNI_EVENTS_SCALER_MAX_REPLICAS in the
+  ## settings ConfigMap). Must be >= 1. When the resulting cap binds under real
+  ## load, the remedies are to raise broker RAM (and this budget with it) or to
+  ## lower rabbitmq.channel_prefetch_count -- NEVER to "add pods", because a larger
+  ## fleet divides this SAME budget into smaller per-pod caps. The budget must also
+  ## be set low enough relative to real broker memory to leave headroom for the
+  ## reconnect-grace orphan-queue backlog, a churn-and-event-rate-driven term the
+  ## live stream count structurally cannot see.
+  broker_stream_memory_budget_mib: 1024
+  ## @param rabbitmq.max_non_durable_streams_per_pod Absolute per-pod cap on concurrent non-durable streams
+  ## Type: integer or null. Maps to OMNI_EVENTS_MAX_NON_DURABLE_STREAMS_PER_POD env var.
+  ## Default: null. Absolute per-pod override, in concurrent non-durable streams,
+  ## for operators who have measured their own deployment. When set it wins
+  ## unconditionally over the computed cap; must be >= 1. Unset means the cap is
+  ## COMPUTED from broker_stream_memory_budget_mib and channel_prefetch_count. The
+  ## cap is an always-on invariant: unset means computed, set means absolute -- there
+  ## is no off switch. (A supplied 0 is rejected by pydantic on ge=1 and crash-loops
+  ## the pod loudly rather than degrading silently into the computed default.)
+  max_non_durable_streams_per_pod: null
+  ## Fleet capacity worked example (SR-7.3 / PRD AC-2)
+  ## ------------------------------------------------
+  ## A >=12,000 concurrent non-durable stream fleet target is reachable by
+  ## changing ONLY the values below -- packing density (channel_client_limit)
+  ## and/or channelPoolAutoscaling.maxReplicas -- with no code change. All
+  ## numbers derive from app/lib/rabbitmq/stream_memory_cap.py.
+  ##
+  ## Per-stream worst case = prefetch x 1800 B + 5120 B (the two measured
+  ## constants BYTES_PER_HELD_MESSAGE = 1800 and BYTES_PER_STREAM_CHANNEL_SHARE
+  ## = 5120). At the default prefetch 15 that is 32,120 B per stream.
+  ##
+  ## Default band at stock values (prefetch 15, budget 1024 MiB, maxReplicas 10):
+  ##   fleet cap = 1024 MiB / 32,120 B = 33,429 streams
+  ##   per-pod cap = 33,429 // 10 = 3,342
+  ##   soft threshold = channel_pool_size 100 x channel_client_limit 8 = 800
+  ##   shed midpoint = 800 + (3,342 - 800) // 2 = 2,071
+  ##   Band soft 800 < shed 2,071 < cap 3,342 -- not inverted.
+  ##
+  ## Two values-only paths to >=12,000 fleet streams:
+  ##   Path A (more pods, stock density): set channelPoolAutoscaling.maxReplicas: 17.
+  ##     Clears >=12,000 on BOTH bases (17 x 720 = 12,240 usable; 17 x 800 =
+  ##     13,600 admitted). Per-pod cap recomputes to 33,429 // 17 = 1,966, still
+  ##     well above the 800 soft threshold, so the band is not inverted. Fleet
+  ##     worst-case broker memory 12,000 x 32,120 B ~= 385 MB, inside the budget.
+  ##     Boundary case: maxReplicas 15 gives 800 x 15 = 12,000 exactly on the
+  ##     admitted basis, but 15 x 720 = 10,800 falls short on the scaling-signal
+  ##     basis -- 17 is the recommended value because it clears both.
+  ##   Path B (denser packing, stock fleet): set rabbitmq.channel_client_limit: 16
+  ##     with channel_pool_size 100 and maxReplicas 10. Soft threshold 1,600/pod
+  ##     -> fleet 16,000. Per-pod cap unchanged at 3,342 (> 1,600, band not
+  ##     inverted; shed midpoint 2,471). The ChannelPoolMetricsResponse
+  ##     channels_total reports the effective STREAM count -- soft threshold
+  ##     1,600 minus the readiness reserve 80 = 1,520 (not the physical
+  ##     100-channel pool size, which shares the name) -- and channels_in_use
+  ##     <= 3,342, both accepted by the metrics response model (Epic 7 removed
+  ##     the former le=10000 bound, so it no longer caps this route).
+  ##
+  ## Admission basis vs scaling-signal basis (both are true of different
+  ## quantities): admission keys on the 800/pod soft threshold, while the
+  ## readiness reserve (readiness_min_available_channels 80) shapes only the
+  ## SCALING SIGNAL, leaving 720/pod usable-in-the-signal. So a target of 12,000
+  ## needs 15 pods on the admitted basis but 17 on the scaling-signal basis.
+  ##
+  ## The budget must be backed by REAL broker RAM: raising maxReplicas divides
+  ## the SAME fleet budget into smaller per-pod caps, so scaling out is not free.
+  ## See the channelPoolAutoscaling.maxReplicas ## @param for the divisor
+  ## semantics.
+  ## @param rabbitmq.max_re_routable_streams_per_pod Per-pod stream count at which
+  ## re-routable streams are shed.
+  ## Type: integer. Maps to OMNI_EVENTS_MAX_RE_ROUTABLE_STREAMS_PER_POD env var.
+  ## Default: null. Once a pod holds this many streams it refuses RE-ROUTABLE
+  ## streams (all REST/SSE, plus gRPC consume arriving through the proxy), so the
+  ## band above this threshold stays reserved for pinned streams that autoscaling
+  ## cannot rescue. The value is clamped into
+  ## [channel_pool_size * channel_client_limit, memory-safe stream cap], so an
+  ## out-of-band value is accepted rather than rejected. Leaving it unset means the
+  ## midpoint of that band. Setting it to the cap disables the shed tier outright,
+  ## which is the right posture for single-replica deployments or uniformly hot
+  ## fleets with nowhere to re-route.
+  max_re_routable_streams_per_pod: null
+  ## @param rabbitmq.channel_wait_ms Non-durable pool channel-checkout wait in milliseconds
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_WAIT_MS env var.
+  ## Default: 500. Bounds how long a non-durable stream waits for a channel from
+  ## the pool before the pool reports exhaustion. Under two-tier admission a wait
+  ## expiry is NOT the refusal point -- the memory-safe per-pod stream cap is; this
+  ## only shapes how long a checkout blocks while the pool is momentarily saturated.
+  channel_wait_ms: 500
+  ## @param rabbitmq.non_durable_queue_ttl_seconds Broker TTL for non-durable queues
+  ## Type: integer. Maps to OMNI_EVENTS_NON_DURABLE_QUEUE_TTL_SECONDS env var.
+  ## Default: 20. The broker x-expires window an orphaned non-durable queue lingers
+  ## after its consumer disconnects, so a client that reconnects within this grace
+  ## period rebinds to its existing queue and its buffered backlog rather than
+  ## starting fresh. Raising it widens the reconnect grace but lengthens how long
+  ## orphaned queues hold broker memory, which enlarges the reconnect-grace backlog
+  ## term the fleet memory budget must leave headroom for.
+  non_durable_queue_ttl_seconds: 20
+  ## @param rabbitmq.durable_consumer_prefetch_count Per-channel QoS prefetch for durable consumers
+  ## Type: integer. Maps to OMNI_EVENTS_DURABLE_CONSUMER_PREFETCH_COUNT env var.
+  ## Default: 20. Per-channel QoS for DURABLE consumers (both the with-acks and
+  ## server-delayed-ack paths). It bounds the in-flight messages nacked/requeued
+  ## per disconnect, keeping quorum x-delivery-count churn well clear of the
+  ## delivery-limit. Deliberately far below the durable pool's own prefetch default
+  ## (500). Must be >= 1: a prefetch of 0 means UNLIMITED to set_qos, defeating the
+  ## bound.
+  durable_consumer_prefetch_count: 20
+  ## Durable channel pool. Sizing for the pool that serves durable queue
+  ## operations and DLQ browse -- distinct from the non-durable pool above. The
+  ## durable pool is admitted against its OWN budget, so heavy non-durable fan-out
+  ## cannot 503 durable operations, and it is strict by construction (there is
+  ## deliberately no durable overflow twin).
+  ## @param rabbitmq.durable_channel_pool_size Maximum size of the durable channel pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_POOL_SIZE env var.
+  ## Default: 100. Deliberately GENEROUS relative to the handful of long-lived
+  ## durable queues a deployment runs, so durable operations never queue behind
+  ## non-durable load.
+  durable_channel_pool_size: 100
+  ## @param rabbitmq.durable_channel_pool_min_size Minimum size of the durable channel pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_POOL_MIN_SIZE env var.
+  ## Default: 0. Leaves the durable pool empty until a durable checkout first needs it.
+  durable_channel_pool_min_size: 0
+  ## @param rabbitmq.durable_channel_prefetch_count Base per-channel QoS for the durable pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_PREFETCH_COUNT env var.
+  ## Default: 500. NOTE: this setting is effectively INERT -- it bounds nothing in
+  ## practice, because every durable consumer (durable_consumer_prefetch_count) and
+  ## every DLQ browse (dead_letter_browse_prefetch_count) overrides it per checkout
+  ## via set_qos, and declaration-only channels host no consumers. Do not tune it
+  ## expecting a broker-memory effect.
+  durable_channel_prefetch_count: 500
+  ## @param rabbitmq.durable_channel_wait_ms Durable pool channel-checkout wait in milliseconds
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_WAIT_MS env var.
+  ## Default: 500. How long a durable operation waits for a channel from the durable
+  ## pool before it reports exhaustion.
+  durable_channel_wait_ms: 500
+  ## @param rabbitmq.durable_channel_client_limit Clients per channel on the durable pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_DURABLE_CHANNEL_CLIENT_LIMIT env var.
+  ## Default: 1. A STRICT bound here (unlike the non-durable pool's packing TARGET):
+  ## the durable pool never packs past this limit.
+  durable_channel_client_limit: 1
+## Broker-side bounds for the durable event queues, shipped as a RabbitMQ
+## policy and applied by a post-install/post-upgrade hook Job.
+##
+## Why a policy and not queue arguments: queue arguments are IMMUTABLE once a
+## queue exists, so a value change would only reach newly created queues and a
+## long-lived durable queue could never be retuned. A policy re-applies to
+## existing queues immediately, which is what makes these knobs usable in the
+## field.
+##
+## Why a hook Job: the Job reaches the broker over the management HTTP API,
+## the only path that also works against a MANAGED broker (CloudAMQP and
+## friends expose no node or Erlang access; they serve the management API on
+## 443). It runs the service image with the entrypoint overridden, so the apply
+## logic ships as a module INSIDE that image (`public_scripts/`) rather than as
+## a ConfigMap: there it is unit-tested, linted, and versioned in lockstep with
+## the service, and it lands in the published source mirror customers read.
+## (The image being distroless rules out a shell-SCRIPT ConfigMap in
+## particular; a mounted Python file would run fine without a shell. The
+## reasons above are why there is no second image and no ConfigMap here.)
+##
+## The Job is FAIL-CLOSED: if the policy cannot be applied the Job fails, and a
+## failed post-install/post-upgrade hook fails the whole Helm release. That is
+## deliberate -- a cluster running without these bounds is the condition this
+## feature exists to prevent. Note that Helm does NOT remove hook resources on
+## `helm uninstall`; the Job object must be deleted by hand if that matters.
+##
+## Operator hazard: at most ONE regular policy applies to a queue (the highest
+## priority wins, and equal priorities resolve nondeterministically). A second
+## regular policy matching `^event-queue:` would silently DISPLACE this one
+## rather than merge with it, so keep every bound for these queues in this
+## policy.
+##
+## Broker version: prefer RabbitMQ >= 4.1.5. On 4.0.5-4.1.4 a negative
+## `delivery-limit` triggers a policy-repair loop that prevents queues from
+## ever expiring (the chart refuses a negative value outright for that reason).
+policyHook:
+  ## @param policyHook.enabled Apply the event-queue bounds policy on install and upgrade
+  ## Type: boolean. Default: true. When true, managementApi.baseUrl,
+  ## managementApi.vhost and managementApi.existingSecret.name are REQUIRED and
+  ## the chart refuses to render without them. Set to false on a restricted
+  ## broker where policies are managed outside this chart -- the queues then
+  ## carry no bounds unless you apply an equivalent policy yourself.
+  enabled: true
+  ## @param policyHook.backoffLimit Pod retries before the hook (and the release) fails
+  ## Type: integer. Default: 1, i.e. two pod attempts in total. Broker
+  ## flakiness is NOT what this covers -- the script retries each
+  ## management-API call itself (3 attempts with backoff) -- so this exists for
+  ## whole-pod failures: an image-pull error, a node eviction, an OOM kill.
+  ## Sized against activeDeadlineSeconds below, which spans ALL pod attempts:
+  ## two worst-case pods (~83 s each) plus Kubernetes' 10 s inter-attempt
+  ## backoff is ~176 s, so the second attempt fits under the 180 s deadline.
+  ## Raising this without raising the deadline buys nothing -- the extra
+  ## attempts are cut off mid-run.
+  backoffLimit: 1
+  ## @param policyHook.activeDeadlineSeconds Wall-clock bound on the whole Job
+  ## Type: integer. Default: 180. Caps how long a broker outage can stall a
+  ## `helm upgrade` -- past this the Job fails and the release fails with it,
+  ## instead of hanging until the Helm timeout (300 s by default, which this
+  ## stays clear of so the Job's own error is what surfaces).
+  ## The arithmetic, worst case throughout, which the script's retry budget is
+  ## sized to fit:
+  ##   per management-API attempt   4 s connect + 8 s read            = 12 s
+  ##   per call    3 attempts + jittered backoff of up to 1 s and 2 s = 39 s
+  ##   per pod     GET (fails open) then PUT, plus ~5 s startup       ~ 83 s
+  ##   per Job     2 pod attempts + Kubernetes' 10 s backoff          ~ 176 s
+  ## The margin over a single pod (~97 s) is what absorbs scheduling and the
+  ## image pull, which this deadline also covers. Keep the two in step: if you
+  ## shorten this below ~90 s the pod is killed as DeadlineExceeded before the
+  ## script can log WHY the broker would not answer.
+  activeDeadlineSeconds: 180
+  ## @param policyHook.ttlSecondsAfterFinished Seconds before a finished Job is cleaned up
+  ## Type: integer. Default: 900 (15 minutes). 0 = do not delete automatically
+  ## (keep the pod logs for debugging).
+  ttlSecondsAfterFinished: 900
+  ## @param policyHook.resources Resource requests/limits for the hook pod
+  ## Type: object. Default: small -- the Job makes two HTTP calls and exits.
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  ## RabbitMQ management HTTP API endpoint and credential. Supplied by the
+  ## deployment repo; there are deliberately NO defaults, because a wrong
+  ## default here means "applied successfully to the wrong broker".
+  managementApi:
+    ## @param policyHook.managementApi.baseUrl Management API base URL (scheme, host, port)
+    ## Type: string. REQUIRED when policyHook.enabled. No trailing path.
+    ## A self-hosted broker is typically
+    ## `http://<rabbitmq-service>.<namespace>.svc.cluster.local:15672`;
+    ## CloudAMQP serves the management API over HTTPS on 443, e.g.
+    ## `https://<instance>.rmq.cloudamqp.com`. Never assume `:15672`.
+    baseUrl: ""
+    ## @param policyHook.managementApi.vhost Virtual host the policy is applied to
+    ## Type: string. REQUIRED when policyHook.enabled. Must be the SAME vhost
+    ## the service consumes from -- the Job cross-checks it against the vhost in
+    ## the service's AMQP URI and fails loudly on a mismatch.
+    vhost: ""
+    ## Existing Secret holding the management-API credential. The credential is
+    ## used at DEPLOY time only and is never given to the running service, which
+    ## keeps its own least-privilege AMQP credential. The `policymaker` tag plus
+    ## access to the vhost is sufficient; `administrator` is not required.
+    existingSecret:
+      ## @param policyHook.managementApi.existingSecret.name Secret name
+      ## Type: string. REQUIRED when policyHook.enabled. Must exist in the
+      ## release namespace before install.
+      name: ""
+      ## @param policyHook.managementApi.existingSecret.usernameKey Key holding the username
+      ## Type: string. Default: username
+      usernameKey: username
+      ## @param policyHook.managementApi.existingSecret.passwordKey Key holding the password
+      ## Type: string. Default: password
+      passwordKey: password
+  ## The policy itself. Two of its fields are deliberately NOT values, because
+  ## they are scoping rather than tuning and a changed value would be silently
+  ## destructive:
+  ##   - the match PATTERN is fixed at `^event-queue:`, derived from the
+  ##     service's queue-naming contract; an operator who changed it would
+  ##     silently un-bound every event queue.
+  ##   - `apply-to` is fixed at `quorum_queues` (RabbitMQ >= 3.12). Durable and
+  ##     non-durable queues share the `event-queue:` name prefix and only the
+  ##     durable ones are quorum queues, so the queue TYPE is the whole of the
+  ##     separation. Widening it to `queues` would apply max-length +
+  ##     drop-head to non-durable queues, silently dropping a live-but-slow
+  ##     consumer's backlog (those queues have no dead-letter exchange, so the
+  ##     drops are invisible) and breaking the reconnect-token "no missed
+  ##     events" guarantee.
+  policy:
+    ## @param policyHook.policy.name Policy name in the broker
+    ## Type: string. Default: event-queue-limits. Renaming it orphans the
+    ## previous policy, which keeps applying until you delete it by hand.
+    name: event-queue-limits
+    ## @param policyHook.policy.priority Regular-policy priority
+    ## Type: integer. Default: 0. Raise it only to win against another regular
+    ## policy that also matches these queues; equal priorities resolve
+    ## nondeterministically.
+    priority: 0
+    definition:
+      ## NOTE on nulls: none of the three numeric bounds below may be null.
+      ## Helm coerces a null integer to 0, and each of those zeroes is a value
+      ## the broker ACCEPTS and then quietly enforces, so the chart refuses all
+      ## three at render time rather than shipping a policy that discards every
+      ## event while the hook reports success. (`expiresMs` is the one
+      ## exception -- see its own note below.)
+      ##
+      ## @param policyHook.policy.definition.deliveryLimit Redelivery attempts before dead-lettering
+      ## Type: integer. Default: 10. Must be >= 0 -- the chart refuses null and
+      ## refuses a negative value, which on RabbitMQ 4.0.5-4.1.4 triggers a
+      ## policy-repair loop that resets the `expires` idle clock every 5 seconds
+      ## so no queue ever auto-reaps. 0 is legal but drastic (a requeued message
+      ## is dead-lettered on its first redelivery), so it must be set on purpose.
+      deliveryLimit: 10
+      ## @param policyHook.policy.definition.messageTtlMs Per-message TTL in milliseconds
+      ## Type: integer. Default: 86400000 (24 hours). A message older than this
+      ## is dead-lettered to the DLQ. Must be >= 1 -- the chart refuses null and
+      ## 0, which would expire every message the instant it is published.
+      messageTtlMs: 86400000
+      ## @param policyHook.policy.definition.maxLength Maximum messages held per durable queue
+      ## Type: integer. Default: 100000. On overflow the queue evicts per
+      ## `overflow` below and dead-letters the evicted message. Must be >= 1 --
+      ## the chart refuses null and 0, which would dead-letter every message
+      ## published to every durable queue.
+      maxLength: 100000
+      ## @param policyHook.policy.definition.overflow Behavior when maxLength is reached
+      ## Type: string. Allowed values: drop-head, reject-publish. Default:
+      ## drop-head. (`reject-publish-dlx` is NOT available here: the policy is
+      ## scoped to quorum queues, which do not support it, and the broker
+      ## rejects the policy -- failing the release.) Keep drop-head unless you
+      ## have measured the alternative: `reject-publish` makes a single full
+      ## queue nack the aggregator's publisher confirms, which marks OTHER
+      ## tenants' publishes on the same binding key as failed.
+      overflow: drop-head
+      ## @param policyHook.policy.definition.expiresMs Idle-queue TTL in milliseconds
+      ## Type: integer or null. Default: 86400000 (24 hours). A durable queue
+      ## with NO attached consumer for this long is deleted by the broker,
+      ## along with its remaining messages (which are discarded, not
+      ## dead-lettered). This is what stops abandoned queues from filling to
+      ## maxLength and firehosing the DLQ forever.
+      ##
+      ## LIFECYCLE CONTRACT: this makes a durable queue's lifetime finite. A
+      ## client that stops consuming for longer than this gets NOT_FOUND (gRPC)
+      ## / 404 (REST) on its next consume and must re-run CreateDurableQueue --
+      ## so clients must persist BOTH the queue_id AND the filter groups.
+      ## Publishing to a queue does NOT count as use, and neither does
+      ## re-declaring it: only an attached consumer holds a queue open.
+      ##
+      ## Set to null to ship the policy with NO expires key (queues then live
+      ## until explicitly deleted, and abandoned queues accumulate). 0 is not a
+      ## valid value -- the broker rejects it.
+      ##
+      ## Prefer expiresMs >= messageTtlMs. This NARROWS the window in which the
+      ## reap discards live messages; it does not close it. Reaped messages are
+      ## discarded, not dead-lettered, and the idle clock runs from the last
+      ## consumer detaching -- so a message published partway through the idle
+      ## window still has TTL left when the reap fires and is lost with the
+      ## queue. Setting expiresMs < messageTtlMs widens that window to every
+      ## message older than expiresMs.
+      expiresMs: 86400000
+      ## @param policyHook.policy.definition.consumerTimeoutMs Consumer acknowledgement timeout in milliseconds
+      ## Type: integer or null. Default: null (ship no `consumer-timeout`
+      ## key, so the broker's own default applies -- 30 minutes unless the
+      ## server config says otherwise). This is the ONLY supported lever for
+      ## the ack timeout that can be retuned on a running cluster: RabbitMQ
+      ## accepts it as a queue argument (immutable once the queue exists), as
+      ## this policy key, or in the server config -- never as a basic.consume
+      ## argument, which is silently ignored.
+      ##
+      ## What it does: the broker cancels a consumer, closes its channel, and
+      ## requeues its unacked messages when any single delivery goes
+      ## unacknowledged for this long. It bounds a hung client's ability to
+      ## hold messages unacked forever. The service detects the resulting
+      ## consumer loss and ends the stream with an error, so the client
+      ## reconnects rather than waiting on a queue nothing is consuming.
+      ##
+      ## SIZING -- read before setting a value. The timeout is PER DELIVERY,
+      ## and durable consumers prefetch `durable_consumer_prefetch_count`
+      ## (default 20) messages at a time, so the last message of a prefetch
+      ## batch has been sitting undelivered-to-the-client for the whole time
+      ## the client spent on the preceding 19. The safe form is:
+      ##
+      ##   consumerTimeoutMs > durable_consumer_prefetch_count
+      ##                       x worst-case per-message processing time
+      ##
+      ## Size it too tightly and every healthy-but-slow consumer is killed on
+      ## a loop -- a continuous channel-kill/reconnect cycle, which is worse
+      ## than the hung consumer the timeout is meant to catch. At the default
+      ## prefetch of 20, a 60000 (60 s) timeout would demand sub-3-second
+      ## per-message processing from every client.
+      ##
+      ## Upstream bounds: values below 60000 (60 s) are NOT supported, values
+      ## below 300000 (5 minutes) are not recommended, and enforcement is
+      ## evaluated on a one-minute tick -- so the effective timeout is this
+      ## value rounded up to the next minute. Start at or above 300000.
+      ##
+      ## The chart REFUSES anything below 60000 at render, because the broker
+      ## does not: `consumer-timeout: 0` is accepted and cancels every consumer
+      ## on every durable queue on its first delivery. The 300000
+      ## recommendation above is left as guidance -- the safe value depends on
+      ## your clients' per-message processing time, which the chart cannot see.
+      ##
+      ## Scope is already correct: this policy applies to quorum queues, and
+      ## RabbitMQ 4.3+ scopes the ack timeout to quorum queues anyway.
+      consumerTimeoutMs: null
+## Graceful-drain shutdown configuration (SDD SR-6.1 / SR-7.1, PRD FR-8, AC-4).
+## On SIGTERM the pod first keeps serving normally for settleDelaySeconds --
+## readiness still SERVING, new streams still admitted -- so an endpoint change
+## has time to propagate to direct in-cluster clients. It then enters a
+## "draining" state -- readiness flips to NOT_SERVING and new non-durable
+## streams are refused -- and waits up to the drain window for its in-flight
+## non-durable streams to terminate before the connector closes, so scale-down
+## and rollouts do not force-drop live streams.
+shutdown:
+  ## @param shutdown.drainWindowSeconds Bounded non-durable drain window in seconds
+  ## Type: float. Maps to OMNI_EVENTS_SHUTDOWN_DRAIN_WINDOW_SECONDS env var.
+  ## Default: 30.0. Upper bound on how long shutdown waits for in-flight
+  ## non-durable streams to drain before the connector closes and any streams
+  ## still held are actively reclaimed. Tradeoff: a LONGER window drains more
+  ## streams cleanly (fewer client reconnects, less perturbation of the
+  ## autoscaler signal) but slows every pod deletion and rollout by up to this
+  ## much; a SHORTER window rolls faster but forces more live streams to
+  ## reconnect.
+  ## INVARIANT: terminationGracePeriodSeconds MUST be >= settleDelaySeconds +
+  ## drainWindowSeconds + 10s post-drain teardown -- covering this window alone
+  ## is NOT enough, because the settle runs before the drain and the server
+  ## teardown after it. An operator who RAISES this must raise the grace period
+  ## to match; if the grace period is shorter than that sum, the kubelet
+  ## SIGKILLs the pod mid-shutdown and the graceful hand-off is lost. The
+  ## terminationGracePeriodSeconds entry below carries the full derivation, and
+  ## further rationale is in the docs.
+  drainWindowSeconds: 30.0
+  ## @param shutdown.drainPollIntervalSeconds Drain re-read interval in seconds
+  ## Type: float. Maps to OMNI_EVENTS_SHUTDOWN_DRAIN_POLL_INTERVAL_SECONDS env var.
+  ## Default: 0.5. How often, during the drain window above, the shutdown path
+  ## re-reads the non-durable pool's in-flight checkout count to decide whether
+  ## the pool has drained early. A smaller interval detects an early-drained pool
+  ## sooner (shutdown finishes faster) at the cost of more frequent polls; it has
+  ## no effect once the drain window elapses.
+  drainPollIntervalSeconds: 0.5
+  ## @param shutdown.settleDelaySeconds Endpoint-settle delay in seconds after SIGTERM
+  ## Type: float. Maps to OMNI_EVENTS_SHUTDOWN_SETTLE_DELAY_SECONDS env var.
+  ## Default: 15. On SIGTERM the application keeps serving normally for this
+  ## long before it begins draining, so an endpoint change has time to propagate
+  ## first. For the whole delay the pod still ADMITS new arrivals -- readiness is
+  ## still SERVING and draining is not yet engaged. App-side admission refusal
+  ## (503) begins only when the delay elapses and the drain starts. A value of 0
+  ## skips the phase entirely and the drain begins immediately on SIGTERM.
+  ##
+  ## WHICH path this delay protects: the readiness-gated MAIN Service
+  ## (service.yaml), used by direct in-cluster clients. There the endpoint's
+  ## ready flag flips false the moment the pod goes Terminating, and that change
+  ## has to reach every kube-proxy / client watching the EndpointSlice before the
+  ## app stops serving; this delay is the budget for that propagation.
+  ##
+  ## It does NOT shorten the equivalent window on the HTTPProxy (Contour/Envoy)
+  ## path, and raising it will not. The HTTPProxy routes target the -envoy
+  ## Service, which sets publishNotReadyAddresses: true, so the endpoint stays
+  ## ready throughout termination and the pod leaves Envoy's set only when the
+  ## pod OBJECT is deleted -- which happens after the container exits. A longer
+  ## delay postpones the app stop and the pod deletion by the same amount,
+  ## leaving a short residual window in which Envoy may still select a pod whose
+  ## servers have stopped. That window is structural, and its remedy is the
+  ## catch-all route's retryPolicy (httpProxy.unary.retryPolicy), which
+  ## transparently re-places an undeliverable unary request onto another pod --
+  ## not a larger value here. That remedy is partial: it covers a refused
+  ## connection on either leg and a refused stream on gRPC, but a REST request
+  ## dispatched onto a pooled connection the terminating pod had already closed
+  ## (Envoy response flag UC) is not retried and still reaches the client.
+  ##
+  ## Tradeoff: size it to comfortably COVER worst-case EndpointSlice propagation
+  ## to direct in-cluster clients (single-digit to low-tens of seconds) but no
+  ## larger -- it is dead time added to every pod deletion and rollout, so it
+  ## trades rollout speed for hand-off cleanliness.
+  ## It is deliberately NOT sized to the streaming routes' 240m response envelope.
+  ## INVARIANT: terminationGracePeriodSeconds MUST be >= settleDelaySeconds +
+  ## drainWindowSeconds + 10s post-drain teardown; this whole delay is consumed
+  ## before the drain even begins, so an operator who RAISES this must raise the
+  ## grace period to match.
+  settleDelaySeconds: 15.0
+  ## @param shutdown.terminationGracePeriodSeconds Pod termination grace period in seconds
+  ## Type: integer (seconds). Default: 60. Sets the Deployment pod spec's
+  ## terminationGracePeriodSeconds -- the total budget, measured from pod deletion,
+  ## that Kubernetes allows before SIGKILL. That budget is spent in order: first the
+  ## settleDelaySeconds settle, during which the pod serves normally, then the
+  ## up-to-drainWindowSeconds app drain, then the post-drain server teardown. The
+  ## grace period must cover ALL THREE or the kubelet SIGKILLs the pod before it
+  ## has finished and the graceful hand-off is lost.
+  ## INVARIANT (holds at the shipped defaults): terminationGracePeriodSeconds >=
+  ## settleDelaySeconds + drainWindowSeconds + 10s post-drain teardown.
+  ## At defaults: 60 >= 15 + 30 + 10 = 55, leaving a 5s margin.
+  ## An operator who LOWERS this, RAISES settleDelaySeconds, or RAISES
+  ## drainWindowSeconds must keep this invariant true.
+  ##
+  ## The 10s teardown term is a fixed property of the application's shutdown
+  ## implementation, not a knob. Once the drain ends, the gRPC server's 5s stop
+  ## grace and the REST teardown run concurrently; the REST leg's longest step is
+  ## the 5s lifespan shutdown sleep, so with no open REST connection the whole
+  ## teardown is about 5s and 10s covers it with margin. After BOTH of those legs
+  ## return, one more step runs: the client close -- the RabbitMQ connector, the
+  ## shared HTTP client, and the Redis client, closed in that order. It is
+  ## normally sub-second, and the roughly 5s of slack the 10s term carries over
+  ## the ~5s concurrent legs absorbs it at every grace period the guard admits,
+  ## including one set exactly at the floor. What the term does not bound is
+  ## that close blocking on an unresponsive broker, or uvicorn's wait for open
+  ## REST/SSE connections: only margin above the floor pays for those, and a
+  ## deployment that has seen either should raise this value rather than assume
+  ## the floor covers it.
+  ##
+  ## RESIDUAL the invariant does NOT cover: the REST teardown also waits for open
+  ## connections to close, and that wait is unbounded. An idle REST/SSE stream is
+  ## not cut when teardown begins -- it ends at its next liveness-poll wake, up to
+  ## roughly OMNI_EVENTS_CONSUMER_LIVENESS_POLL_SECONDS x 1.15 later (about 17s at
+  ## that setting's default of 15). That setting is env-var only, so the chart
+  ## cannot compute the term. A deployment holding idle REST/SSE streams at drain
+  ## end may therefore still reach the grace deadline during teardown; the drain
+  ## itself has already completed at that point, so what a SIGKILL there costs is
+  ## a TCP reset instead of a clean stream end, plus a requeue with an incremented
+  ## delivery-count for any unacked durable deliveries (which counts against
+  ## policyHook.policy.definition.deliveryLimit). Raise this value above the
+  ## invariant's floor if clean SSE termination matters to you.
+  ##
+  ## Tradeoff: this is deliberately a BOUNDED value chosen for rollout speed, NOT
+  ## the streaming routes' 240m response envelope -- sizing it to the full stream
+  ## lifetime would make each pod take up to 4h to roll. A LARGER grace period lets
+  ## more in-flight streams drain cleanly; a SMALLER one rolls faster but forces
+  ## more live streams to reconnect. Full rationale is in the docs.
+  terminationGracePeriodSeconds: 60
+## Redis/Valkey configuration for caching
+## Redis is used to cache storage permissions, which provides a performance
+## improvement when clients disconnect and reconnect to an event consumer queue.
+## When disabled, storage permissions are not cached across reconnections.
+redis:
+  ## @param redis.enabled Enable Redis/Valkey for storage permissions caching
+  ## Type: boolean. Maps to OMNI_EVENTS_REDIS_ENABLED env var.
+  ## When enabled, redis_uri must be provided in the envSecretName secret.
+  ## Default: false (must be explicitly enabled)
+  enabled: false
+## Permissions service configuration
+permissions:
+  ## @param permissions.enabled Enable authorization (permission) enforcement
+  ## Type: boolean. Default: false.
+  ## When disabled, all permission checks short-circuit to "allowed", even if
+  ## authentication is enabled via principalSource. When enabled, principalSource
+  ## must not be "disabled" (authorization requires an authenticated principal).
+  ## Maps to OMNI_EVENTS_PERMISSIONS_ENABLED env var.
+  enabled: false
+  ## @param permissions.endpoint Permissions API endpoint for authorization checks
+  ## Type: string. Required when permissions.enabled is true (an empty value
+  ## then fails the render, as the service would refuse it at startup) and
+  ## ignored otherwise.
+  ## Maps to OMNI_EVENTS_PERMISSIONS_ENDPOINT env var.
+  endpoint: "http://permission-service:3000"
+  ## @param permissions.ttl_seconds Time-to-live in seconds for the permissions cache
+  ## Type: integer. Maps to OMNI_EVENTS_PERMISSIONS_TTL_SECONDS env var.
+  ## Default: 600
+  ttl_seconds: 600
+  ## @param permissions.yaml_file_path Path to the YAML file for fine-grained permissions
+  ## Type: string. Maps to OMNI_EVENTS_PERMISSIONS_YAML_FILE_PATH env var.
+  ## Default: /app/config/permissions.yaml
+  yaml_file_path: "/app/config/permissions.yaml"
+  ## Storage-service permission enforcement. This gate is independent of
+  ## permissions.enabled: it governs only the storage-service permission path.
+  ## @param permissions.content YAML content for fine-grained permissions configuration
+  ## Type: string (YAML). Required. Defines event_permissions. See README for details.
+  ## Note: the storage-service endpoints are no longer defined here — they are
+  ## configured via permissions.storage_permissions.endpoints and rendered into
+  ## the permissions YAML file, and are only consulted when
+  ## permissions.storage_permissions.enabled is true.
+  content: |-
+    event_permissions: []
+  storage_permissions:
+    ## @param permissions.storage_permissions.enabled Enable storage-service
+    ## permission enforcement, gating the storage-service permission path
+    ## independently of permissions.enabled.
+    ## Type: boolean. Default: false.
+    ## Maps to OMNI_EVENTS_STORAGE_PERMISSIONS_ENABLED env var.
+    enabled: false
+    ## @param permissions.storage_permissions.endpoints Storage-service endpoint URLs
+    ## Type: array of strings. The endpoints are rendered into the permissions
+    ## YAML file (see permissions.yaml_file_path) as storage_permissions_endpoints,
+    ## which the service loads at startup. Consulted only when
+    ## permissions.storage_permissions.enabled is true.
+    ## Default: ["http://storage-service:8012"]
+    endpoints:
+      - "http://storage-service:8012"
+## @param principalSource Single first-class auth gate selecting how the
+## principal (caller identity) is derived and whether a token is required.
+## Type: string. Allowed values:
+## - "" (empty, the default) - the chart selects the mode:
+##   1. `jwt` when OpenID is configured, that is, openId.openIdConfigurationUri
+##      is set and at least one JWT audience is configured (the "default"
+##      client registration's clientId or openId.additionalJwtAudience).
+##   2. Otherwise the render fails with a message asking for that OpenID
+##      configuration or an explicit principalSource.
+##   The chart never selects `jwtUnverified` by itself; see allowUnverifiedJwt.
+## - `disabled` - authentication is off; no principal is derived and no token
+##   is required. Use it for local or test runs without tokens.
+##   permissions.enabled must be false in this mode, or the render fails.
+## - `jwtUnverified` - derive the principal from the JWT without verifying its
+##   signature, issuer, audience, or expiry. Requires allowUnverifiedJwt: true.
+## - `jwt` - validate incoming tokens as JWTs using public keys pulled from the
+##   identity provider (requires openId.openIdConfigurationUri and at least one
+##   JWT audience).
+## - `opaque` - validate incoming tokens via the IdP /userinfo endpoint
+##   (requires openId.openIdConfigurationUri).
+## - `userInfoService` - derive the principal from the external user-info service
+##   (requires userInfoService.uri).
+## Any other value fails the render. So does a mode whose requirements above
+## are not met, which the service would otherwise refuse at startup.
+## Default: "" (chart-selected, see above).
+## Maps to OMNI_EVENTS_PRINCIPAL_SOURCE env var.
+principalSource: ""
+## @param allowUnverifiedJwt Explicit opt-in for principalSource jwtUnverified.
+## Type: boolean or null (unquoted; a quoted "true" or "false" fails the
+## render). Default: null.
+## jwtUnverified accepts any token that reaches the pod without verifying it,
+## so the service refuses to start in that mode unless
+## OMNI_EVENTS_ALLOW_UNVERIFIED_JWT is true. The chart renders it true only
+## when you set both principalSource: jwtUnverified and allowUnverifiedJwt:
+## true; it never sets this opt-in by itself. allowUnverifiedJwt: true without
+## principalSource: jwtUnverified fails the render, as does jwtUnverified
+## without allowUnverifiedJwt: true.
+## Set it only when every path to the pods verifies tokens first. The Envoy
+## auth extension on the HTTPProxy verifies only the requests that come through
+## the HTTPProxy: in-cluster callers that reach the Service directly bypass it,
+## so the Service must also be unreachable directly, for example through a
+## NetworkPolicy (or an equivalent control). Otherwise use principalSource: jwt.
+## Maps to OMNI_EVENTS_ALLOW_UNVERIFIED_JWT env var ("false" unless opted in).
+allowUnverifiedJwt: null
+## User-info service configuration.
+## Consulted only when principalSource is "userInfoService".
+userInfoService:
+  ## @param userInfoService.uri Base URI of the external user-info service used
+  ## to derive the principal when principalSource is "userInfoService".
+  ## Type: string. Maps to OMNI_EVENTS_USER_INFO_SERVICE_URI env var.
+  ## Default: http://userinfo-service:8080
+  uri: http://userinfo-service:8080
+## OpenID IDP and related auth settings.
+## These values configure the OIDC provider used when principalSource is "jwt"
+## or "opaque" (token verification, audiences, discovery URI, etc.). With
+## principalSource left empty, openId.openIdConfigurationUri plus a JWT audience
+## is what makes the chart select "jwt" (see principalSource).
+## Authentication behavior is gated by principalSource (not openId.enabled), and
+## authorization enforcement by permissions.enabled.
+openId:
+  ## @param openId.enabled Puts the Envoy auth extension on the HTTPProxy.
+  ## Type: boolean. Default: false.
+  ## When httpProxy.enabled is true, each HTTPProxy (rest and grpc) carries the
+  ## auth extension's authorization block when openId.enabled is true or that
+  ## proxy's merged httpProxy.authExtension.enabled is true (see
+  ## httpProxy.authExtension). It does not choose the service's own auth mode,
+  ## which principalSource selects. It also renders OMNI_EVENTS_OPENID_ENABLED,
+  ## an infra-only setting that the service does not act on.
+  enabled: false
+  ## @param openId.tokenVerificationType
+  ## Defines how auth tokens are validated by the service:
+  ## - `jwt` - validates incoming tokens as JWT using public keys pulled from the identity provider
+  ## - `opaque` - validates incoming tokens using /userinfo endpoint from the identity provider
+  tokenVerificationType: "jwt"
+  ## @param openId.principalIdClaim
+  ## The JWT/userinfo claim used as the principal (user) identity.
+  ## Default "sub". Set to "oid" for Azure AD tenant-wide object IDs.
+  ## WARNING: changing this on an existing deployment orphans all
+  ## previously-created durable queues (their names embed the hashed
+  ## principal id). Treat as a one-way, deploy-time choice.
+  principalIdClaim: "sub"
+  ## @param openId.openIdConfigurationUri
+  ## The endpoint from the identity provider to retrieve OpenID Connect Metadata (/.well-known/openid-configuration).
+  ## https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+  ## The metadata includes other IdP endpoints such as jwks_uri, token_endpoint and userinfo_endpoint.
+  openIdConfigurationUri: ""
+  ## @param openId.clientRegistrations
+  ## Client registrations. The "default" client's clientId is added to the
+  ## set of allowed JWT audiences (OMNI_EVENTS_JWT_AUDIENCES). Optional: omit
+  ## the "default" client when the IdP does not issue tokens whose `aud` is
+  ## the client id, and supply the real audience(s) via additionalJwtAudience.
+  ## More than one entry named "default" fails the render.
+  ## Audience is the expected value of `aud` claim in JWTs passed in the Authorization header.
+  clientRegistrations: []
+  # - name: "default"
+  #   clientId: "some_client_id"
+  #   scope: "a b c"
+
+  ## @param openId.additionalJwtAudience
+  ## List of additional audiences allowed, unioned with the "default" client's
+  ## clientId to form the full set of accepted JWT audiences. Use this (with no
+  ## "default" clientRegistration) when the IdP issues tokens whose `aud` is an
+  ## API/resource identifier rather than the client id.
+  ## Type: list of strings. null or an empty string mean no extra audience;
+  ## any other kind (a non-empty plain string included) fails the render.
+  ## Audience is the expected value of `aud` claim in JWTs passed in the Authorization header.
+  additionalJwtAudience: []
+  # -  <client id>
+## @param authContextTtl How long the IdP's JWKS signing keys are cached.
+## Type: integer (seconds). Default: 1800 (30 minutes).
+## Applies only when principalSource is "jwt": it is how long the identity
+## provider's signing keys are held before they are fetched again. It is inert
+## in every other mode, and it does not govern how long a resolved principal is
+## cached for a request.
+## Maps to OMNI_EVENTS_AUTH_CONTEXT_TTL env var.
+authContextTtl: 1800
+## @param resources Resource limits and requests for the container
+## Type: object. Optional. Default: sensible defaults for production use.
+## Example: { limits: { cpu: "100m", memory: "128Mi" },
+##           requests: { cpu: "100m", memory: "128Mi" } }
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+## Liveness probe configuration
+## Uses the "liveness" gRPC health service which always returns
+## SERVING as long as the process is responsive. A pod above its
+## soft threshold, at its shed threshold, or at its memory cap is
+## healthy and still serving live streams -- and above the soft
+## threshold it is deliberately still admitting pinned ones -- so
+## liveness must never kill it.
+livenessProbe:
+  ## @param livenessProbe.grpc.port gRPC port for liveness probe
+  ## Type: integer. Should match service.grpc.port. Default: 50051
+  grpc:
+    port: 50051
+    service: liveness
+## Readiness probe configuration
+readinessProbe:
+  ## @param readinessProbe.grpc.port gRPC port for readiness probe
+  ## Type: integer. Should match service.grpc.port. Default: 50051
+  grpc:
+    port: 50051
+  ## @param readinessProbe.periodSeconds How often to check readiness
+  ## Type: integer. Default: 3. The probe is lightweight (in-memory pool
+  ## stats), so a short interval gives fast reaction to pool exhaustion.
+  periodSeconds: 3
+  ## @param readinessProbe.failureThreshold Failures before marking unready
+  ## Type: integer. Default: 1. A single failure immediately removes the pod
+  ## from service, preventing new connections when the pool is near exhaustion.
+  failureThreshold: 1
+## Channel Pool Autoscaling configuration
+## This autoscaler scales based on available channel pool capacity, which is the
+## appropriate metric for this service since it has a fixed channel pool capacity.
+## When enabled, this deploys a lightweight autoscaler pod that monitors
+## available capacity across all service pods and scales accordingly.
+## IMPORTANT: This requires service.rest.enabled to be true for the metrics endpoint.
+channelPoolAutoscaling:
+  ## @param channelPoolAutoscaling.enabled Enable channel pool-based autoscaling
+  ## Type: boolean. Default: true
+  enabled: true
+  ## @param channelPoolAutoscaling.minReplicas Minimum number of replicas
+  ## Type: integer. Default: 3. A true floor, enforced in both directions: the
+  ## autoscaler never scales the fleet below it, and an observable fleet found
+  ## below it is raised back to it regardless of load, one replica per poll,
+  ## subject to the same gates as any other scale-up (no pod may still be
+  ## starting, the scale-up cooldown must have elapsed) and capped by
+  ## maxReplicas. That covers a fresh install - the Deployment omits
+  ## spec.replicas so that a helm upgrade cannot fight the autoscaler, which
+  ## leaves Kubernetes defaulting it to 1 - and a manual `kubectl scale` to a
+  ## nonzero count below the floor, which is reverted upward within a poll.
+  ## Enforcement requires a fleet the autoscaler can observe. A poll in which no
+  ## pod is Running, or in which no pod returns metrics, takes no action at all,
+  ## so the floor is not applied on that poll. `kubectl scale --replicas=0` is
+  ## therefore an effective off switch and is not reverted, and a fleet that is
+  ## entirely crash-looping or otherwise unreachable is left where it is rather
+  ## than raised.
+  ## minReplicas must be at least 1 - the autoscaler rejects a floor of 0 at
+  ## startup, so a chart set to 0 leaves the autoscaler pod crash-looping. To
+  ## stop the fleet, scale the Deployment to zero by hand as above instead.
+  ## The floor is 3 rather than 1 to keep the fleet out of the 2-4 replica band
+  ## where flapping was measured; under a bursty per-client fan-out profile, a
+  ## fleet that has dug below this floor has to re-climb from cold the moment
+  ## the next burst lands.
+  minReplicas: 3
+  ## @param channelPoolAutoscaling.maxReplicas Maximum number of replicas
+  ## Type: integer. Default: 10. This one value feeds BOTH the autoscaler's own
+  ## ceiling and the service pods' cap divisor (it is templated into the
+  ## settings configmap as OMNI_EVENTS_SCALER_MAX_REPLICAS), so the fleet
+  ## ceiling is stated once. Changing it therefore rolls the service pods as
+  ## well - the Deployment carries a checksum/config annotation over that
+  ## configmap - where previously it only restarted the autoscaler pod.
+  maxReplicas: 10
+  ## @param channelPoolAutoscaling.minAvailableCapacity Minimum available non-durable stream units
+  ## Type: integer (non-durable STREAM units). Default: 800.
+  ## The unit is non-durable stream units, NOT channels: post-packing (Epic 3) a
+  ## pod's soft (scaling) threshold is channel_pool_size 100 *
+  ## channel_client_limit 8 = 800 streams, so capacity is counted in streams here
+  ## and throughout the autoscaler signal.
+  ## Scale UP when either the instantaneous total available capacity across all
+  ## pods falls below this value (fleet-wide available < 800), or the fleet is
+  ## below minReplicas. Capacity pressure takes precedence when both hold. The
+  ## capacity trigger is deliberately undamped: running out of capacity is an
+  ## emergency, so it acts on the current reading, and an undamped scale-up (hot
+  ## poll ~2s) adds one pod = +720 usable stream units in the signal.
+  ## Scale DOWN requires all of the following: the MINIMUM available capacity
+  ## observed over the trailing scaleDownWindowSeconds is at least this value
+  ## plus one pod's step in that signal, AND no pod is still starting up, AND the
+  ## postScaleUpStabilizationSeconds window since the last executed scale-up has
+  ## elapsed, AND the scaleDownCooldownSeconds since the last scale-down has
+  ## elapsed, AND the fleet is above minReplicas.
+  ## One pod's step is (rabbitmq.channel_pool_size *
+  ## rabbitmq.channel_client_limit - rabbitmq.readiness_min_available_channels),
+  ## measured in non-durable stream units: that is the per-pod SOFT THRESHOLD
+  ## less the readiness reserve -- one pod's step in the scaling signal, not the
+  ## pod's admission ceiling, which is the memory cap. At stock packing that step
+  ## is 100 * 8 - 80 = 720. The reserve is subtracted to keep the signal
+  ## conservative so the autoscaler reacts before the soft threshold is reached.
+  ## It is taken as the largest capacity reported by any healthy reporter, so a
+  ## terminating pod reporting zero cannot collapse the scale-down deadband.
+  ##
+  ## Resulting scale-down deadband at stock packing: scale UP when fleet-wide
+  ## available < 800; scale DOWN when the trailing-window minimum >= 800 + one pod
+  ## step 720 = 1520. So the deadband is [800, 1520] -- inside it the capacity
+  ## signal moves the fleet neither way. The minReplicas floor is independent of
+  ## the deadband and still applies inside it: an idle fleet of 2 pods reports
+  ## 1440, which is inside the band, and is raised to minReplicas anyway.
+  ##
+  ## Why 800: 800 equals one pod's soft threshold (channel_pool_size 100 *
+  ## channel_client_limit 8) and comfortably exceeds one worst-case single-client
+  ## fan-out burst (~600 concurrent streams, the measured incident profile), so
+  ## the fleet always holds roughly one spare pod's worth of admission headroom --
+  ## a fresh burst client is absorbed while an undamped scale-up (hot poll ~2s,
+  ## +720 per pod) spins up the next pod. This is a sized-for-profile default, not
+  ## a measured optimum, and stays env-tunable
+  ## (OMNI_EVENTS_SCALER_MIN_AVAILABLE_CAPACITY). The prior default of 30 was
+  ## sized for the pre-packing ~80-channel-per-pod step: at stream scale it put
+  ## scale-up at ~4% of a single pod (fleet ran to near-exhaustion before adding a
+  ## pod) and scale-down at deadband [30, 750] (fired for essentially any real
+  ## load, collapsing the fleet to the replica floor) -- incoherent at stream
+  ## scale, which this retune corrects.
+  ##
+  ## VALUES-ONLY (no library change, no release): the deployed autoscaler always
+  ## reads this helm value via OMNI_EVENTS_SCALER_MIN_AVAILABLE_CAPACITY
+  ## (autoscaler-deployment.yaml), so retuning this default alone fully changes
+  ## deployed behavior with no code change and no notification_common release. The
+  ## library default (notification_common scaler_settings.py,
+  ## scaler_min_available_capacity = 30) is deliberately left unchanged as a
+  ## never-hit fallback in this deployment.
+  ##
+  ## Fleet arithmetic (SR-7.3 / PRD AC-2): this threshold (800), the per-pod
+  ## capacity (720 usable in the scaling signal / 800 admitted soft threshold),
+  ## and maxReplicas together make the >=12,000 concurrent-stream fleet target
+  ## reachable by helm values alone. minAvailableCapacity sets the scale-up
+  ## RESERVE, not the fleet ceiling; the ceiling is owned by maxReplicas and
+  ## packing density (SR-7.3), so no change to maxReplicas is required here. For
+  ## the two values-only paths to >=12,000 -- Path A
+  ## (channelPoolAutoscaling.maxReplicas: 17) and Path B
+  ## (rabbitmq.channel_client_limit: 16) -- see the "Fleet capacity worked example
+  ## (SR-7.3 / PRD AC-2)" block under the rabbitmq settings above.
+  minAvailableCapacity: 800
+  ## @param channelPoolAutoscaling.pollIntervalHotSeconds Polling interval when scaling
+  ## Type: float. Default: 2.0. Fast polling when recently scaled or under load.
+  pollIntervalHotSeconds: 2.0
+  ## @param channelPoolAutoscaling.pollIntervalColdSeconds Polling interval when idle
+  ## Type: float. Default: 15.0. Slower polling when system is stable.
+  pollIntervalColdSeconds: 15.0
+  ## @param channelPoolAutoscaling.scaleUpCooldownSeconds Cooldown after scale up
+  ## Type: integer. Default: 10. Wait time before another scale up.
+  scaleUpCooldownSeconds: 10
+  ## @param channelPoolAutoscaling.scaleDownCooldownSeconds Cooldown after scale down
+  ## Type: integer (seconds). Default: 1800. Minimum wait after a scale-down
+  ## before another scale-down (30 minutes). Only the scale-DOWN side is slow:
+  ## scaleUpCooldownSeconds is deliberately short by comparison so an
+  ## under-capacity fleet still responds fast.
+  scaleDownCooldownSeconds: 1800
+  ## @param channelPoolAutoscaling.scaleDownWindowSeconds Scale-down smoothing window
+  ## Type: integer (seconds). Default: 300. Scale-down decides on the MINIMUM
+  ## available capacity observed over this trailing window rather than on the
+  ## instantaneous reading, so a trough shorter than the window (one client's
+  ## streams cliffing for a few seconds) cannot buy a pod deletion. Scale-UP is
+  ## deliberately not smoothed. Set to 0 to disable smoothing entirely and
+  ## decide on the instantaneous reading; negative values are rejected.
+  scaleDownWindowSeconds: 300
+  ## @param channelPoolAutoscaling.postScaleUpStabilizationSeconds Post-scale-up hold
+  ## Type: integer (seconds). Default: 600. After a scale-up actually executes,
+  ## scale-down is suppressed for this long so the new pods have time to take
+  ## load. Distinct from scaleDownCooldownSeconds, which measures from the last
+  ## scale-DOWN and so does not bind when a fleet enters a burst after a quiet
+  ## period. Keep it at or above scaleDownWindowSeconds, or the smoothing window
+  ## largely subsumes it. Set to 0 to disable the stabilization window entirely;
+  ## negative values are rejected.
+  postScaleUpStabilizationSeconds: 600
+  ## @param channelPoolAutoscaling.resources Resource limits/requests for autoscaler
+  ## Type: object. Optional. Default: lightweight resources suitable for production.
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 50m
+      memory: 128Mi
+## @param volumes Additional volumes to add to the deployment
+## Type: array of objects. Optional. Default: []
+## Example: [{ name: foo, secret: { secretName: mysecret, optional: false } }]
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+## @param volumeMounts Additional volume mounts to add to the container
+## Type: array of objects. Optional. Default: []
+## Example: [{ name: foo, mountPath: "/etc/foo", readOnly: true }]
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+## @param nodeSelector Node labels for pod assignment
+## Type: object. Optional. Default: {}
+## Example: { disktype: ssd }
+nodeSelector: {}
+## @param tolerations Tolerations for pod assignment
+## Type: array of objects. Optional. Default: []
+## Example: [{ key: "key1", operator: "Equal", value: "value1", effect: "NoSchedule" }]
+tolerations: []
+## @param affinity Affinity rules for pod assignment
+## Type: object. Optional. Default: {}
+## Example: { nodeAffinity: {...}, podAffinity: {...}, podAntiAffinity: {...} }
+affinity: {}
+## Smoke test base image configuration
+## Used for running helm test without building a custom test image.
+## See SMOKE_TESTS.md in the project root for smoke test documentation.
+smokeTest:
+  image:
+    ## @param smokeTest.image.repository Smoke test base image repository
+    repository: nvcr.io/nvidia/omniverse/smoke-test-base
+    ## @param smokeTest.image.tag Smoke test base image tag
+    tag: "1.0.1"
+    ## @param smokeTest.image.pullPolicy Image pull policy. Allowed values: Always, IfNotPresent, Never
+    pullPolicy: IfNotPresent
+    ## @param smokeTest.image.pullSecrets Pull secrets for the smoke test image
+    pullSecrets: []
+    #  - name: secret
+  ## @param smokeTest.podLabels Labels applied to the smoke-test pod only (not the main Deployment).
+  ## Required for workload-identity: the Azure mutating webhook injects the
+  ## projected token volume/env only into pods carrying
+  ## `azure.workload.identity/use: "true"`. Falls back to `.Values.podLabels`
+  ## when unset.
+  podLabels: {}
+  # Example:
+  # podLabels:
+  #   azure.workload.identity/use: "true"
+## Test suite configuration (smoke tests)
+## Deploys a test pod that runs smoke tests against the Event Consumer Service
+## only (REST and gRPC). See SMOKE_TESTS.md for details.
+tests:
+  ## @param tests.enabled Enable/disable test suite.
+  enabled: false
+  ## Dedicated ServiceAccount for the smoke-test Job. Separate from the
+  ## main service SA so the test runs under its own AAD identity — the
+  ## smoke-test is a client of event-consumer-service, not the service
+  ## itself.
+  serviceAccount:
+    ## Whether to create the SA. Set to false to bind to a pre-existing SA
+    ## via `name` below.
+    create: true
+    ## Override the generated SA name. Defaults to `<fullname>-test-smoke`.
+    name: ""
+    ## Annotations on the SA (e.g. `azure.workload.identity/client-id`).
+    annotations: {}
+    ## Automatically mount the SA's API credentials.
+    automount: true
+  ## Workload-identity for the smoke-test pod. Independent from the main
+  ## service's identity — the smoke-test has its own SA (above) and its
+  ## own sidecar toggle here.
+  serviceIdentity:
+    accessTokenFile:
+      ## @param tests.serviceIdentity.accessTokenFile.enabled Enable the access-token-file flow for smoke-test.
+      enabled: false
+      provisionerSidecar:
+        ## Container spec for the token-provisioner sidecar. Rendered as a
+        ## K8s 1.29+ native sidecar (an initContainer with
+        ## `restartPolicy: Always`). The chart adds a `token-exchange`
+        ## volumeMount; `name` and `restartPolicy` are controlled by the
+        ## chart and any values supplied here for those keys are ignored.
+        ##
+        ## CONTRACT: the sidecar MUST write the token to
+        ## `/etc/secrets/access-token/token` — that path is hardcoded in
+        ## the test container's read side (SMOKE_TESTS_ACCESS_TOKEN_FILE_PATH).
+        ## Set the sidecar's `TOKEN_OUTPUT_PATH` env to exactly that path;
+        ## a mismatch makes the test wait the full 30s and then fail.
+        container: {}
+        # Example:
+        # container:
+        #   image: nvcr.io/.../client-credentials-sidecar:0.0.4
+        #   env:
+        #     - name: AZURE_TENANT_ID
+        #       value: <tenant-uuid>
+        #     - name: OAUTH2_CLIENT_ID
+        #       value: <client-id>
+        #     - name: OAUTH2_SCOPE
+        #       value: <resource-app-id>/.default
+        #     - name: AUTH_MODE
+        #       value: workload-identity
+        #     - name: TOKEN_OUTPUT_PATH
+        #       value: /etc/secrets/access-token/token
+  ## @param tests.runGrpcTests Enable or disable gRPC tests.
+  runGrpcTests: true
+  ## @param tests.runRestTests Enable or disable REST tests.
+  runRestTests: true
+  ## @param tests.timeout Request timeout in seconds.
+  timeout: ""
+  ## Event Consumer Service REST endpoint (optional override).
+  ## If set — always used. If not set — default: when httpProxy.enabled use
+  ## ingress URL; when ingress off use in-cluster service URL.
+  restConsumerEndpoint: ""
+  ## Event Consumer Service gRPC endpoint (optional override). If set — always
+  ## used. If not set — in-cluster or ingress grpc URL. Required for gRPC tests.
+  grpcConsumerEndpoint: ""
+  ## @param tests.grpcSkipTls Skip TLS verification for gRPC (e.g. "true").
+  grpcSkipTls: ""
+  ## @param tests.ttlSecondsAfterFinished Seconds after the smoke test Job completes
+  ## (Succeeded or Failed) before it is cleaned up. 0 = do not delete automatically.
+  ## Default: 900 (15 minutes). Type: integer.
+  ttlSecondsAfterFinished: 900
+  ## Token authentication for smoke tests (optional). Required when consumer
+  ## has auth enabled (openId.enabled). Use OAuth 2.0 client credentials;
+  ## each property accepts value or valueFrom (e.g. secretKeyRef).
+  auth: {}
+  # microsoftUrl:
+  #   value: "https://login.microsoftonline.com/.../v2.0/.well-known/openid-configuration"
+  # credentials:
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: "smoke-test-oauth"
+  #       key: "credentials"
+  # scope:
+  #   value: "<client-id>/.default"
+## Secrets Store CSI Driver integration
+secrets:
+  ## CSI Driver configuration for external secret management
+  csi:
+    ## @param secrets.csi.enabled Enable Secrets Store CSI Driver integration
+    ## Type: boolean. Default: false. Requires CSI driver installed in cluster.
+    enabled: false
+    ## @param secrets.csi.secretProviderClassName Name of the SecretProviderClass
+    ## Type: string. Required if secrets.csi.enabled is true.
+    ## Must reference an existing SecretProviderClass resource.
+    secretProviderClassName: ""
+    ## @param secrets.csi.volumeName Volume name for the secrets mount
+    ## Type: string. Default: secrets-store-inline
+    volumeName: "secrets-store-inline"
+    ## @param secrets.csi.mountPath Path where secrets will be mounted in container
+    ## Type: string. Default: /mnt/secrets-store
+    mountPath: "/mnt/secrets-store"

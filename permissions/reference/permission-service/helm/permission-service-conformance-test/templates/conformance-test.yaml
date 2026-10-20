@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "conformance-test.fullname" . }}
+  labels:
+    {{- include "conformance-test.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "conformance-test.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "conformance-test.imagePullSecrets" ( dict "images" (list (dict "pullSecrets" .Values.image.pullSecrets))) | nindent 6 }}
+      serviceAccountName: {{ include "conformance-test.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+      initContainers:
+        - name: {{ .Chart.Name }}-token-provisioner
+          restartPolicy: Always
+            {{- (omit .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+              {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+                {{- toYaml . | nindent 12 }}
+              {{- end }}
+            - name: token-exchange
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+      {{- end }}
+      containers:
+        - name: conformance-test
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TEST_SUITE
+              value: "{{ .Values.conformanceTest.testSuite }}"
+            - name: REST_URL
+              value: "{{ .Values.conformanceTest.restUrl }}"
+            - name: GRPC_URL
+              value: "{{ .Values.conformanceTest.grpcUrl }}"
+            - name: PRINCIPAL
+              value: "{{ .Values.conformanceTest.principal }}"
+            - name: ACTION_NAME
+              value: "{{ .Values.conformanceTest.actionName }}"
+            - name: ACTION_SERVICE
+              value: "{{ .Values.conformanceTest.actionService }}"
+            - name: RESOURCE_ID
+              value: "{{ .Values.conformanceTest.resourceId }}"
+            - name: RESOURCE_TYPE
+              value: "{{ .Values.conformanceTest.resourceType }}"
+            - name: WAIT_RETRIES
+              value: "{{ .Values.conformanceTest.waitRetries | default 10 }}"
+            - name: WAIT_INTERVAL
+              value: "{{ .Values.conformanceTest.waitInterval | default 5 }}"
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: ENABLE_CLIENT_CREDENTIALS
+              value: "true"
+            - name: CLIENT_CREDENTIALS_OPENID_CONFIGURATION
+              value: "{{ .Values.serviceIdentity.clientCredentials.openIdConfigurationUri | default .Values.openId.openIdConfigurationUri }}"
+            - name: CLIENT_ID
+              value: "{{ .Values.serviceIdentity.clientCredentials.clientId }}"
+            - name: CLIENT_SCOPE
+              value: "{{ .Values.serviceIdentity.clientCredentials.clientScope }}"
+            - name: CLIENT_SECRET_FILE
+              value: "/etc/secrets/client-credentials/{{ .Values.serviceIdentity.clientCredentials.clientSecretRef.key }}"
+            - name: CLIENT_CREDENTIALS_EXTRA_HEADERS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraHeaders | toJson | quote }}
+            - name: CLIENT_CREDENTIALS_EXTRA_BODY_PARAMS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraBodyParams | toJson | quote }}
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: ENABLE_ACCESS_TOKEN_FILE
+              value: "true"
+            - name: ACCESS_TOKEN_FILE_PATH
+              value: {{ .Values.serviceIdentity.accessTokenFile.path | quote }}
+            - name: ACCESS_TOKEN_FILE_POLL_INTERVAL
+              value: {{ .Values.serviceIdentity.accessTokenFile.pollInterval | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: client-credentials-secret
+              readOnly: true
+              mountPath: "/etc/secrets/client-credentials"
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: token-exchange
+              readOnly: true
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+            {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+        - name: client-credentials-secret
+          secret:
+            secretName: {{ .Values.serviceIdentity.clientCredentials.clientSecretRef.name }}
+        {{- end }}
+        {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end }}
+      restartPolicy: Never
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

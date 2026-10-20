@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for discovery-conformance-tests.
+
+## Container image configuration
+image:
+  ## @param image.repository Conformance tests container image repository
+  repository: nvcr.io/nvidia/omniverse/discovery-conformance-tests
+  ## @param image.pullPolicy Image pull policy
+  pullPolicy: IfNotPresent
+  ## @param image.tag Image tag to deploy
+  tag: "0.0.0"
+  ## @param image.pullSecrets Pull secrets for images.
+  pullSecrets: []
+
+## @param nameOverride String to override the chart name
+nameOverride: ""
+## @param fullnameOverride String to fully override the generated name
+fullnameOverride: ""
+
+## ServiceAccount configuration
+serviceAccount:
+  ## @param serviceAccount.create Whether to create a ServiceAccount
+  create: true
+  ## @param serviceAccount.annotations Annotations for the ServiceAccount
+  annotations: {}
+  ## @param serviceAccount.name ServiceAccount name (auto-generated if empty)
+  name: ""
+
+## @param podAnnotations Annotations to add to the test pod
+podAnnotations: {}
+
+## @param podLabels Additional labels for the test pod
+podLabels: {}
+
+## @param securityContext Container security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+## Service under test connection settings
+service:
+  ## @param service.restEndpoint REST base URL of the Discovery Service to test
+  restEndpoint: "http://discovery-service:8080"
+  ## @param service.healthEndpoint Health endpoint used to wait for service readiness
+  healthEndpoint: "http://discovery-service:8080/health"
+
+## Timeout settings
+timeouts:
+  ## @param timeouts.request Seconds for HTTP requests
+  request: "30.0"
+
+## @param skipOptionalTests Set to true to skip tests marked as optional
+skipOptionalTests: false
+
+## Resource requests and limits for the test Job pod
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+## @param restartPolicy Restart policy for the Job pod
+restartPolicy: Never
+
+## @param backoffLimit Number of retries before considering the Job failed
+backoffLimit: 0
+
+## @param ttlSecondsAfterFinished Seconds to keep the completed Job for log inspection
+ttlSecondsAfterFinished: 600

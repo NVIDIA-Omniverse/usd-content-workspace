@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "event-consumer-conformance-tests"
+version = "0.0.0"
+description = "Conformance tests for the Omniverse Event Consumer Service gRPC and REST APIs"
+requires-python = ">=3.14"
+
+dependencies = [
+    # Proto runtime (stubs are bundled in src/nvidia/)
+    "grpcio>=1.75.0,<2",
+    "protobuf>=5.0.0",
+    "googleapis-common-protos>=1.56.0",
+    "httpx>=0.28.0",
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+run-conformance-tests = "conformance_tests:run_tests"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/conformance_tests", "src/nvidia"]
+
+[tool.uv]
+default-groups = []
+
+# Conformance tests are shipped to external customers, so dependencies
+# must resolve from public PyPI. Declaring PyPI explicitly as the
+# default index keeps resolution there whatever default index the
+# surrounding environment configures.
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[tool.pytest.ini_options]
+testpaths = ["src/conformance_tests"]
+addopts = "--tb=short -v"
+markers = [
+    "requires_auth: tests that require authentication to be enabled on the service",
+    "grpc: gRPC API conformance tests",
+    "rest: REST API conformance tests",
+]

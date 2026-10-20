@@ -1,0 +1,12 @@
+Conformance tests use {{ .Values.conformanceTest.sourceFile }} as their source fixture.
+This must be a disposable object that exists in storage. Three acceptance cases per
+transport can leave generated blobs and associations that this suite cannot remove.
+
+If a deployment accepts the over-bound probe (1001 specifications after OpenAPI
+advertises the expected 1000), it can leave one association per specification on
+the source. That metadata can exceed storage response limits and break subsequent
+reads and disassociation. An all-suite run sends this probe on both transports.
+Use a source whose associations can be abandoned.
+
+OpenAPI verification requires conformanceTest.restUrl even for a gRPC-only run.
+A skipped case, failed readiness, timeout, or unverifiable contract cannot certify.

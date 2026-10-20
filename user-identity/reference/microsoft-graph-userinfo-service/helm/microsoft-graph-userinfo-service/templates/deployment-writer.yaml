@@ -1,0 +1,135 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "userinfoservice.validateAppRoleAssignments" . }}
+{{- if .Values.writer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "userinfoservice.fullname" . }}-writer
+  labels:
+    {{- include "userinfoservice.writerLabels" . | nindent 4 }}
+spec:
+  # The directory sync is sequential and serialized by a database advisory lock,
+  # so it cannot be parallelized. The writer runs as a single replica; additional
+  # writers would only duplicate Graph API and database load. Use Recreate so a
+  # rollout never briefly runs two writers.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "userinfoservice.writerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "userinfoservice.writerLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if eq .Values.providers.entra.authMode "workload-identity" }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      {{- include "userinfoservice.imagePullSecrets" ( dict "images" (list .Values.image) "global" .Values) | nindent 6 }}
+      serviceAccountName: {{ include "userinfoservice.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-writer
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.ports.rest }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.writer.resources | nindent 12 }}
+          env:
+            - name: STARTUP_MODE
+              value: "writer"
+            - name: PORT
+              value: {{ .Values.service.ports.rest | quote }}
+            {{- include "userinfoservice.loggingEnv" . | nindent 12 }}
+            {{- include "userinfoservice.entraEnv" . | nindent 12 }}
+            - name: CACHE_ENABLED
+              value: {{ .Values.providers.cache.enabled | quote }}
+            {{- include "userinfoservice.cacheKindsEnv" . | nindent 12 }}
+            - name: SYNC_INTERVAL
+              value: {{ .Values.providers.cache.syncInterval | quote }}
+            - name: SYNC_JITTER_MAX
+              value: {{ .Values.providers.cache.syncJitterMax | quote }}
+            {{- include "userinfoservice.appRoleAssignmentsEnv" . | nindent 12 }}
+            {{- include "userinfoservice.postgresEnv" . | nindent 12 }}
+            {{- include "userinfoservice.observabilityEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- $pgTokenSidecar := eq (include "userinfoservice.postgresTokenSidecarEnabled" .) "true" }}
+          {{- $accessTokenSidecar := eq (include "userinfoservice.accessTokenSidecarEnabled" .) "true" }}
+          {{- if or .Values.volumeMounts $pgTokenSidecar $accessTokenSidecar }}
+          volumeMounts:
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if $pgTokenSidecar }}
+            {{- include "userinfoservice.postgresTokenVolumeMount" . | nindent 12 }}
+            {{- end }}
+            {{- if $accessTokenSidecar }}
+            {{- include "userinfoservice.accessTokenVolumeMount" . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+        {{- if $pgTokenSidecar }}
+        {{- include "userinfoservice.postgresTokenSidecar" . | nindent 8 }}
+        {{- end }}
+        {{- if $accessTokenSidecar }}
+        {{- include "userinfoservice.accessTokenSidecar" . | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.volumes $pgTokenSidecar $accessTokenSidecar }}
+      volumes:
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if $pgTokenSidecar }}
+        {{- include "userinfoservice.postgresTokenVolume" . | nindent 8 }}
+        {{- end }}
+        {{- if $accessTokenSidecar }}
+        {{- include "userinfoservice.accessTokenVolume" . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

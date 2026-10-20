@@ -1,0 +1,138 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+edition.workspace = true
+license.workspace = true
+name = "storage-service"
+rust-version.workspace = true
+version.workspace = true
+
+[features]
+cosmosdb = []
+dynamodb = []
+test = ["storage-core/test"]
+
+[lints]
+workspace = true
+
+[dependencies]
+arrayvec.workspace = true
+async-stream.workspace = true
+async-trait.workspace = true
+aws-config.workspace = true
+aws-credential-types.workspace = true
+aws-sdk-dynamodb.workspace = true
+aws-sdk-s3.workspace = true
+aws-sdk-sqs.workspace = true
+axum.workspace = true
+azservicebus.workspace = true
+azure_core.workspace = true
+azure_data_cosmos.workspace = true
+azure_identity.workspace = true
+azure_storage.workspace = true
+azure_storage_blobs.workspace = true
+base64.workspace = true
+bit-vec.workspace = true
+blake3.workspace = true
+bytes.workspace = true
+bytesize.workspace = true
+clap.workspace = true
+deadpool-postgres.workspace = true
+either.workspace = true
+enum-map.workspace = true
+envy.workspace = true
+fastrand.workspace = true
+figment.workspace = true
+fluent-uri.workspace = true
+fred.workspace = true
+futures.workspace = true
+get-size2.workspace = true
+hashbrown.workspace = true
+http.workspace = true
+humantime-serde.workspace = true
+indexmap.workspace = true
+init-tracing-opentelemetry.workspace = true
+linkme.workspace = true
+moka.workspace = true
+native-tls.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-prometheus-text-exporter.workspace = true
+opentelemetry_sdk.workspace = true
+parking_lot.workspace = true
+percent-encoding.workspace = true
+pin-project-lite.workspace = true
+postgres-native-tls.workspace = true
+postgres-protocol.workspace = true
+prost.workspace = true
+regex.workspace = true
+regex-automata.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_urlencoded.workspace = true
+snafu.workspace = true
+storage-core.workspace = true
+storage-core-protos.workspace = true
+storage-core-util.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-postgres.workspace = true
+tokio-stream.workspace = true
+tokio-util.workspace = true
+tonic.workspace = true
+tonic-health.workspace = true
+tower.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+url-escape.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+
+storage-service-grpc = { path = "../storage-service-grpc" }
+storage-service-metrics = { path = "../storage-service-metrics" }
+storage-service-permissions = { path = "../storage-service-permissions" }
+storage-service-protos = { path = "../storage-service-protos" }
+
+[dev-dependencies]
+assert_matches.workspace = true
+async-stream.workspace = true
+azure_messaging_servicebus.workspace = true
+either.workspace = true
+lazy_static.workspace = true
+libc.workspace = true
+more-asserts.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true
+postgres.workspace = true
+prometheus-parse.workspace = true
+rand.workspace = true
+regex.workspace = true
+rstest.workspace = true
+serial_test.workspace = true
+tempfile.workspace = true
+test-log.workspace = true
+time.workspace = true
+toml.workspace = true
+url_normalizer.workspace = true
+
+storage-service-test = { path = "../storage-service-test" }
+
+[package.metadata.cargo-machete]
+ignored = ["humantime-serde", "linkme", "tokio-stream"]

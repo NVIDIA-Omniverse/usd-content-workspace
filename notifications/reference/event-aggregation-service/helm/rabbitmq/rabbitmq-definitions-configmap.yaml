@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-definitions
+data:
+  definitions.json: |
+    {
+      "vhosts": [
+        {
+          "name": "notifications"
+        }
+      ],
+      "users": [
+        {
+          "name": "notification-publisher",
+          "password_hash": "MnRXMpu82eZ69549oNsUGY3MDWVZUuY3I92c0AV/PrfgYcEL",
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "tags": ""
+        },
+        {
+          "name": "notification-consumer",
+          "password_hash": "pwYZCROvG7PvsCOa88aaoXN+n2rqf7BJHCutkJAkMC4hCxTc",
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "tags": ""
+        }
+      ],
+      "permissions": [
+        {
+          "user": "notification-publisher",
+          "vhost": "notifications",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        },
+        {
+          "user": "notification-consumer",
+          "vhost": "notifications",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        }
+      ],
+      "exchanges": [
+        {
+          "name": "notifications",
+          "vhost": "notifications",
+          "type": "direct",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        }
+      ],
+      "queues": [],
+      "bindings": []
+    }

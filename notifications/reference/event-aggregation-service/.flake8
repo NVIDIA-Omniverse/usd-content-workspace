@@ -1,0 +1,3 @@
+[flake8]
+exclude = scripts/demo.py,.git,tools,.venv*,venv,_deps,db/migrations/models,_build,build,pytest_report/pytest_report.xml,proto,nvidia,conformance_tests
+max-line-length = 100

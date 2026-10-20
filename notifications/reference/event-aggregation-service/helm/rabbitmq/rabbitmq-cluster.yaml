@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rabbitmq-cluster
+spec:
+  replicas: 1
+  override:
+    statefulSet:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: rabbitmq
+              volumeMounts:
+              - mountPath: /etc/rabbitmq/definitions.json
+                subPath: definitions.json
+                name: definitions
+            volumes:
+            - name: definitions
+              configMap:
+                name: rabbitmq-definitions
+  rabbitmq:
+    additionalConfig: |
+      load_definitions = /etc/rabbitmq/definitions.json # Path to the mounted definitions file
