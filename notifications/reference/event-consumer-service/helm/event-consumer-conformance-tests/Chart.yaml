@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: event-consumer-conformance-tests
+description: >
+  Kubernetes Job that runs the Event Consumer Service conformance test suite
+  against a deployed instance of the service.
+
+type: application
+
+# Managed by CI/CD — bumped alongside the service version.
+version: "0.0.0"
+appVersion: "0.0.0"

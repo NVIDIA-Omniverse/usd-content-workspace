@@ -1,0 +1,925 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+replicaCount: 1
+
+image:
+  repository: nvcr.io/nvidia/omniverse/permission-service
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+  pullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  # Defaults to false: the service does not call the Kubernetes API,
+  # so projecting a token only widens the lateral-movement surface
+  # available to anyone who achieves code execution in the pod.
+  automount: false
+  # Annotations to add to the service account
+  ## @param serviceAccount.annotations Annotations to add to the ServiceAccount.
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+## Shared pod metadata applied to every pod the chart deploys.
+## @param podAnnotations Annotations added to all pods.
+podAnnotations: {}
+## @param podLabels Extra labels added to all pods.
+## Merged on top of the chart's common labels; must not collide with selector labels.
+podLabels: {}
+
+# Pod-level security defaults aligned with the Kubernetes "restricted"
+# Pod Security Standard. The container image already pins a non-root
+# user (`USER 1000:1000`); `runAsNonRoot` enforces the same guarantee at
+# the pod-spec level so admission controllers that inspect the spec
+# (rather than the image) accept the workload.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  # fsGroup: 2000
+
+# Container-level security defaults. The service does not write to the
+# container filesystem at runtime (secrets are mounted read-only and
+# the access-token integration uses a dedicated emptyDir), so a
+# read-only root filesystem is safe.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  ports:
+    http: 3000
+    grpc: 3010
+  ## @param service.annotations Annotations to add to the Service.
+  annotations: {}
+
+  # @param service.headless.enabled Render a headless Service (clusterIP: None)
+  # alongside the regular Service so gRPC clients can resolve individual pod IPs
+  # and load-balance per request across all replicas (instead of pinning to one
+  # pod via the ClusterIP VIP). Additive; does not affect the regular Service.
+  headless:
+    enabled: true
+
+  # @param service.nameOverride Name override for the Service object. If not set, uses the Chart name as the service name.
+  nameOverride: ""
+
+## Database backend configuration
+database:
+  ## @param database.type
+  ## Defines the storage backend used by the service.
+  ## Available values:
+  ## - "postgres" (default) — uses PostgreSQL as the storage backend.
+  ## - "config-file" — uses read-only YAML configuration files as the storage backend.
+  ##   When set to "config-file", the postgres section is ignored and policy/metadata files must be provided.
+  type: "postgres"
+
+  ## @param database.init
+  ## Database initialization settings.
+  ## The content below is mounted as YAML files inside the container via a ConfigMap.
+  ##
+  ## In config-file mode, these files are used as the storage backend.
+  ## In postgres mode, policies are loaded as system policies on startup.
+  init:
+    ## @param database.init.policies
+    ## YAML array for policy entries in the policy configuration file.
+    ##
+    ## Format:
+    ##   - policy: "<cedar_policy_text>"   # required
+    ##     order: <integer>                # optional, default from config.defaultPolicyOrder (lower = evaluated first)
+    ##     comment: "<free-form note>"     # optional, administrator-supplied description of what the policy
+    ##                                     # does or who it was created for. Stored as metadata only and
+    ##                                     # never used during authorization, so changing or removing a
+    ##                                     # comment does not alter policy evaluation. Limited to 4096
+    ##                                     # characters by the policy management API.
+    ##
+    ## Scope fields are inferred from Cedar text for both postgres and config-file backends.
+    ## Representable exact constraints are indexed into scope columns.
+    ## Non-representable constraints become null scope columns.
+    ## Cedar policy text remains authoritative for final authorization decisions.
+    ##
+    ## Examples:
+    ##   # Global permit — no constraints, applies to everything
+    ##   - policy: "permit(principal, action, resource);"
+    ##
+    ##   # Scoped to a specific user
+    ##   - policy: "permit(principal == Principal::\"administrator\", action, resource);"
+    ##
+    ##   # Scoped to a specific action, with an administrator note
+    ##   - policy: "permit(principal, action == Action::\"my-service:read\", resource);"
+    ##     comment: "Allows everyone to read from my-service; reviewed 2026-Q1 by platform team."
+    ##
+    ##   # Scoped to action + principal + resource
+    ##   - policy: >-
+    ##       permit(
+    ##         principal == User::"user123",
+    ##         action == Action::"my-service:write",
+    ##         resource == Resource::"my-service:document/doc1"
+    ##       );
+    ##
+    ##   # Cedar policy with a "when" condition
+    ##   - policy: >-
+    ##       permit(principal, action, resource)
+    ##       when { principal.sub == "admin" && resource.tag == "public" };
+    ##
+    ##   # Cedar policy with an "unless" condition — no constraints (global)
+    ##   - policy: >-
+    ##       forbid(principal, action, resource)
+    ##       unless { principal.sub == "superadmin" };
+    ##
+    policies: []
+
+    ## @param database.init.services
+    ## YAML object for the services that will be created by default. 
+    ##
+    ## Format:
+    ##   services:
+    ##     - name: "<service_name>"
+    ##       principal:                                 # optional principal metadata
+    ##         idClaim: "<jwt_claim>"                   # optional, JWT claim used as principal ID (default: "sub")
+    ##       actions:                                   # optional, list of action names
+    ##         - "<action_name>"
+    ##       resourceTypes:                             # optional, list of resource types
+    ##         - type: "<resource_type>"
+    ##           evaluationPriority: "<permit|forbid>"  # optional, default: "forbid"
+    ##           parentType: "<resource_type>"          # optional, hierarchy parent type for `resource in <parentType>::"<url>/"` scopes (default: the resource's own type)
+    ##
+    ## Example:
+    ##   services:
+    ##     - name: "my-service"
+    ##       principal:
+    ##         idClaim: "sub"
+    ##       actions:
+    ##         - "read"
+    ##         - "write"
+    ##         - "delete"
+    ##       resourceTypes:
+    ##         - type: "document"
+    ##           evaluationPriority: "forbid"
+    ##           parentType: "folder"
+    ##
+    services:
+      - name: "storage-service"
+        actions:
+          - "read"
+          - "write"
+        resourceTypes:
+          - type: "object"
+            evaluationPriority: "permit"
+            parentType: "folder"
+          - type: "folder"
+            evaluationPriority: "permit"
+
+      - name: "event-consumer-service"
+        actions:
+          - "consume-all-storage-create-events"
+          - "consume-all-storage-delete-events"
+          - "consume-durable-queues"
+          - "create-durable-queues"
+          - "delete-durable-queues"
+          - "inspect-and-replay-all-dlq"
+
+      - name: "event-aggregation-service"
+        actions:
+          - "publish-event"
+        resourceTypes:
+          - type: "EventType"
+
+  ## Postgres backend settings. Only used when database.type is set to "postgres".
+  postgres:
+    ## @param database.postgres.host Defines the hostname for connecting to Postgres
+    ## @param database.postgres.port Defines the port for connecting to Postgres
+    ## @param database.postgres.user Specifies the username used for connecting to Postgres
+
+    ## @param database.postgres.secretRef.name
+    ## Name of an existing Kubernetes Secret holding the Postgres credentials. The chart does not
+    ## create this Secret; create it before deploying with the keys the chart previously rendered:
+    ## - `POSTGRES_PASSWORD` — the Postgres password, mounted at `/etc/secrets/POSTGRES_PASSWORD`.
+    ##   Not needed when `tokenFile.enabled` is true.
+    ## - `POSTGRES_USER` — the Postgres username. Only read when `database.postgres.user` is empty.
+
+    ## @param database.postgres.dbname The database name used for the service.
+    ## @param database.postgres.sslMode Defines what SSL mode to use to connect to Postgres. Does not use SSL by default.
+    ## @param database.postgres.connections The maximum amount of connections established in a pool for Postgres
+    ## @param database.postgres.workerThreads The amount of parallel threads used in the service to execute Postgres queries
+
+    host: ""
+    port: 5432
+
+    user: ""
+    secretRef:
+      name: "permission-service-secret"
+    dbname: "postgres"
+    sslMode: ""
+    connections: 16
+    workerThreads: 32
+
+    ## How long to wait at startup for a sidecar-mounted credential file (token
+    ## or password file) to become readable before the container fails closed,
+    ## and how often to retry while waiting.
+    ## @param database.postgres.credentialWaitTimeout Startup wait for a not-yet-mounted credential file (e.g. "30s", "1m").
+    ## @param database.postgres.credentialWaitInterval Retry interval while waiting for the credential file (e.g. "2s").
+    credentialWaitTimeout: "30s"
+    credentialWaitInterval: "2s"
+
+    ## Short-lived token authentication. When enabled, the Postgres password is
+    ## read from a JSON token file (same format as serviceIdentity.accessTokenFile)
+    ## and the connection pool is rebuilt whenever the token rotates. This replaces
+    ## the static password secret mount.
+    tokenFile:
+      ## @param database.postgres.tokenFile.enabled Read the Postgres password from a rotating token file instead of a static secret.
+      ## @param database.postgres.tokenFile.path Path to the token file inside the container.
+      ## @param database.postgres.tokenFile.pollInterval How often to check the token file for changes (e.g. "15s", "1m").
+
+      enabled: false
+      path: "/etc/secrets/postgres-token/token"
+      pollInterval: "15s"
+
+      ## Optional sidecar that provisions the token file. When set, the chart
+      ## mounts a shared in-memory volume at the token file's directory and runs
+      ## this container. When unset, the token file at `path` must be supplied by
+      ## other means (e.g. a projected/secret volume via `volumes`/`volumeMounts`,
+      ## or another container).
+      provisionerSidecar:
+        # Full container spec; will be replicated verbatim, with one exception:
+        # volume mounts will get an ADDITIONAL volume called `postgres-token` to
+        # be able to communicate the token to the service.
+        container:
+
+
+## OpenID IdP and related authentication settings.
+## Only OpenID integration is supported at this point.
+##
+## This section is commonly shared across multiple services on the platform
+## and should only contain values that are applicable platform-wide (e.g. the
+## IdP discovery URI, accepted audiences/issuers, principal claim).
+## Service-specific tuning (timeouts, cache sizes, leeway, thread counts, etc.) belongs
+## under `config` instead so it can be tuned per service without diverging
+## the shared OpenID configuration.
+openId:
+  ## @param openId.enabled
+  ## Determines if authentication is enabled for the service.
+  ## If disabled, the service does not verify access tokens passed to the service.
+  enabled: true
+
+  ## @param openId.openIdConfigurationUri
+  ## The endpoint from the identity provider to retrieve OpenID Connect Metadata (/.well-known/openid-configuration).
+  ## https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+  ## The metadata includes other IdP endpoints such as jwks_uri, token_endpoint and userinfo_endpoint.
+  openIdConfigurationUri: ""
+
+  ## The permission service is the platform's authorization service: it authenticates callers at its
+  ## own REST/gRPC boundary rather than delegating to a downstream proxy or auth extension, so it must
+  ## verify bearer tokens against the IdP itself. The in-service token-verification fields below —
+  ## `tokenVerificationType`, `allowedJwtAudience`, and `allowedJwtIssuers` —
+  ## configure that verification (how tokens are validated and which audiences/issuers are accepted).
+  ## @param openId.tokenVerificationType
+  ## Defines how auth tokens are validated by the service:
+  ## - `jwt` - validates incoming tokens as JWT using public keys pulled from the identity provider
+  ## - `opaque` - validates incoming tokens using /userinfo endpoint from the identity provider
+  ## - `jwtuserinfo` - validates incoming tokens as JWT using public keys and also calls /userinfo
+  tokenVerificationType: "jwt"
+
+  ## @param openId.allowedJwtAudience
+  ## List of accepted values for the `aud` claim in JWTs passed in the Authorization header.
+  ## Required when `openId.enabled` is true and `tokenVerificationType` is `jwt` or `jwtuserinfo`: the service
+  ## refuses to start without at least one audience. Not used with `opaque`.
+  allowedJwtAudience: [ ]
+    # -  <client id>
+    # -  <api client id>
+
+  ## @param openId.allowedJwtIssuers
+  ## List of accepted values for the `iss` claim in JWTs passed in the Authorization header.
+  ## When empty, the `iss` claim is not validated.
+  ## The discovery-document issuer is NOT added implicitly: every trusted issuer
+  ## must be listed here. Useful for IdPs whose token-stamped issuers diverge
+  ## from the discovery URL (e.g. Microsoft Entra ID multi-tenant or v1 vs v2
+  ## endpoints) and for staged IdP migrations.
+  allowedJwtIssuers: [ ]
+    # -  https://login.microsoftonline.com/<tenant-id>/v2.0
+    # -  https://sts.windows.net/<tenant-id>/
+
+  ## @param openId.requiredJwtClaims
+  ## Rules that claims of every verified token must satisfy in addition to the `aud` and `iss`
+  ## checks. All rules must pass; a token failing any rule is rejected with 401 Unauthorized.
+  ## Each rule names a top-level `claim` and an `operator`:
+  ## - `equals` / `notEquals` (`value`): the claim is a single value equal / not equal to `value`
+  ## - `in` / `notIn` (`values`): the claim is a single value that is / is not one of `values`
+  ## - `contains` (`value`): the claim array (or a single value) includes `value`
+  ## - `containsAny` / `containsAll` (`values`): the claim array (or a single value) includes
+  ##   at least one / every item of `values`
+  ## - `exists`: the claim is present and not null
+  ## Values are strings, integers, or booleans and must match the claim type exactly ("1" is not 1).
+  ## A missing or null claim fails every rule. Invalid rules prevent the service from starting.
+  requiredJwtClaims: [ ]
+    # - claim: appid
+    #   operator: equals
+    #   value: "<client-id>"
+    # - claim: appid
+    #   operator: in
+    #   values: ["<client-a>", "<client-b>"]
+    # - claim: groups
+    #   operator: containsAny
+    #   values: ["<group-1>", "<group-2>"]
+
+  ## The service introspects each verified token to resolve the calling principal and its group
+  ## memberships, which it then feeds into Cedar policy evaluation (policies scoped by principal and by
+  ## `principal in Group::"<id>"`). `principalIdClaim` and `principalGroupsClaim` configure which claims
+  ## carry that identity, so token introspection here is intrinsic to the authorization decision.
+  ## @param openId.principalIdClaim
+  ## The JWT claim used as the principal identifier. Defaults to "sub".
+  principalIdClaim: "sub"
+
+  ## @param openId.principalGroupsClaim
+  ## The JWT claim holding the principal's group memberships, used to evaluate
+  ## `principal in Group::"<id>"` policy scopes. Must be a JSON array of group
+  ## id strings. Defaults to "groups".
+  principalGroupsClaim: "groups"
+
+  ## The service must validate every incoming token as part of the authorization process, so it
+  ## bounds the size of the tokens it accepts itself.
+  ## @param openId.maxTokenLength
+  ## Maximum accepted size, in bytes, of a bearer token presented in the
+  ## `Authorization` header. Tokens whose byte length exceeds this cap are
+  ## rejected before any caching, header parsing, or outbound forwarding to
+  ## the identity provider. The default of 8 KiB (8192) accommodates realistic
+  ## JWTs while preventing attackers from poisoning the token cache,
+  ## amplifying traffic to the IdP `userinfo` endpoint, or forcing expensive
+  ## base64 decoding on arbitrarily large inputs.
+  maxTokenLength: 8192
+
+
+## Configuration for the main service logic
+config:
+  ## @param config.enableDenyReason Toggles returning the "reason" field for denied authorization requests.
+
+  ## @param config.cacheControlMaxAge
+  ## Defines for how many seconds the clients can cache authorization results.
+  ## If not specified or specified as zero, then cache control headers are disabled.
+
+  ## @param config.evaluationCacheSize The LRU cache size for authorization results (10000 by default).
+  ## @param config.evaluationCacheTtl Determines how long authorization results are cached for each request (15 minutes by default).
+  ## @param config.policySetCacheSize The LRU cache size for parsed Cedar PolicySet ASTs keyed by policy text (1000 by default).
+  ## @param config.policySetCacheTtl Determines how long parsed PolicySet ASTs are cached (1 hour by default).
+  ## @param config.jwtLeeway Adds leeway for JWT expiration in seconds. Capped at 300 seconds (5 minutes); values above the cap are rejected at startup.
+  ## @param config.jwksTtl Time-to-live for public keys retrieved from the identity provider.
+  ## @param config.jwksFailureBackoff Window after a failed JWKS fetch during which further refreshes are skipped.
+  ## @param config.metadataCacheSize The LRU cache size for service metadata retrieved from the database.
+  ## @param config.metadataCacheTtl Determines how long metadata is cached for each service.
+
+  ## @param config.tokenCacheSize The LRU cache size for validated tokens and their principals.
+  ## @param config.tokenTtl
+  ## Determines for how long the tokens are cached by the service.
+  ## Must not be greater than the actual token duration.
+  ## Only used for opaque access tokens or if the 'exp' claim is not specified in JWTs.
+
+  ## @param config.invalidTokenCacheSize
+  ## Capacity of the bounded negative cache used to short-circuit recently
+  ## rejected bearer tokens. Kept much smaller than `tokenCacheSize` so a
+  ## flood of bogus tokens cannot evict verified principals from the
+  ## positive cache (the eviction policy is per cache instance). Increase
+  ## only if hot retry loops on the same bad token are observed in the
+  ## `token.cache.invalid.size` metric.
+
+  ## @param config.invalidTokenCacheTtl
+  ## How long an entry remains in the negative cache. Kept much shorter
+  ## than `tokenTtl` so that an opaque token that is rejected by the IdP
+  ## once and then re-issued / rotated within minutes is not falsely
+  ## considered invalid for the rest of `tokenTtl`. Clamped to
+  ## `min(invalidTokenCacheTtl, tokenTtl)` at startup.
+
+  ## @param config.workerThreads
+  ## Amount of worker threads specified for the main service runtime.
+  ## Should exclude worker threads specified for `postgres.workerThreads`.
+
+  ## @param config.threadStackSize
+  ## Stack size in bytes for each worker thread in the service runtime.
+  ## Increase this if the service crashes with a stack overflow.
+
+  ## @param config.parallelEvaluationThreshold
+  ## When an authorization request needs to evaluate more than this many
+  ## resources that are not already cached, the evaluation is spread across
+  ## multiple CPU cores. Requests at or below this size are evaluated one
+  ## resource at a time, which is faster for small requests. Raise this value
+  ## if requests usually carry only a few resources; lower it to start using
+  ## multiple cores sooner.
+
+  enableDenyReason: true
+  defaultPolicyOrder: 0
+  cacheControlMaxAge: 0
+  evaluationCacheSize: 10000
+  evaluationCacheTtl: 15min
+  policySetCacheSize: 1000
+  policySetCacheTtl: 1h
+  jwtLeeway: 60
+  jwksTtl: 3h
+  jwksFailureBackoff: 10s
+  metadataCacheSize: 100
+  metadataCacheTtl: 1h
+  tokenCacheSize: 2048
+  tokenTtl: 30min
+  invalidTokenCacheSize: 256
+  invalidTokenCacheTtl: 60s
+  workerThreads: 32
+  threadStackSize: 4194304
+  parallelEvaluationThreshold: 1
+
+  ## @param config.urlRemapper.enabled
+  ## Enables forward URL-prefix remapping of resource IDs. When true, the
+  ## service rewrites incoming resource URLs (in policies, authorization
+  ## requests, and diagnostics) using the longest-matching rule from
+  ## the loaded remapper config before persisting or querying the database.
+  ## When false, resource IDs flow through unchanged.
+  ##
+  ## @param config.urlRemapper.rewriteRules
+  ## Map of source URL prefix -> target URL prefix used by the remapper.
+  ## Each value is either the target prefix string or an object whose
+  ## `target` field holds it; other fields in the object are ignored. These
+  ## two forms are equivalent:
+  ##   "omniverse://models/": "https://mybucket.s3.amazonaws.com/models/"
+  ##   "omniverse://models/":
+  ##     target: "https://mybucket.s3.amazonaws.com/models/"
+  ## The longest matching source prefix wins. Rendered into a chart-owned
+  ## ConfigMap and mounted as /etc/permission-config/url-remapper.yaml when
+  ## `rewriteRulesRef.name` is empty. Ignored when `rewriteRulesRef.name`
+  ## is set.
+  ##
+  ## @param config.urlRemapper.rewriteRulesRef.name
+  ## Name of an existing ConfigMap that already contains the remapper YAML.
+  ## When set, the chart skips rendering its own remapper ConfigMap and
+  ## mounts this one instead. The pointed-to file must deserialize into the
+  ## same `{ enabled, rewriteRules }` shape produced by the chart-managed
+  ## form so the service can load it directly.
+  ##
+  ## @param config.urlRemapper.rewriteRulesRef.key
+  ## Key inside `rewriteRulesRef.name` whose value is the remapper YAML.
+  ## Defaults to "url-remapper.yaml". Also used as the projected file name
+  ## inside the pod, so the file lands at
+  ## /etc/permission-config/url-remapper/<key>.
+  ##
+  ## Mirrors storage-service's `config.urlRemapper` block so a single chart
+  ## values fragment can be shared between the two services. The
+  ## `checkpointMetadataKey` field that storage-service supports is ignored
+  ## here -- permission-service does not need checkpoint mapping.
+  urlRemapper:
+    enabled: false
+    rewriteRules: {}
+    rewriteRulesRef:
+      name: ""
+      key: ""
+
+  ## Timeouts applied to outbound HTTP clients constructed by the service.
+  ## Each subkey corresponds to one client type the service uses;
+  ## this prevents a slow or unreachable upstream from wedging worker threads
+  ## and causing indirect service-wide DoS.
+  clientTimeouts:
+    ## Timeouts for the HTTP client used for outbound calls to the identity
+    ## provider (OpenID discovery, JWKS, userinfo, client-credentials token
+    ## endpoints). All IdP-bound traffic from `permission-auth` and the
+    ## client-credentials token manager flows through this client.
+    idp:
+      ## @param config.clientTimeouts.idp.connect
+      ## Maximum time to wait for a TCP connection to the IdP.
+      connect: "5s"
+
+      ## @param config.clientTimeouts.idp.request
+      ## Maximum total time for a single HTTP request to the IdP
+      ## (connect + send + receive).
+      request: "10s"
+
+      ## @param config.clientTimeouts.idp.idle
+      ## How long an idle keep-alive connection to the IdP stays in the pool.
+      idle: "90s"
+
+## Configures the service identity used to authenticate outgoing requests to other services.
+serviceIdentity:
+  clientCredentials:
+    ## @param serviceIdentity.clientCredentials.enabled Defines if the service needs to authenticate its requests to other services.
+    ## @param serviceIdentity.clientCredentials.openIdConfigurationUri The OpenID configuration URI used for the client credentials token exchange.
+    ## @param serviceIdentity.clientCredentials.clientId The client ID used for client credentials flow to obtain a service token.
+    ## @param serviceIdentity.clientCredentials.clientScope The value for `scope` field passed to the identity provider with the client credentials flow.
+    ## @param serviceIdentity.clientCredentials.clientSecretRef Reference to an existing Kubernetes secret containing the client secret.
+    ## When enabled, the referenced secret is mounted into the deployment.
+    ## @param serviceIdentity.clientCredentials.extraHeaders Additional HTTP headers to include in the token exchange request (e.g. {"X-Custom-Header": "value"}).
+    ## @param serviceIdentity.clientCredentials.extraBodyParams Additional body parameters to include in the token exchange request (e.g. {"audience": "https://api.example.com"}).
+
+    enabled: false
+    openIdConfigurationUri: ""
+    clientId: ""
+    clientScope: ""
+    clientSecretRef:
+      name: ""
+      key: ""
+    extraHeaders: {}
+    extraBodyParams: {}
+
+  accessTokenFile:
+    ## @param serviceIdentity.accessTokenFile.enabled Defines if the service should read a pre-provisioned access token from a file instead of using client credentials flow.
+    ## Only one of clientCredentials.enabled and accessTokenFile.enabled should be true.
+
+    enabled: false
+    path: "/etc/secrets/access-token/token"
+
+    provisionerSidecar:
+
+      # Full container spec; will be replicated verbatim, with one exception:
+      # volume mounts will get an ADDITIONAL volume called `token-exchange` to be
+      # able to communicate the token to the actual service this token
+      # provisioner sidecar is for.
+      #
+      # Must be left EMPTY with no defaults: the service cannot know upfront which
+      # sidecar an operator will use or what values it needs, so any default here
+      # would be wrong. The operator supplies the full container spec, including
+      # its own resource requests and limits (helm-resources exempts this spec
+      # precisely because it is empty here).
+      container:
+
+    ## @param serviceIdentity.accessTokenFile.pollInterval How often to check the token file for changes (e.g. "15s", "1m").
+    pollInterval: "15s"
+
+## Configuration for the notification events the service publishes and consumes.
+## The service uses the Omniverse Storage Notification API both to inform other
+## consumers about permission changes (`publisher`) and to invalidate its own
+## caches when another replica performs a write (`consumer`).
+notifications:
+  ## Configuration for publishing permission- and metadata-change events so that
+  ## other consumers are informed about policy and metadata updates.
+  publisher:
+    ## @param notifications.publisher.enabled Defines if the service needs to publish notifications.
+    ## @param notifications.publisher.endpoint The gRPC endpoint for the Event Publishing API of the Notification Service to publish events about policy updates.
+    enabled: false
+    endpoint: "http://event-aggregation-service:50051"
+
+    ## TLS configuration for the outbound gRPC connection to the Event
+    ## Publishing API. Most in-cluster deployments terminate TLS at an upstream
+    ## proxy and keep this section disabled. Enable it when the Notification
+    ## Service is reached over a network segment where the bearer tokens
+    ## attached by `serviceIdentity.clientCredentials` or
+    ## `serviceIdentity.accessTokenFile` must not be exposed in cleartext.
+    tls:
+      ## @param notifications.publisher.tls.enabled
+      ## Enable TLS for the outbound gRPC connection to the Event Publishing
+      ## API. When true, the `endpoint` URL should use the `https://` scheme so
+      ## its hostname is used as the default TLS SNI / peer name. The connection
+      ## is verified against the platform's native root certificate store unless
+      ## `caCertificateSecretRef.name` is set.
+      enabled: false
+
+      ## CA certificate used to verify the Event Publishing API server
+      ## certificate. When unset, the platform's native trust store is used.
+      caCertificateSecretRef:
+        ## @param notifications.publisher.tls.caCertificateSecretRef.name
+        ## Name of an existing Kubernetes Secret that holds a PEM-encoded CA
+        ## bundle for verifying the Event Publishing API. Leave empty to fall
+        ## back to the platform's native root certificate store.
+        name: ""
+
+        ## @param notifications.publisher.tls.caCertificateSecretRef.key
+        ## Key inside `caCertificateSecretRef.name` whose value is the
+        ## PEM-encoded CA bundle. Also used as the projected file name inside
+        ## the pod, so the bundle lands at
+        ## /etc/permission-config/notifications-tls/<key>.
+        key: "ca.crt"
+
+      ## @param notifications.publisher.tls.serverName
+      ## Optional override for the TLS server name (SNI / peer name) used when
+      ## connecting to the Event Publishing API. Defaults to the hostname taken
+      ## from `endpoint`. Set this when the endpoint is an IP address or
+      ## otherwise diverges from the certificate's CN / SAN.
+      serverName: ""
+
+  ## Configuration for consuming permission- and metadata-change events so that
+  ## this replica invalidates its local caches when another replica performs a
+  ## write. Required when running more than one replica; without it, caches on
+  ## replicas that did not handle the write stay stale until their TTL expires.
+  ## Consuming reuses the same `serviceIdentity` credentials as publishing.
+  consumer:
+    ## @param notifications.consumer.enabled Defines if the service subscribes to change events to invalidate its caches.
+    ## @param notifications.consumer.endpoint The gRPC endpoint for the Consumer API of the Notification Service.
+    enabled: false
+    endpoint: "http://event-consumer-service:50051"
+
+    ## TLS configuration for the outbound gRPC connection to the Consumer API.
+    ## Mirrors `notifications.publisher.tls`; most in-cluster deployments keep it disabled.
+    tls:
+      ## @param notifications.consumer.tls.enabled
+      ## Enable TLS for the outbound gRPC connection to the Consumer API. When
+      ## true, the `endpoint` URL should use the `https://` scheme so its
+      ## hostname is used as the default TLS SNI / peer name. The connection is
+      ## verified against the platform's native root certificate store unless
+      ## `caCertificateSecretRef.name` is set.
+      enabled: false
+
+      ## CA certificate used to verify the Consumer API server certificate.
+      ## When unset, the platform's native trust store is used.
+      caCertificateSecretRef:
+        ## @param notifications.consumer.tls.caCertificateSecretRef.name
+        ## Name of an existing Kubernetes Secret that holds a PEM-encoded CA
+        ## bundle for verifying the Consumer API. Leave empty to fall back to
+        ## the platform's native root certificate store.
+        name: ""
+
+        ## @param notifications.consumer.tls.caCertificateSecretRef.key
+        ## Key inside `caCertificateSecretRef.name` whose value is the
+        ## PEM-encoded CA bundle. Also used as the projected file name inside
+        ## the pod, so the bundle lands at
+        ## /etc/permission-config/consumer-tls/<key>.
+        key: "ca.crt"
+
+      ## @param notifications.consumer.tls.serverName
+      ## Optional override for the TLS server name (SNI / peer name) used when
+      ## connecting to the Consumer API. Defaults to the hostname taken from
+      ## `endpoint`. Set this when the endpoint is an IP address or otherwise
+      ## diverges from the certificate's CN / SAN.
+      serverName: ""
+
+## gRPC server transport configuration
+grpc:
+  ## @param grpc.tonicInitialConnectionWindowSize Sets the max connection-level flow control for HTTP2.
+  ## @param grpc.tonicInitialStreamWindowSize Sets the SETTINGS_INITIAL_WINDOW_SIZE option for HTTP2 stream-level flow control.
+  ## @param grpc.tonicMaxDecodingMessageSize Limits the maximum size of a decoded message.
+
+  tonicInitialConnectionWindowSize: "65535"
+  tonicInitialStreamWindowSize: "65535"
+  tonicMaxDecodingMessageSize: "4194304"
+
+## Logs, metrics and traces configuration
+observability:
+  ## Logging configuration
+  logging:
+    ## @param observability.logging.level
+    ## Defines the log level for the service.
+    ## Supports tracing directives syntax, e.g. "info", "permission_service=debug,hyper=warn".
+    level: "info"
+
+    ## Structured logging configuration
+    structured:
+      ## @param observability.logging.structured.enabled
+      ## Enables JSON-structured logging of trace spans.
+      ## When disabled, the service uses human-readable pretty-printed logs.
+      enabled: false
+
+    ## API access logging configuration
+    access:
+      ## @param observability.logging.access.enabled
+      ## Emits one access record (or several when an endpoint unwinds a
+      ## batch) per business REST / gRPC call. Disabled by default.
+      ## Pretty when structured logging is off; nested JSON when it is on.
+      ## Set to true to enable; RUST_LOG must still allow target access.
+      enabled: false
+      ## @param observability.logging.access.headers
+      ## Map of access field name to request header name. Each present header
+      ## is copied as a top-level key under access (e.g. ip, ua). Authorization
+      ## is never copied. Keys operation, request, and response are reserved
+      ## and ignored. Map a gateway correlation header here if unwound lines
+      ## must be grouped (there is no built-in request.id).
+      headers: {}
+
+  ## @param observability.serviceName The service name defined in metrics and traces ("permission-service" by default).
+  serviceName: "permission-service"
+
+  ## @param observability.serviceScope The service scope defined in metrics and traces ("permission_service" by default).
+  serviceScope: "permission_service"
+
+  ## @param observability.tracing.enabled
+  ## Enables exporting trace spans to an OpenTelemetry collector.
+  ## When disabled, no tracing endpoint env vars are injected and the
+  ## service runs without span export.
+  ## @param observability.tracing.endpoint.grpc GRPC Exporter for trace spans. Only used when `observability.tracing.enabled` is true.
+  ## @param observability.tracing.samplingRatio
+  ## Defines the sampling ratio for traces sent to the collector
+  ## (the percentage of traces that would be sent).
+  ## Must be between 0 and 1. Only used when `observability.tracing.enabled` is true.
+  tracing:
+    enabled: false
+    endpoint:
+      grpc: ""
+    samplingRatio: "1.0"
+
+  ## @param observability.metrics.enabled
+  ## Enables exporting metrics to an OpenTelemetry collector.
+  ## When disabled, no metrics endpoint env var is injected and the
+  ## service runs without metric export.
+  ## @param observability.metrics.endpoint.grpc GRPC Exporter for OpenTelemetry metrics. Only used when `observability.metrics.enabled` is true.
+  metrics:
+    enabled: false
+    endpoint:
+      grpc: ""
+
+smokeTest:
+  ## @param smokeTest.enabled Defines if smoke test needs to be deployed. Can be used with `helm test` command.
+  ## @param smokeTest.waitRetries Number of retries to wait for the service (default: 10).
+  ## @param smokeTest.waitInterval Interval in seconds between retries (default: 5).
+  ## @param smokeTest.serviceUrl Optional override for the smoke test SERVICE_URL. If empty, defaults to the ingress URL built from httpProxy (when enabled) or the in-cluster Service URL (http://SERVICE_NAME.NAMESPACE.svc.cluster.local:port).
+  ## @param smokeTest.ttlSecondsAfterFinished TTL in seconds for the completed smoke-test Job (Kubernetes ttlSecondsAfterFinished). Use 0 to omit the field.
+
+  enabled: false
+  serviceUrl: ""
+  ## @param smokeTest.podLabels Extra labels for the smoke-test pod; override the shared podLabels.
+  podLabels: {}
+  image:
+    repository: nvcr.io/nvidia/omniverse/permission-smoke-test
+    pullPolicy: IfNotPresent
+    tag: ""
+    pullSecrets: []
+  waitRetries: 10
+  waitInterval: 5
+  ## @param smokeTest.resources Resource requests and limits for the smoke-test container.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # TTL for completed smoke-test Job (seconds). Keep Job and Pods so logs are available for debugging.
+  # 0 = delete immediately (not recommended: failed jobs disappear before you can inspect them).
+  # Default 30 min (1800) allows time to review logs and investigate errors. Set to 0 only if you must.
+  ttlSecondsAfterFinished: 1800
+
+## @param extraVars Pass additional environment variables to the deployment. Useful for OpenTelemetry configuration and other custom environment variables.
+extraVars: {}
+
+## External ingress via Contour's httpproxy objects
+httpProxy:
+  ## @param httpProxy.enabled Enable the ingress HTTP proxy
+  enabled: false
+
+  ## FQDN configuration for the ingress
+  ## Final ingress hostname will be composed as "<host>.<domain>"
+  fqdn:
+    ## @param httpProxy.fqdn.host Host component of the FQDN
+    ## Defaults to "permissions", the short name for permission-service.
+    host: "permissions"
+
+    ## @param httpProxy.fqdn.domain Domain component of the FQDN
+    domain: "nodomain.none"
+
+  ## @param httpProxy.path The prefix for all routes of this service
+  ## If a route is available on /v1/myroute and this path equals /api,
+  ## the route will become /api/v1/myroute
+  path: "/"
+
+  ## TLS configuration for the ingress
+  tls:
+    ## @param httpProxy.tls.enabled Enable TLS for the HTTP proxy
+    enabled: false
+
+    ## @param httpProxy.tls.secretName Name of the secret containing the TLS cert
+    secretName: ""
+
+    ## CertManager integration for automatic certificate provisioning
+    ## If enabled, will create a Certificate resource for CertManager, using
+    ## either the default TLS secret name or httpProxy.tls.secretName if
+    ## specified. This secret will be added as tls.secretName of the httpProxy
+    ## CR for Contour.
+    certManager:
+      ## @param httpProxy.tls.certManager.enabled Enable CertManager integration
+      enabled: false
+
+      ## Issuer reference for CertManager
+      issuerRef:
+        ## @param httpProxy.tls.certManager.issuerRef.name Name of the issuer
+        ## Required if certManager.enabled is true.
+        name: my-issuer
+
+        ## @param httpProxy.tls.certManager.issuerRef.kind Kind of the issuer
+        ## Required if certManager.enabled is true.
+        kind: my-issuer-kind
+
+  ## CORS policy configuration
+  ## Verbatim CORSPolicy setting of Envoy's HTTPProxy object
+  corsPolicy:
+    ## @param httpProxy.corsPolicy.allowCredentials Allow credentials in CORS
+    ## If true, allowOrigin cannot use wildcard.
+    allowCredentials: false
+
+    ## @param httpProxy.corsPolicy.allowOrigin Allowed origins for CORS requests
+    ## Use specific origins if allowCredentials is true.
+    allowOrigin:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowHeaders Allowed headers for CORS requests
+    allowHeaders:
+      - "*"
+
+    ## @param httpProxy.corsPolicy.allowMethods Allowed HTTP methods for CORS
+    allowMethods:
+      - 'GET'
+      - 'PUT'
+      - 'POST'
+      - 'DELETE'
+
+    ## @param httpProxy.corsPolicy.exposeHeaders Exposed headers for CORS requests that clients are allowed to read
+    exposeHeaders:
+      - "*"
+
+  ## @param httpProxy.authExtension
+  ## If used, specifies the Envoy extension service name used to authenticate calls to this service
+  authExtension:
+    enabled: false
+
+    ## @param httpProxy.authExtension.responseTimeout Configures maximum time to wait for a check response from the auth extension.
+    ## Type: string, duration in Go format.
+    responseTimeout: 2s
+
+    ## @param httpProxy.authExtension.extensionRef Specifies the extension resource that will authorize client requests.
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+
+  ## @param httpProxy.annotations
+  ## Annotations added to the HTTPProxy CRD
+  annotations: {}
+
+  timeoutPolicy:
+    ## @param httpProxy.timeoutPolicy.response
+    ## Timeout for receiving a response from the server after processing
+    ## a request from client. Applies to both httpProxy -> backend and client -> httpProxy connections.
+    response: "10s"
+
+    ## @param httpProxy.timeoutPolicy.idle Timeout for idle connections
+    ## Timeout for how long the proxy should wait while there is
+    ## no activity during single request/response (for HTTP/1.1) or
+    ## stream (for HTTP/2)
+    idle: "10s"
+
+  ## Per-protocol overrides for the HTTPProxy objects. Any values
+  ## set here are deep-merged on top of the shared httpProxy
+  ## settings above (timeoutPolicy, corsPolicy, annotations,
+  ## etc.), allowing you to customize each protocol's proxy
+  ## without duplicating the common configuration.
+  ## Example — give gRPC a longer response timeout:
+  ##   grpc:
+  ##     timeoutPolicy:
+  ##       response: "30s"
+  grpc: {}
+  rest: {}
+
+## @param resources Resource requests and limits for the permission-service container.
+## Kubernetes uses `requests` to schedule the pod and `limits` to cap its usage; both are set for CPU
+## and memory so the pod is schedulable and bounded.
+## https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+resources:
+  requests:
+    cpu: 4
+    memory: 4Gi
+  limits:
+    cpu: 6
+    memory: 4Gi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+
+autoscaling:
+  enabled: false
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+#  - name: permission-service
+#    secret:
+#      secretName: permission-service
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+#  - name: permission-service
+#    readOnly: true
+#    mountPath: "/etc/secrets"
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

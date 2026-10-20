@@ -1,0 +1,435 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Build every component that no other workflow here builds, on GitHub-hosted
+# runners.
+#
+# The per-component workflows (storage-core, storage-service,
+# permission-service, envoy-auth-extension, thumbnail-service,
+# microsoft-graph-userinfo-service, observability) cover the Rust services and
+# their main images. Everything else in the tree -- the Python notification
+# services, the discovery operator and chart, the web UIs and the CLI, the
+# Helm charts and the remaining Dockerfiles -- had no check
+# at all, so nothing showed whether it builds without access to the NVIDIA
+# network.
+#
+# That is the one question this workflow answers. A hosted runner sits on the
+# public internet with no NVIDIA access, and the jobs below use no secrets and
+# no NVIDIA-internal endpoint. A component that still needs a private registry,
+# an internal host or a file the publish leaves out fails here.
+#
+# Every matrix is fail-fast: false so one blocked component does not hide the
+# state of the others.
+#
+# Documentation is not built here; the docs ship as sources. The component
+# docs' repo_docs tooling (`./repo.sh docs`) also cannot run on hosted
+# runners, because the packman CDN it downloads from blocks them.
+#
+# Buf is not run here either. Every build compiles its protos with protoc
+# through tonic/prost build scripts, and the generated Rust that some crates
+# check in is regenerated with buf only when an API changes, outside any build.
+
+name: public-build
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/public-build.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - 'common/url-normalizer/**'
+      - 'discovery/**'
+      - 'examples/**'
+      - 'metadata/**'
+      - 'notifications/**'
+      - 'permissions/**'
+      - 'storage/api/**'
+      - 'thumbnails/**'
+      - 'user-identity/**'
+      - 'storage/reference/storage-service/helm/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ---------------------------------------------------------------- Rust
+  # The two Rust workspaces without a workflow of their own. common/url-normalizer
+  # is compiled as a path dependency of storage-service, but its own tests and
+  # binary target are not.
+  url-normalizer-check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: common/url-normalizer
+
+  url-normalizer-test:
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: common/url-normalizer
+      test-args: '--workspace'
+
+  discovery-operator-check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: discovery/reference/discovery-service/operator
+
+  discovery-operator-test:
+    # tests/capabilities_client.rs needs a GripMock server (GRIPMOCK_ADDR, see
+    # the operator's docker-compose.test.yml) and is left out. tests/rest_api.rs
+    # starts its server in-process.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: discovery/reference/discovery-service/operator
+      test-args: '--lib --bins --test rest_api'
+
+  # -------------------------------------------------------------- Python
+  python:
+    name: python ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # `python` is the interpreter each package's Dockerfile builds on. The
+        # services' requires-python is an open floor (>=3.14) and they publish
+        # no .python-version, so uv would otherwise pick the newest interpreter
+        # it can download -- one that some locked dependencies have no wheels
+        # or build support for yet.
+        include:
+          # No uv.lock is published for the library; the services lock it as a
+          # path dependency.
+          - name: notification-common
+            dir: notifications/reference/common
+            python: '3.14'
+            sync: uv sync
+            check: uv run pytest -q tests
+          - name: event-consumer-service
+            dir: notifications/reference/event-consumer-service
+            python: '3.14'
+            sync: uv sync --locked
+            check: uv run pytest -q tests
+          - name: event-aggregation-service
+            dir: notifications/reference/event-aggregation-service
+            python: '3.14'
+            sync: uv sync --locked
+            check: uv run pytest -q tests
+          - name: event-consumer-conformance-tests
+            dir: notifications/reference/event-consumer-service/conformance_tests
+            python: '3.14'
+            sync: uv sync --locked
+            check: uv build --wheel --out-dir dist
+          - name: event-aggregation-conformance-tests
+            dir: notifications/reference/event-aggregation-service/conformance_tests
+            python: '3.14'
+            sync: uv sync --locked
+            check: uv build --wheel --out-dir dist
+          - name: discovery-conformance-tests
+            dir: discovery/reference/discovery-service/chart/conformance_tests
+            python: '3.13'
+            sync: uv sync --locked
+            check: uv build --wheel --out-dir dist
+          - name: discovery-operator-conformance
+            dir: discovery/reference/discovery-service/operator/conformance
+            python: '3.12'
+            sync: uv sync --locked --extra test
+            check: uv run pytest -q tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.dir }}
+        env:
+          UV_PYTHON: ${{ matrix.python }}
+        run: ${{ matrix.sync }}
+
+      - name: Build / test
+        working-directory: ${{ matrix.dir }}
+        env:
+          UV_PYTHON: ${{ matrix.python }}
+        run: ${{ matrix.check }}
+
+  # Storage API: the Poetry-managed filesystem example service and the
+  # conformance suite, run against each other exactly as storage/api/README.md
+  # describes, then the example's container image from the built wheel.
+  storage-api:
+    name: storage-api conformance (filesystem example)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry
+          poetry config virtualenvs.in-project true
+
+      - name: Install filesystem_example
+        working-directory: storage/api/filesystem_example
+        run: poetry install
+
+      - name: Install conformance_tests
+        working-directory: storage/api/conformance_tests
+        run: poetry install
+
+      - name: Run the conformance suite against the filesystem example
+        working-directory: storage/api
+        run: |
+          source filesystem_example/.venv/bin/activate
+          ./run_tests.sh --force
+
+      # Independent of the suite's result: the image only needs the wheel.
+      - name: Build the filesystem example wheel and image
+        if: success() || failure()
+        working-directory: storage/api/filesystem_example
+        run: |
+          poetry build --format wheel
+          docker build -t filesystem-example:ci .
+
+  # ----------------------------------------------------------------- npm
+  node:
+    name: npm ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: storage-navigator-cli
+            dir: examples/navigator-cli
+            node: '22'
+            pre: ''
+            check: npm run typecheck && npm run build && npm test
+          - name: storage-navigator (navigator-ui)
+            dir: examples/navigator-ui
+            # Not the v20.17.0 in the app's .nvmrc: the sources and tests use
+            # Promise.withResolvers and Iterator.prototype.toArray, which Node 20
+            # does not have, so 11 tests fail there with "is not a function".
+            node: '22'
+            # The app installs the in-repo storage-permission-ui as a file:
+            # dependency (copied, see .npmrc install-links), which ships dist/.
+            pre: cd ../../permissions/reference/storage-permission-ui && npm ci && npm run build:lib
+            check: npm run build && npm run vitest
+          - name: permission-ui
+            dir: permissions/reference/permission-ui
+            node: '22'
+            pre: ''
+            check: npm run build && npm run vitest
+          - name: storage-permission-ui
+            dir: permissions/reference/storage-permission-ui
+            node: '22'
+            pre: ''
+            check: npm run build:lib && npm run build:example && npm run vitest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Prepare
+        if: matrix.pre != ''
+        working-directory: ${{ matrix.dir }}
+        run: ${{ matrix.pre }}
+
+      - name: npm ci
+        working-directory: ${{ matrix.dir }}
+        run: npm ci
+
+      - name: Build / test
+        working-directory: ${{ matrix.dir }}
+        run: ${{ matrix.check }}
+
+  # ----------------------------------------------------------------- Helm
+  helm:
+    name: helm ${{ matrix.chart }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Several charts deliberately refuse to render without deployment-
+        # specific values (auth mode, endpoints, database host). `values` gives
+        # those charts the minimum placeholder set; the thumbnail-service set is
+        # the one its own tests/render-fixtures.sh uses.
+        chart:
+          - discovery/reference/discovery-service/chart/helm
+          - discovery/reference/discovery-service/chart/helm/discovery-conformance-tests
+          - discovery/reference/discovery-service/operator/helm/auto-discovery-service
+          - examples/navigator-ui/helm/storage-navigator
+          - notifications/reference/event-aggregation-service/helm/event-aggregation-conformance-tests
+          - notifications/reference/event-consumer-service/helm/event-consumer-conformance-tests
+          - permissions/reference/envoy-auth-extension/helm
+          - permissions/reference/permission-service/helm/permission-service
+          - permissions/reference/permission-service/helm/permission-service-conformance-test
+          - permissions/reference/permission-ui/helm/permission-ui
+          - storage/reference/storage-service/helm
+          - user-identity/reference/microsoft-graph-userinfo-service/helm/userinfo-conformance-test
+        values: ['']
+        include:
+          - chart: notifications/reference/event-aggregation-service/helm/event-aggregation-service
+            values: >-
+              --set principalSource=disabled
+          - chart: notifications/reference/event-consumer-service/helm/event-consumer-service
+            values: >-
+              --set principalSource=disabled
+              --set policyHook.enabled=false
+          - chart: thumbnails/reference/thumbnail-service/helm/thumbnail-service
+            values: >-
+              --set thumbnailPathTemplate=https://example.blob.core.windows.net/c/{resource_address_md5}/{width}x{height}/{resource_filename}.{output_encoding}
+              --set thumbnailSizes=256x256
+              --set notifications.eventConsumer.endpoint=notifications:50051
+              --set notifications.eventConsumer.resourcePrefixes[0]=https://account.blob.core.windows.net/container/
+              --set serviceIdentity.accessTokenFile.enabled=true
+              --set serviceIdentity.accessTokenFile.provisionerSidecar.container.image=sidecar:latest
+              --set storage.endpoint=storage:50001
+          - chart: thumbnails/reference/thumbnail-service/helm/thumbnail-conformance-test
+            values: >-
+              --set conformanceTest.restUrl=http://thumbnail-service:8080
+              --set conformanceTest.grpcUrl=http://thumbnail-service:50051
+              --set conformanceTest.sourceFile=s3://example/sample.usd
+          - chart: user-identity/reference/microsoft-graph-userinfo-service/helm/microsoft-graph-userinfo-service
+            values: >-
+              --set providers.cache.postgres.host=postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      # VALUES is split on whitespace on purpose: it is a list of --set flags.
+      - name: helm lint
+        env:
+          CHART: ${{ matrix.chart }}
+          VALUES: ${{ matrix.values }}
+        run: helm lint "$CHART" $VALUES
+
+      - name: helm template
+        env:
+          CHART: ${{ matrix.chart }}
+          VALUES: ${{ matrix.values }}
+        run: helm template ci "$CHART" $VALUES > /dev/null
+
+  # --------------------------------------------------------------- Docker
+  # The Dockerfiles no per-component workflow builds. Build only; nothing is
+  # pushed and no registry is logged in to.
+  docker:
+    name: docker build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: auto-discovery-service
+            context: discovery/reference/discovery-service/operator
+            dockerfile: discovery/reference/discovery-service/operator/Dockerfile
+          - name: auto-discovery-mock-capabilities
+            context: discovery/reference/discovery-service/operator
+            dockerfile: discovery/reference/discovery-service/operator/Dockerfile.mock
+          - name: discovery-operator-conformance
+            context: discovery/reference/discovery-service/operator
+            dockerfile: discovery/reference/discovery-service/operator/conformance/Dockerfile
+          - name: discovery-conformance-tests
+            context: discovery/reference/discovery-service/chart/conformance_tests
+            dockerfile: discovery/reference/discovery-service/chart/conformance_tests/Dockerfile
+          - name: discovery-conformance-nginx
+            context: discovery/reference/discovery-service/chart/conformance_tests/nginx
+            dockerfile: discovery/reference/discovery-service/chart/conformance_tests/nginx/Dockerfile
+          - name: discovery-smoke-local
+            context: discovery/reference/discovery-service/chart/tests/local
+            dockerfile: discovery/reference/discovery-service/chart/tests/local/smoke.Dockerfile
+          # The service Dockerfiles copy notification-common in from a named
+          # build context, as their BUILDING.md documents.
+          - name: event-consumer-service
+            context: notifications/reference/event-consumer-service
+            dockerfile: notifications/reference/event-consumer-service/Dockerfile
+            build-contexts: common=notifications/reference/common
+          - name: event-aggregation-service
+            context: notifications/reference/event-aggregation-service
+            dockerfile: notifications/reference/event-aggregation-service/Dockerfile
+            build-contexts: common=notifications/reference/common
+          - name: event-consumer-conformance-tests
+            context: notifications/reference/event-consumer-service/conformance_tests
+            dockerfile: notifications/reference/event-consumer-service/conformance_tests/Dockerfile
+          - name: event-aggregation-conformance-tests
+            context: notifications/reference/event-aggregation-service/conformance_tests
+            dockerfile: notifications/reference/event-aggregation-service/conformance_tests/Dockerfile
+          - name: storage-navigator
+            context: examples/navigator-ui
+            dockerfile: examples/navigator-ui/Dockerfile
+          - name: permission-ui
+            context: permissions/reference/permission-ui
+            dockerfile: permissions/reference/permission-ui/Dockerfile
+          # The two UI Dockerfiles default SERVE_IMAGE to an NVIDIA nginx base
+          # and document overriding it. The default builds above show whether
+          # that base is pullable; these show the app itself still builds into
+          # an image on a public nginx.
+          - name: storage-navigator (public nginx)
+            context: examples/navigator-ui
+            dockerfile: examples/navigator-ui/Dockerfile
+            build-args: |
+              SERVE_IMAGE=nginxinc/nginx-unprivileged:stable-alpine
+              SERVE_USER=nginx
+          - name: permission-ui (public nginx)
+            context: permissions/reference/permission-ui
+            dockerfile: permissions/reference/permission-ui/Dockerfile
+            build-args: |
+              SERVE_IMAGE=nginxinc/nginx-unprivileged:stable-alpine
+              SERVE_USER=nginx
+          - name: permission-smoke-test
+            context: permissions/reference/permission-service
+            dockerfile: permissions/reference/permission-service/docker/Dockerfile.smoke-test
+          - name: permission-service-conformance-test
+            context: permissions/reference/permission-service
+            dockerfile: permissions/reference/permission-service/docker/Dockerfile.conformance-test
+          - name: thumbnail-conformance-test
+            context: thumbnails/reference/thumbnail-service
+            dockerfile: thumbnails/reference/thumbnail-service/Dockerfile.conformance-test
+          - name: thumbnail-ci-rust
+            context: thumbnails/reference/thumbnail-service
+            dockerfile: thumbnails/reference/thumbnail-service/docker/ci-rust.Dockerfile
+          - name: microsoft-graph-userinfo-service
+            context: user-identity/reference/microsoft-graph-userinfo-service
+            dockerfile: user-identity/reference/microsoft-graph-userinfo-service/Dockerfile
+          - name: microsoft-graph-userinfo-smoke-test
+            context: user-identity/reference/microsoft-graph-userinfo-service
+            dockerfile: user-identity/reference/microsoft-graph-userinfo-service/Dockerfile.smoke-test
+          - name: userinfo-conformance-test
+            context: user-identity/reference/microsoft-graph-userinfo-service
+            dockerfile: user-identity/reference/microsoft-graph-userinfo-service/Dockerfile.conformance-test
+    steps:
+      # Same reclaim as docker-image.yml: the Rust release builds plus their
+      # `cargo vendor` tarballs do not fit in a hosted runner's free space.
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          build-contexts: ${{ matrix.build-contexts }}
+          build-args: ${{ matrix.build-args }}
+          push: false
+          load: false

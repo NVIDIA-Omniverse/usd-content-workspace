@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Opens the pull request for a release branch in the public
+# NVIDIA-Omniverse/usd-content-workspace repository.
+#
+# mirror-to-public.yml pushes `release/<tag>` there with a deploy key, which
+# cannot open pull requests. This workflow runs on that push, in the public
+# repository only, and opens the pull request into the default branch with
+# the repository's own GITHUB_TOKEN, or updates the one already open.
+#
+# Requires "Allow GitHub Actions to create and approve pull requests" in the
+# public repository's Actions settings. A pull request opened with
+# GITHUB_TOKEN does not start pull_request workflows, so the component and
+# private-path workflows also run on pushes to release/v*: the deploy-key push
+# starts them, and their checks show on the pull request's head commit.
+
+name: Open release pull request
+
+on:
+  push:
+    branches:
+      - "release/v*"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: open-release-pr-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  open-pr:
+    if: github.repository == 'NVIDIA-Omniverse/usd-content-workspace'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Open or update pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          tag="${BRANCH#release/}"
+          body="Release $tag of usd-content-workspace."
+          num="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$num" ]; then
+            # REST rather than `gh pr edit`, which also queries the retired
+            # Projects (classic) API and fails.
+            pr="$(gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$num" -f title="$tag" -f body="$body" --jq .html_url)"
+            echo "Updated $pr"
+          else
+            pr="$(gh pr create --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --base "$BASE" --title "$tag" --body "$body")"
+            echo "Opened $pr"
+          fi
+          # Each release branch carries the whole tree, so an older open
+          # release merged after this one would roll the repository back.
+          # Close the others as superseded.
+          gh pr list --repo "$GITHUB_REPOSITORY" --base "$BASE" --state open --limit 100 \
+            --json number,headRefName \
+            --jq '.[] | select((.headRefName | startswith("release/v")) and .headRefName != $ENV.BRANCH) | .number' \
+            | while read -r old; do
+                gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$old/comments" -f body="Superseded by $pr." > /dev/null
+                gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$old" -f state=closed > /dev/null
+                echo "Closed #$old as superseded"
+              done

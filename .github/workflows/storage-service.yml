@@ -1,0 +1,77 @@
+# Type-check storage-service.
+#
+# Depends on storage/reference/storage-core, common/url-normalizer and storage/reference/externals/azure-sdk being published into this repository, so the
+# path filter below also fires when those change.
+
+name: storage-service
+
+on:
+  pull_request:
+    paths:
+      - 'storage/reference/storage-service/**'
+      - 'storage/reference/storage-core/**'
+      - 'common/url-normalizer/**'
+      - 'storage/reference/externals/azure-sdk/**'
+      - '.github/workflows/storage-service.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - '.github/workflows/docker-image.yml'
+      - '.dockerignore'
+  push:
+    # release/v*: the mirrored release branch in the public repository, whose
+    # pull request is opened with GITHUB_TOKEN and so gets no pull_request run.
+    branches: [main, 'release/v*']
+    paths:
+      - 'storage/reference/storage-service/**'
+      - 'storage/reference/storage-core/**'
+      - 'common/url-normalizer/**'
+      - 'storage/reference/externals/azure-sdk/**'
+      - '.github/workflows/storage-service.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+      - '.github/workflows/docker-image.yml'
+      - '.dockerignore'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: storage/reference/storage-service
+
+  test:
+    # Library unit tests only - 354 of them.
+    #
+    # The integration binaries under storage-service/tests/ stand a service up
+    # against a real environment: 11 of the 20 call get_env(), which resolves
+    # live Azure or S3 configuration and panics without it. They are the same
+    # class as the smoke and conformance suites, which stay out of CI until
+    # those backends are provisioned.
+    #
+    # pubsub::azure::identity is a lib test but needs AZURE_BLOB_STORAGE_* just
+    # the same, so it is skipped within --lib. The L2 metadata cache suite is a
+    # lib test too and does run here, against the Valkey service container.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: storage/reference/storage-service
+      test-args: '--workspace --lib -- --skip pubsub::azure::identity::tests'
+
+  image:
+    # The container image, built with the repository root as the Docker build
+    # context. The filters above already cover storage-core, url-normalizer and
+    # externals/azure-sdk, which is exactly what this build needs -- they are
+    # path dependencies of the workspace and live inside the context, so a
+    # change to any of them can break the image without touching
+    # storage-service/ at all.
+    uses: ./.github/workflows/docker-image.yml
+    with:
+      component: storage-service
+      dockerfile: storage/reference/storage-service/Dockerfile
+      cargo-manifest-dir: storage/reference/storage-service
+      # The Dockerfile defaults to building from its own directory; from the
+      # repository root it needs the component's path.
+      build-args: COMPONENT_DIR=storage/reference/storage-service

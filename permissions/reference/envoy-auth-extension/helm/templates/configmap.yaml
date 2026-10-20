@@ -1,0 +1,96 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ include "envoy-auth-extension.failOnRemovedOpenIdValues" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "envoy-auth-extension.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "envoy-auth-extension.labels" . | nindent 4 }}
+data:
+  envoy-ext-config.toml: |
+    [server]
+    ip_address = "0.0.0.0"
+    port = {{ .Values.service.ports.envoyAuthExt }}
+    username_claims = [{{- range $i, $c := .Values.config.server.usernameClaims }}{{ if $i }}, {{ end }}{{ $c | quote }}{{- end }}]
+    user_id_header = "{{ .Values.config.server.userIdHeader }}"
+    username_header = "{{ .Values.config.server.usernameHeader }}"
+    username_source_claim_header = "{{ .Values.config.server.usernameSourceClaimHeader }}"
+
+    [server.tonic]
+    initial_connection_window_size = 65535
+    initial_stream_window_size = 65535
+    max_decoding_message_size = 4194304
+
+    [logging]
+    level = "{{ .Values.observability.logging.level }}"
+
+    [otel.tracing]
+
+    [otel.metrics]
+
+    [auth]
+    authentication_type = "{{ .Values.openId.tokenVerificationType }}"
+    jwt_audience = {{ include "envoy-auth-extension.jwtAudience" .Values.openId.allowedJwtAudience }}
+    {{- if .Values.openId.allowedJwtIssuers }}
+    jwt_issuers = {{ include "envoy-auth-extension.jwtIssuers" .Values.openId.allowedJwtIssuers }}
+    {{- end }}
+    {{- if .Values.openId.requiredJwtClaims }}
+    jwt_required_claims = {{ include "envoy-auth-extension.jwtRequiredClaims" .Values.openId.requiredJwtClaims }}
+    {{- end }}
+
+    openid_configuration = "{{ .Values.openId.openIdConfigurationUri }}"
+
+    principal_id_claim = "{{ .Values.openId.principalIdClaim }}"
+    max_token_length = {{ .Values.openId.maxTokenLength }}
+
+    {{- $jwtLeeway := int .Values.config.jwtLeeway }}
+    {{- if or (lt $jwtLeeway 0) (gt $jwtLeeway 300) }}
+    {{- fail "config.jwtLeeway must be between 0 and 300 seconds" }}
+    {{- end }}
+    jwt_leeway = {{ $jwtLeeway }}
+
+    token_cache_size = {{ .Values.config.tokenCacheSize }}
+    invalid_token_cache_size = {{ .Values.config.invalidTokenCacheSize }}
+
+    [auth.jwks_ttl]
+    secs = {{ .Values.config.jwksTtl}}
+    nanos = 0
+
+    [auth.jwks_failure_backoff]
+    secs = {{ .Values.config.jwksFailureBackoff }}
+    nanos = 0
+
+    [auth.token_ttl]
+    secs = {{ .Values.config.tokenTtl }}
+    nanos = 0
+
+    [auth.invalid_token_cache_ttl]
+    secs = {{ .Values.config.invalidTokenCacheTtl }}
+    nanos = 0
+
+    [idp_client.connect_timeout]
+    secs = {{ .Values.config.idpConnectTimeout }}
+    nanos = 0
+
+    [idp_client.request_timeout]
+    secs = {{ .Values.config.idpRequestTimeout }}
+    nanos = 0
+
+    [idp_client.pool_idle_timeout]
+    secs = {{ .Values.config.idpPoolIdleTimeout }}
+    nanos = 0

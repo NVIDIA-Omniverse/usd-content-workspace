@@ -1,0 +1,2 @@
+[run]
+omit = nvidia/omniverse/notification_service/**, proto

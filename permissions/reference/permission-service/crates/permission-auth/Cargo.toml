@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "permission-auth"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+publish = ["ct-omniverse-cargo-local"]
+
+[dependencies]
+clap = { workspace = true, features = ["derive", "env"] }
+jsonwebtoken = { workspace = true }
+humantime = { workspace = true }
+moka = { workspace = true, features = ["future"] }
+permission-core = { workspace = true }
+reqwest = { workspace = true, features = ["json", "default-tls"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true, features = ["parsing"] }
+tokio = { workspace = true }
+tonic = { workspace = true, optional = true }
+tracing = { workspace = true }
+
+[features]
+# Outbound gRPC client auth interceptors built on top of `service_identity`.
+grpc = ["dep:tonic", "tokio/fs", "tokio/sync", "tokio/time"]
+
+[dev-dependencies]
+tempfile = "3.26.0"
+tokio = { workspace = true, features = ["macros", "rt"] }
+wiremock = "0.6.5"

@@ -1,0 +1,11 @@
+[workspace]
+members = [
+  "codegen",
+  "openapi",
+  "azure-autorust",
+]
+
+resolver = "2"
+
+[workspace.lints]
+

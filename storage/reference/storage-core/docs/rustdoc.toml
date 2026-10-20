@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[rustdoc]
+# Enable all features for better documentation
+all-features = true
+
+# Include private items in documentation
+document-private-items = true
+
+# Show source code
+show-coverage = true
+
+# Enable search index
+generate-search-index = true
+
+# Enable redirect pages
+enable-index-page = true
+
+# Set the theme
+default-theme = "ayu"
+
+# Additional CSS for better styling
+css = "docs/custom.css"

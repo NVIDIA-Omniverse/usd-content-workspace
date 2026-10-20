@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.channelPoolAutoscaling.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}-autoscaler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "event-consumer-service.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: autoscaler
+  template:
+    metadata:
+      labels:
+        {{- include "event-consumer-service.labels" . | nindent 8 }}
+        app.kubernetes.io/component: autoscaler
+    spec:
+      {{- include "event-consumer-service.imagePullSecrets" ( dict "images" (list .Values.image) "global" .Values) | nindent 6 }}
+      serviceAccountName: {{ include "event-consumer-service.fullname" . }}-autoscaler
+      automountServiceAccountToken: true
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: autoscaler
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: OMNI_EVENTS_MODE
+              value: "scaler"
+            - name: OMNI_EVENTS_SCALER_TARGET_DEPLOYMENT
+              value: {{ include "event-consumer-service.fullname" . }}
+            - name: OMNI_EVENTS_SCALER_TARGET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OMNI_EVENTS_SCALER_TARGET_LABEL_SELECTOR
+              value: "app.kubernetes.io/name={{ include "event-consumer-service.name" . }},app.kubernetes.io/component!=autoscaler"
+            - name: OMNI_EVENTS_SCALER_METRICS_PORT
+              value: "{{ .Values.service.rest.port }}"
+            - name: OMNI_EVENTS_SCALER_MIN_AVAILABLE_CAPACITY
+              value: "{{ .Values.channelPoolAutoscaling.minAvailableCapacity }}"
+            - name: OMNI_EVENTS_SCALER_MIN_REPLICAS
+              value: "{{ .Values.channelPoolAutoscaling.minReplicas }}"
+            - name: OMNI_EVENTS_SCALER_MAX_REPLICAS
+              value: "{{ .Values.channelPoolAutoscaling.maxReplicas }}"
+            - name: OMNI_EVENTS_SCALER_POLL_INTERVAL_HOT_SECONDS
+              value: "{{ .Values.channelPoolAutoscaling.pollIntervalHotSeconds }}"
+            - name: OMNI_EVENTS_SCALER_POLL_INTERVAL_COLD_SECONDS
+              value: "{{ .Values.channelPoolAutoscaling.pollIntervalColdSeconds }}"
+            - name: OMNI_EVENTS_SCALER_SCALE_UP_COOLDOWN_SECONDS
+              value: "{{ .Values.channelPoolAutoscaling.scaleUpCooldownSeconds }}"
+            - name: OMNI_EVENTS_SCALER_SCALE_DOWN_COOLDOWN_SECONDS
+              value: "{{ .Values.channelPoolAutoscaling.scaleDownCooldownSeconds }}"
+            - name: OMNI_EVENTS_SCALER_SCALE_DOWN_WINDOW_SECONDS
+              value: "{{ .Values.channelPoolAutoscaling.scaleDownWindowSeconds }}"
+            - name: OMNI_EVENTS_SCALER_POST_SCALE_UP_STABILIZATION_SECONDS
+              value: "{{ .Values.channelPoolAutoscaling.postScaleUpStabilizationSeconds }}"
+            - name: OMNI_EVENTS_SCALER_LOG_LEVEL
+              value: "{{ .Values.logging.level }}"
+          resources:
+            {{- toYaml .Values.channelPoolAutoscaling.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

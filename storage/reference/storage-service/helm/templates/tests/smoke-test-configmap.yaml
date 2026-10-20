@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ if .Values.tests.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "storage-service.fullname" . }}-smoke-tests
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed,before-hook-creation
+data:
+  # Empty __init__.py for Python package structure (mounted multiple times)
+  __init__.py: ""
+
+  # Test files
+  pytest.ini: |
+{{ .Files.Get "files/tests/pytest.ini" | indent 4 }}
+  conftest.py: |
+{{ .Files.Get "files/tests/conftest.py" | indent 4 }}
+  utils.py: |
+{{ .Files.Get "files/tests/utils.py" | indent 4 }}
+  storage_grpc_helpers.py: |
+{{ .Files.Get "files/tests/storage_grpc_helpers.py" | indent 4 }}
+  storage_rest_helpers.py: |
+{{ .Files.Get "files/tests/storage_rest_helpers.py" | indent 4 }}
+  test_storage_grpc.py: |
+{{ .Files.Get "files/tests/smoke-tests/test_storage_grpc.py" | indent 4 }}
+  test_storage_rest.py: |
+{{ .Files.Get "files/tests/smoke-tests/test_storage_rest.py" | indent 4 }}
+
+  # Pre-generated gRPC stubs - Capabilities
+  capabilities_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/capabilities/v1alpha/capabilities_pb2.py" | indent 4 }}
+  capabilities_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/capabilities/v1alpha/capabilities_pb2_grpc.py" | indent 4 }}
+
+  # Pre-generated gRPC stubs - FileFolder
+  filefolder_service_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/filefolder/v1alpha/filefolder_service_pb2.py" | indent 4 }}
+  filefolder_service_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/filefolder/v1alpha/filefolder_service_pb2_grpc.py" | indent 4 }}
+
+  # Pre-generated gRPC stubs - FileObject
+  fileobject_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_pb2.py" | indent 4 }}
+  fileobject_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_pb2_grpc.py" | indent 4 }}
+  fileobject_service_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_service_pb2.py" | indent 4 }}
+  fileobject_service_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_service_pb2_grpc.py" | indent 4 }}
+
+  # Pre-generated gRPC stubs - Metadata
+  metadata_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/metadata/v1alpha/metadata_pb2.py" | indent 4 }}
+  metadata_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/metadata/v1alpha/metadata_pb2_grpc.py" | indent 4 }}
+
+  # Pre-generated gRPC stubs - Versioning
+  versioning_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/versioning/v1alpha/versioning_pb2.py" | indent 4 }}
+  versioning_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/storage/versioning/v1alpha/versioning_pb2_grpc.py" | indent 4 }}
+{{- end }}

@@ -1,0 +1,229 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+## Local development values for event-consumer-service
+## These values override the defaults in values.yaml for local testing
+
+## Container image configuration for local development
+image:
+  ## @param image.repository Local image repository name
+  ## Type: string. For local development builds.
+  repository: event-consumer-service
+  ## @param image.pullPolicy Never pull, use local image only
+  ## Type: string. Set to Never for local development.
+  pullPolicy: Never
+  ## @param image.tag Local image tag
+  ## Type: string. Tag for local development builds.
+  tag: "local"
+
+## @param imagePullSecrets No pull secrets needed for local images
+## Type: array. Empty for local development.
+imagePullSecrets: []
+
+## Service configuration for local development
+service:
+  ## gRPC service configuration
+  grpc:
+    ## @param service.grpc.port gRPC service port for local development
+    ## Type: integer. Uses 50052 to avoid conflicts with other services.
+    port: 50052
+  ## REST API service configuration
+  rest:
+    ## @param service.rest.enabled Enable REST API for local development
+    ## Type: boolean. Enabled for local testing.
+    enabled: true
+
+## Logging configuration for local development
+logging:
+  ## @param logging.level Debug logging level for local development
+  ## Type: string. Set to DEBUG for detailed local logs.
+  level: DEBUG
+
+## @param envSecretName Name of the Kubernetes secret for local environment
+## Type: string. Must be created locally with rabbitmq_uri and redis_uri.
+envSecretName: event-consumer-env
+
+## @param principalSource Authentication mode for the local tokenless harness
+## Type: string. Set to "disabled" so the service does not install auth
+## middleware and accepts tokenless requests. This supersedes the old
+## openId.enabled: false mechanism for disabling authentication.
+principalSource: disabled
+
+## OpenID Connect configuration for local development (infrastructure-only)
+## openId.* no longer gates application-level authentication — that is selected
+## by principalSource (above). This block supplies the OIDC config data that the
+## "jwt"/"opaque" principalSource modes consume, plus the ingress-level Envoy
+## auth-extension wiring (gated on openId.enabled). The local tokenless harness
+## keeps principalSource: disabled and leaves this block commented out; to
+## exercise token validation locally, set principalSource to "jwt"/"opaque" and
+## uncomment the OIDC parameters below.
+# openId:
+#   enabled: true
+#   tokenVerificationType: "jwt"
+#   openIdConfigurationUri: "https://login.microsoftonline.com/<tenant-id>/.well-known/openid-configuration"
+#   clientRegistrations:
+#     - name: "default"
+#       clientId: "<client-id>"
+#       scope: "openid profile email"
+#   additionalJwtAudience: []
+
+## Permissions configuration for local development
+permissions:
+  ## @param permissions.endpoint Permissions API endpoint for local dev
+  ## Type: string. Points to dev environment permissions service.
+#  endpoint: "https://permissions.example.com"
+  ## @param permissions.ttl_seconds Permissions cache TTL for local dev
+  ## Type: integer. 10 minutes for local development.
+  ttl_seconds: 600
+  ## @param permissions.yaml_file_path Path to permissions YAML for local dev
+  ## Type: string. Standard path for permissions configuration.
+  yaml_file_path: "/app/config/permissions.yaml"
+  ## @param permissions.storage_permissions.endpoints Storage-service endpoints for local dev
+  ## Type: array of strings. Rendered into the permissions YAML file as
+  ## storage_permissions_endpoints. Consulted only when
+  ## permissions.storage_permissions.enabled is true.
+#  storage_permissions:
+#    endpoints:
+#      - "https://storage.example.com"
+  ## @param permissions.content Permissions YAML content for local dev
+  ## Type: string (YAML). Defines event_permissions.
+#  content: |-
+#    event_permissions: []
+
+## RabbitMQ connection pool configuration
+rabbitmq:
+  ## @param rabbitmq.channel_client_limit Target number of clients per channel
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_CLIENT_LIMIT env var.
+  ## Chart default: 8. Set to 1 for local development. A packing target on the
+  ## non-durable pool and a strict bound on the durable one; see the chart
+  ## values.yaml entry for the full soft-threshold picture.
+  channel_client_limit: 1
+  ## @param rabbitmq.channel_pool_size Maximum size of the RabbitMQ channel pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_SIZE env var.
+  ## Chart default: 100
+  channel_pool_size: 8
+  ## @param rabbitmq.channel_pool_min_size Minimum size of the RabbitMQ channel pool
+  ## Type: integer. Maps to OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_MIN_SIZE env var.
+  ## Chart default: 75
+  channel_pool_min_size: 5
+  ## @param rabbitmq.readiness_min_available_channels Minimum available channels
+  ## for the readiness probe to pass.
+  ## Type: integer. Maps to OMNI_EVENTS_READINESS_MIN_AVAILABLE_CHANNELS env var.
+  ## Chart default: 80. Set low for local dev with a small pool.
+  readiness_min_available_channels: 3
+  ## rabbitmq.channel_prefetch_count is inherited at the chart default (15); the
+  ## local admission band below derives from it. The other newly-templated keys
+  ## (the durable pool five, channel_wait_ms, durable_consumer_prefetch_count,
+  ## broker_stream_memory_budget_mib) are also inherited at their chart defaults --
+  ## none needs a dev override.
+  ## @param rabbitmq.max_non_durable_streams_per_pod Absolute per-pod non-durable stream cap
+  ## Type: integer or null. Maps to OMNI_EVENTS_MAX_NON_DURABLE_STREAMS_PER_POD env var.
+  ## Chart default: null (COMPUTED from broker_stream_memory_budget_mib and
+  ## channel_prefetch_count). Deliberate dev override: with the inherited chart
+  ## budget (1024 MiB) and prefetch (15) the computed cap would be ~3,342 streams
+  ## per pod -- unreachable on a tiny Docker Desktop broker and far above this
+  ## overlay's 8-slot pool, so the shed tier would never be observable. Pinning an
+  ## explicit small cap keeps the local admission band walkable within one dev
+  ## session: soft threshold 8 (channel_pool_size 8 x channel_client_limit 1),
+  ## shed threshold 14 (= 8 + (20 - 8) // 2), cap 20. The override wins
+  ## unconditionally, so this triple is exact.
+  max_non_durable_streams_per_pod: 20
+
+## Event-queue bounds policy hook.
+policyHook:
+  ## @param policyHook.enabled Apply the event-queue bounds policy on install and upgrade
+  ## Type: boolean. Chart default: true. Deliberate dev override: the hook is
+  ## fail-closed and would fail every local release, because it needs a
+  ## management-API base URL and a Secret holding a policymaker credential that
+  ## the local Docker Desktop setup does not provision. Local runs exercise the
+  ## service, not broker policy.
+  ##
+  ## To exercise the hook locally against the dev-compose broker, set this back
+  ## to true and supply the three required values, e.g.:
+  ##   policyHook:
+  ##     enabled: true
+  ##     managementApi:
+  ##       baseUrl: "http://rabbitmq.default.svc.cluster.local:15672"
+  ##       vhost: "/"
+  ##       existingSecret:
+  ##         name: rabbitmq-admin
+  enabled: false
+
+## Channel Pool Autoscaling configuration
+## This autoscaler scales based on available channel pool capacity, which is the
+## appropriate metric for this service since it has a fixed channel pool capacity.
+## When enabled, this deploys a lightweight autoscaler pod that monitors
+## available capacity across all service pods and scales accordingly.
+## IMPORTANT: This requires service.rest.enabled to be true for the metrics endpoint.
+channelPoolAutoscaling:
+  ## @param channelPoolAutoscaling.enabled Enable channel pool-based autoscaling
+  ## Type: boolean. Default: true
+  enabled: true
+  ## @param channelPoolAutoscaling.minReplicas Minimum number of replicas
+  ## Type: integer. Chart default: 3. Deliberate dev override: a 3-pod floor is
+  ## wasteful on Docker Desktop and would start every local run already at the
+  ## floor, where scale-down can never be observed.
+  minReplicas: 1
+  ## @param channelPoolAutoscaling.maxReplicas Maximum number of replicas
+  ## Type: integer. Default: 10
+  maxReplicas: 10
+  ## @param channelPoolAutoscaling.minAvailableCapacity Minimum available client slots
+  ## Type: integer (non-durable stream slots). Chart default: 800. Deliberate dev
+  ## override sized to this overlay's tiny pool: the effective per-pod
+  ## scaling-signal capacity here is 5 slots (channel_pool_size 8 *
+  ## channel_client_limit 1 - readiness_min_available_channels 3), so a value of
+  ## 2 puts the scale-up trigger and the scale-down deadband (2 + 5 = 7 slots)
+  ## within reach of a handful of local streams.
+  minAvailableCapacity: 2
+  ## @param channelPoolAutoscaling.pollIntervalHotSeconds Polling interval when scaling
+  ## Type: float. Default: 2.0. Fast polling when recently scaled or under load.
+  pollIntervalHotSeconds: 2.0
+  ## @param channelPoolAutoscaling.pollIntervalColdSeconds Polling interval when idle
+  ## Type: float. Default: 15.0. Slower polling when the system is stable.
+  pollIntervalColdSeconds: 15.0
+  ## @param channelPoolAutoscaling.scaleUpCooldownSeconds Cooldown after scale up
+  ## Type: integer. Default: 10. Wait time before another scale up.
+  scaleUpCooldownSeconds: 10
+  ## @param channelPoolAutoscaling.scaleDownCooldownSeconds Cooldown after scale down
+  ## Type: integer (seconds). Chart default: 1800. Deliberate dev override: a
+  ## 30-minute cooldown outlasts a local session, making a second scale-down
+  ## unobservable under /deploy-local.
+  scaleDownCooldownSeconds: 300
+  ## @param channelPoolAutoscaling.scaleDownWindowSeconds Scale-down smoothing window
+  ## Type: integer (seconds). Chart default: 300. Deliberate dev override: the
+  ## overlay runs with autoscaling enabled, and any key it does not set is
+  ## inherited, so a 5-minute trailing minimum would suppress every local
+  ## scale-down. 30 seconds keeps the smoothing behavior exercisable within a
+  ## dev session. 0 would disable smoothing entirely.
+  scaleDownWindowSeconds: 30
+  ## @param channelPoolAutoscaling.postScaleUpStabilizationSeconds Post-scale-up hold
+  ## Type: integer (seconds). Chart default: 600. Deliberate dev override, same
+  ## reasoning: a 10-minute post-scale-up hold outlasts a local scale-up/
+  ## scale-down cycle. 60 seconds stays at or above scaleDownWindowSeconds, as
+  ## the chart default's ratio does, while remaining far shorter than a dev
+  ## session. 0 would disable the stabilization window entirely.
+  postScaleUpStabilizationSeconds: 60
+  ## Higher resources locally to avoid slow startup on Docker Desktop
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+## Liveness probe configuration for local development
+livenessProbe:
+  ## @param livenessProbe.grpc.port gRPC port for liveness probe
+  ## Type: integer. Matches service.grpc.port for local dev.
+  grpc:
+    port: 50052
+
+## Readiness probe configuration for local development
+readinessProbe:
+  ## @param readinessProbe.grpc.port gRPC port for readiness probe
+  ## Type: integer. Matches service.grpc.port for local dev.
+  grpc:
+    port: 50052
+  periodSeconds: 3
+  failureThreshold: 1

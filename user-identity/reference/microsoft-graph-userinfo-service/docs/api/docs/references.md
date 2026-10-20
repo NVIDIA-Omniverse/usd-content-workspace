@@ -1,0 +1,22 @@
+(userinfo-api-references-title)=
+# Reference Documents
+
+- [Microsoft Graph API overview](https://learn.microsoft.com/en-us/graph/overview)
+- [Microsoft identity platform — ID token claims reference](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference)
+- [Okta Management API](https://developer.okta.com/docs/api/)
+- [Okta OIDC token claims reference](https://developer.okta.com/docs/reference/api/oidc/#token-claims-for-openid-connect)
+- [Google Admin SDK Directory API](https://developers.google.com/admin-sdk/directory/v1/guides)
+- [Google Identity — OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
+- [RFC 7644 — SCIM 2.0 (System for Cross-domain Identity Management)](https://datatracker.ietf.org/doc/html/rfc7644)
+- [RFC 7643 — SCIM 2.0 Core Schema](https://datatracker.ietf.org/doc/html/rfc7643)
+- [RFC 4511 — LDAP (Lightweight Directory Access Protocol)](https://datatracker.ietf.org/doc/html/rfc4511)
+- [OpenID Connect Core 1.0 — UserInfo endpoint (§5.3)](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo)
+- [OpenID Connect Core 1.0 — full specification](https://openid.net/specs/openid-connect-core-1_0.html)
+- [OAuth 2.0 Authorization Framework (RFC 6749)](https://datatracker.ietf.org/doc/html/rfc6749)
+- [JSON Web Token — JWT (RFC 7519)](https://datatracker.ietf.org/doc/html/rfc7519)
+- [OpenAPI Specification 3.0.3](https://spec.openapis.org/oas/v3.0.3)
+- [Protocol Buffers Language Guide (proto3)](https://protobuf.dev/programming-guides/proto3/)
+- [gRPC documentation](https://grpc.io/docs/)
+- [NVIDIA Omniverse platform](https://www.nvidia.com/en-us/omniverse/)
+- [Universal Scene Description (USD)](https://openusd.org)
+- [NVIDIA Nucleus documentation](https://docs.omniverse.nvidia.com/nucleus/)

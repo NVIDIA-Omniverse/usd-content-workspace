@@ -1,0 +1,456 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Set image to appropriate container source
+## Container image configuration
+image:
+  ## @param image.repository Discovery Service container image repository
+  ## Type: string. Required. Default: "nginx"
+  repository: "nginx"
+  ## @param image.pullPolicy Image pull policy
+  ## Type: string. Allowed values: Always, Never, IfNotPresent. Default: IfNotPresent
+  pullPolicy: IfNotPresent
+  ## @param image.tag Image tag to deploy
+  ## Type: string. Required. Overrides the chart appVersion.
+  tag: "1.31"
+  ## @param image.pullSecrets Pull secrets for images.
+  ## Default: none
+  ## Optional.
+  pullSecrets:
+      # - name: secret
+      # - name: secret
+      # ...
+
+
+# Discovery Service configuration
+## @param discovery Object holding discovery service configuration
+discovery:
+  ## @param discovery.services List of services to be registered by the discovery service.
+  ## Each service should define:
+  ##  - id: Unique string identifier for the service
+  ##  - name: Human readable name of the service
+  ##  - type: Logical type/category of the service ('storage', 'notification-aggregation', etc.)
+  ##  - endpoints: a dict listing GRPC and REST endpoints, with following fields:
+  ##     - host
+  ##     - port
+  ##     - path
+  ##     - tls (boolean)
+  ##
+  ##    If hostname is non-empty, the URL will be constructed as:
+  ##    http[s]://{host}[:{port}]/{path}. The port is omitted when empty, allowing
+  ##    clients to use the scheme's default port. `http` vs. `https` schema will
+  ##    be determined based on the `tls` boolean.
+  ##  
+  ##    If `hostname` is empty and httpProxy is disabled (as in defaults below), 
+  ##    default internal service FQDNs will be used for each service, for example, 
+  ##
+  ##    http://storage-service.<namespace>.svc.cluster.local:8011
+  ## 
+  ##    for Storage Service's GRPC endpoint. 
+  ##
+  ##    If ingress (httpProxy) is enabled, default hostnames will be 
+  ##    <servicename>.<httpProxy.domain>, default port will be httpProxy.port, 
+  ##    and tls flag will be taken from httpProxy.tls. 
+  ##    
+
+  services:
+    - id: "storage-service-01"
+      name: "Storage Service"
+      type: "storage"
+      endpoints:
+        grpc:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+        rest:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+
+    - id: "event-aggregation-service-01"
+      name: "Event Aggregation Service"
+      type: "notification-aggregation"
+      endpoints:
+        grpc:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+        rest:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+
+    - id: "event-consumer-service-01"
+      name: "Event Consumer Service"
+      type: "notification-consumer"
+      endpoints:
+        grpc:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+        rest:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+
+    - id: "permission-service-01"
+      name: "Permission Service"
+      type: "permission"
+      endpoints:
+        grpc:
+          host: ""
+          port: ""
+          path: ""
+          tls: false
+        rest:
+          host: "" 
+          port: ""
+          path: ""
+          tls: false
+
+    - id: "userinfo-service-01"
+      name: "User Info Service"
+      type: "userinfo"
+      endpoints:
+        grpc:
+          host: ""
+          port: ""
+          path: ""
+          tls: false
+        rest:
+          host: ""
+          port: ""
+          path: ""
+          tls: false
+
+    - id: "thumbnail-service-01"
+      name: "Thumbnail Service"
+      type: "thumbnail"
+      endpoints:
+        grpc:
+          host: ""
+          port: ""
+          path: ""
+          tls: false
+        rest:
+          host: ""
+          port: ""
+          path: ""
+          tls: false
+
+    - id: "live-edit-service-01"
+      name: "Live Edit Service"
+      type: "live-edit"
+      endpoints:
+        grpc:
+          host: ""
+          port: ""
+          path: ""
+          tls: false
+
+
+          
+# Enable external ingress via Contour's `httpproxy` objects
+httpProxy:
+
+  enabled: false
+
+  # Final ingress hostname will be composed as "<host>.<domain>". 
+  #
+  # By default, the configuration is that discovery runs on `domain` 
+  # (ie, `my-storage-apis.company.com`), whereas all services will run on 
+  # their respective hostnames in that domain 
+  # (ie, `storage.my-storage-apis.company.com`, `auth.my-storage-apis.company.com`, etc.).
+  #
+  # This allows a natural way to understand the layout, where users connect to the "root" 
+  # (`my-storage-apis.company.com`).
+  #
+  #
+  # Hence, here, the default value for `host` is empty. 
+  #
+
+  fqdn:
+    host:   "" 
+    domain: "nodomain.none" 
+
+  port: ""
+  path: "/"
+
+  # Root Redirect is useful if web browser based Clients are expected. 
+  # 
+  # Since Discovery itself runs on a subpath (https://fqdn/disco/api/path), 
+  # the root (https://fqdn/) can be set up to redirect to a default 
+  # web UI / web page / welcome page / similar entity - for example, 
+  # Storage Navigator. 
+  #
+  # This allows uniform user experience, where Clients - both applications 
+  # using Discovery as their entrypoints into Storage API stack, as well as 
+  # web browsers, can connect to `https://fqdn` and receive an expected 
+  # response. 
+
+  rootRedirect:
+    enabled: false
+    target: 
+      fqdn: ""
+      statusCode: 302
+      path: "/"
+
+  tls: 
+    enabled: false 
+    secretName: "" # Name of secret containing the TLS cert 
+
+    # If enabled, will create a Certificate resource for CertManager, using either default TLS
+    # secret name or one above (httpProxy.tls.secretName) if specified. 
+    #
+    # This secret will be added as tls.secretName of the httpProxy CR for Contour.
+    # 
+    certManager: 
+      enabled: false
+      issuerRef: 
+        name: my-issuer
+        kind: my-issuer-kind
+
+  # Verbatim CORSPolicy setting of Envoy's HTTPProxy object.
+  corsPolicy:
+    allowCredentials: false
+    allowOrigin: 
+      - "*" 
+    allowHeaders: 
+      - "*" 
+    allowMethods:
+      - 'GET'
+    exposeHeaders:
+      - "*"
+
+  # Timeouts - will be passed verbatim to httpProxy object(s) generated
+
+  timeoutPolicy:
+    # Timeout for receiving a response from the server after processing
+    # a request from client. Applies to both httpProxy -> backend, 
+    # as well as Client -> httpProxy connections.
+
+    response: "10s"
+
+    # Timeout for how long the proxy should wait while there is
+    # no activity during single request/response (for HTTP/1.1) or
+    # stream (for HTTP/2)
+    idle: "3s"
+
+  # Additional annotations for HTTPProxy resource
+  annotations: {}
+
+  # Configuration of Envoy auth extension for
+  # this service.
+  authExtension:  
+    enabled: false
+
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+
+    responseTimeout: 2s
+
+ 
+
+## OpenID IDP and related auth settings.
+## Only OpenID integration supported at this point 
+openId: 
+  enabled: false
+
+  # Description of authentication environment returned to Clients via .../auth-config URI
+  description: "OpenID Authentication"
+
+  # OpenID Configuration URI returned to Clients via .../auth-config URI
+  openIdConfigurationUri: "https://...."
+
+
+  # Client registrations, will be used to populate  "clients" key of the JSON structure 
+  # returned at ..../auth-config URI of this service.
+  clientRegistrations:
+
+    # Default should be always present
+    # Note that if "navigator" and "client_library" Client types are not present, 
+    # they will be automatically populated using `clientId` and `scope` of `default` client.
+
+    - name: "default"
+      clientId: "some_client_id"
+      scope: "a b c"
+
+
+## Service configuration
+service:
+  ## @param service.type Kubernetes service type. Allowed values: ClusterIP, NodePort, LoadBalancer
+  ## Type: string. Default: ClusterIP
+  type: ClusterIP
+
+  ## @param service.tls Enable TLS for the service
+  ## Type: bool. Default: false
+  tls: false
+
+  ## @param service.annotations Additional annotations for the service
+  annotations: {}
+
+  ## @param service.nameOverride An override for default service names.
+  ## Optional.
+  nameOverride: ""
+
+  ## @param service.ports Ports to expose for the service
+  ## Type: integer. Default: 8080
+  ports:
+    http: 8080
+
+## @param replicaCount Number of Event Consumer Service replicas to deploy
+## Type: integer. Default: 1. Optional.
+replicaCount: 1
+
+## @param nameOverride String to override the chart name
+## Type: string. Optional. Default: ""
+nameOverride: ""
+
+## @param fullnameOverride String to fully override the generated name
+## Type: string. Optional. Default: ""
+fullnameOverride: ""
+
+## @param podAnnotations Annotations to add to the pod
+## Type: object. Optional. Default: {}
+podAnnotations: {}
+
+## @param podLabels Labels to add to the pod
+## Type: object. Optional. Default: {}
+podLabels: {}
+
+## @param podSecurityContext Security context for the pod
+## Type: object. Optional. Default: {}
+## Example: { fsGroup: 2000 }
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+## @param securityContext Security context for the container
+## Type: object. Optional. Default: {}
+## Example: { capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+
+## @param resources Resource limits and requests for the container
+## Type: object. Optional. Default: sensible defaults for production use.
+## Example: { limits: { cpu: "100m", memory: "128Mi" },
+##           requests: { cpu: "100m", memory: "128Mi" } }
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+## Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+## Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+## Horizontal Pod Autoscaler configuration
+autoscaling:
+  ## @param autoscaling.enabled Enable Horizontal Pod Autoscaler
+  ## Type: boolean. Default: false
+  enabled: false
+  ## @param autoscaling.minReplicas Minimum number of replicas
+  ## Type: integer. Default: 1
+  minReplicas: 1
+  ## @param autoscaling.maxReplicas Maximum number of replicas
+  ## Type: integer. Default: 100
+  maxReplicas: 100
+  ## @param autoscaling.targetCPUUtilizationPercentage Target CPU utilization
+  ## Type: integer. Optional. Default: 80
+  targetCPUUtilizationPercentage: 80
+  ## @param autoscaling.targetMemoryUtilizationPercentage Target memory utilization
+  ## Type: integer. Optional. Default: unset
+  # targetMemoryUtilizationPercentage: 80
+
+## @param volumes Additional volumes to add to the deployment
+## Type: array of objects. Optional. Default: []
+## Example: [{ name: foo, secret: { secretName: mysecret, optional: false } }]
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+## @param volumeMounts Additional volume mounts to add to the container
+## Type: array of objects. Optional. Default: []
+## Example: [{ name: foo, mountPath: "/etc/foo", readOnly: true }]
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+## @param nodeSelector Node labels for pod assignment
+## Type: object. Optional. Default: {}
+## Example: { disktype: ssd }
+nodeSelector: {}
+
+## @param tolerations Tolerations for pod assignment
+## Type: array of objects. Optional. Default: []
+## Example: [{ key: "key1", operator: "Equal", value: "value1", effect: "NoSchedule" }]
+tolerations: []
+
+## @param affinity Affinity rules for pod assignment
+## Type: object. Optional. Default: {}
+## Example: { nodeAffinity: {...}, podAffinity: {...}, podAntiAffinity: {...} }
+affinity: {}
+
+## Smoke test base image configuration
+## Used for running helm test without building a custom test image.
+smokeTest:
+  ## @param smokeTest.enabled Enable smoke test job
+  enabled: false
+  image:
+    ## @param smokeTest.image.repository Smoke test base image repository
+    repository: nvcr.io/nvidia/omniverse/smoke-test-base
+    ## @param smokeTest.image.tag Smoke test base image tag
+    tag: "1.0.1"
+    ## @param smokeTest.image.pullPolicy Image pull policy. Allowed values: Always, IfNotPresent, Never
+    pullPolicy: IfNotPresent
+    ## @param smokeTest.image.pullSecrets Pull secrets for the smoke test image
+    pullSecrets: []
+    #  - name: secret

@@ -1,0 +1,9 @@
+[workspace]
+members = [
+  "mgmt/batch",
+  "svc/blobstorage",
+]
+
+resolver = "2"
+
+[workspace.lints]

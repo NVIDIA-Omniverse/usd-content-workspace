@@ -1,0 +1,189 @@
+# Reusable: run one Rust component's test suite.
+#
+# Scope is deliberately narrow for now: the tests that need no external
+# services. Suites that require a live database, message broker or cloud
+# storage backend stay out of CI until those dependencies are provisioned.
+# Widening this — Postgres and Redis are available here as service containers —
+# is the next step, not a thing to guess at.
+
+name: rust-test
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: Path to the component's workspace root, relative to the repository root.
+        required: true
+        type: string
+      test-args:
+        description: >-
+          Arguments passed to the test runner. Defaults to the whole workspace;
+          components override it to exclude suites that need live services.
+          Note that with nextest: true this is passed to `cargo nextest run`,
+          whose filter syntax differs from libtest's (`-E` expressions rather
+          than a trailing `-- --skip`).
+        required: false
+        default: '--workspace'
+        type: string
+      nextest:
+        description: >-
+          Run the suite under `cargo nextest run` instead of `cargo test`, and
+          run the doctests separately with `cargo test --doc`.
+
+          This is not a preference. A suite needs it when its tests install
+          process-global state that only one of them can own. common/observability
+          is the case in hand: every test builds a tracing subscriber, and
+          otel-tools' builder ends in
+          `tracing::subscriber::set_global_default(...).expect(...)`. The global
+          default can be set once per process, so under `cargo test` -- one
+          process, all tests -- the first test wins and every later one panics
+          with "a global default trace dispatcher has already been set".
+          `--test-threads=1` does not help: the conflict is over a per-process
+          global, not a race between threads. nextest forks a process per test,
+          so each one gets its own global and the suite passes.
+
+          Leave this false unless a component demonstrably needs it: nextest
+          cannot run doctests (nextest-rs/nextest#16), so the doctests move to a
+          second `cargo test --doc` invocation and lose the shared compilation.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ inputs.nextest && 'cargo nextest' || 'cargo test' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # Postgres is started for every component rather than conditionally: a
+    # reusable workflow cannot take `services` as an input, and the container
+    # costs a few seconds for those that do not use it. permission-service's
+    # permission-db suite is the current consumer -- 69 tests that fail closed
+    # without it.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: permissions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # storage-service's L2 metadata cache suite reads REDIS_HOST/REDIS_PORT.
+      #
+      # Valkey 9, matching what the source repository's own CI runs. Not
+      # redis:7: the cache writes with `SET ... IFEQ`, a compare-and-set that
+      # only exists from Redis 8 / Valkey 8 onwards, and an older server rejects
+      # the whole Lua script with a bare "ERR syntax error ... on @user_script:1"
+      # that says nothing about the missing feature.
+      redis:
+        image: valkey/valkey:9.1.0-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # The permission-db tests read these directly; they connect on the
+      # default port, so the service is published on 5432.
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DBNAME: permissions
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+      # Debug info dominates the size of a Rust test build and is of no use to
+      # a CI run that only reports pass or fail. Dropping it shrinks target/
+      # substantially, which is the difference between fitting on a hosted
+      # runner and not.
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+
+    steps:
+      # storage-service plus the vendored Azure SDK exhausts the ~14 GB a hosted
+      # runner leaves free once every test target is built. Reclaim the large
+      # preinstalled toolchains we do not use before starting; this is worth
+      # roughly 25 GB and is cheaper than owning runners.
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+      - uses: actions/checkout@v4
+
+      # libprotobuf-dev as well as the compiler: on Debian the well-known types
+      # (google/protobuf/any.proto and friends) ship in the -dev package, and
+      # build scripts that import them fail without it.
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
+          protoc --version
+          test -f /usr/include/google/protobuf/any.proto
+
+      - name: Show toolchain
+        working-directory: ${{ inputs.component }}
+        run: |
+          rustup show active-toolchain || true
+          cargo --version
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ${{ inputs.component }}/target
+          key: cargo-test-${{ runner.os }}-${{ inputs.component }}-${{ hashFiles(format('{0}/**/Cargo.toml', inputs.component), format('{0}/Cargo.lock', inputs.component)) }}
+          restore-keys: |
+            cargo-test-${{ runner.os }}-${{ inputs.component }}-
+
+      # The pre-built binary rather than `cargo install --locked
+      # cargo-nextest`: the latter compiles the runner from source on every
+      # cache miss, which costs minutes and is pure overhead for a tool we only
+      # ever invoke. get.nexte.st is the project's own documented CI install.
+      - name: Install cargo-nextest
+        if: ${{ inputs.nextest }}
+        run: |
+          curl -LsSf https://get.nexte.st/latest/linux \
+            | tar zxf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+          cargo nextest --version
+
+      - name: cargo test
+        if: ${{ !inputs.nextest }}
+        working-directory: ${{ inputs.component }}
+        # Passed through the environment so the shell treats it as data, not script.
+        env:
+          TEST_ARGS: ${{ inputs.test-args }}
+        run: cargo test ${TEST_ARGS}
+
+      - name: cargo nextest run
+        if: ${{ inputs.nextest }}
+        working-directory: ${{ inputs.component }}
+        env:
+          TEST_ARGS: ${{ inputs.test-args }}
+        run: cargo nextest run ${TEST_ARGS}
+
+      # nextest cannot run doctests (nextest-rs/nextest#16), so they need their
+      # own pass. `cargo test --doc` only ever builds and runs doctests, so it
+      # does not re-run -- or re-trip over -- the suite nextest just executed.
+      - name: cargo test --doc
+        if: ${{ inputs.nextest }}
+        working-directory: ${{ inputs.component }}
+        run: cargo test --doc --workspace

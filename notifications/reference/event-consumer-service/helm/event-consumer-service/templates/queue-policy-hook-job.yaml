@@ -1,0 +1,250 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.policyHook.enabled }}
+{{- /*
+Deployment contract, enforced instead of documented. The hook cannot reach a
+broker it has no address or credential for, and a hook that silently no-ops is
+exactly the failure mode this whole feature exists to remove -- so an
+incompletely configured hook fails `helm template`/`helm install` rather than
+installing a release without the bounds. `policyHook.enabled: false` is the
+escape hatch for operators on restricted brokers who manage the policy
+themselves.
+*/}}
+{{- if not .Values.policyHook.managementApi.baseUrl }}
+{{- fail "policyHook.enabled=true requires policyHook.managementApi.baseUrl (e.g. https://broker.example.com:15672, or https://<name>.rmq.cloudamqp.com on port 443). Set policyHook.enabled=false to manage the event-queue policy outside this chart." }}
+{{- end }}
+{{- if not .Values.policyHook.managementApi.vhost }}
+{{- fail "policyHook.enabled=true requires policyHook.managementApi.vhost -- the vhost the service consumes from. Set policyHook.enabled=false to manage the event-queue policy outside this chart." }}
+{{- end }}
+{{- if not .Values.policyHook.managementApi.existingSecret.name }}
+{{- fail "policyHook.enabled=true requires policyHook.managementApi.existingSecret.name -- a Secret holding a broker credential with the policymaker tag on that vhost. Set policyHook.enabled=false to manage the event-queue policy outside this chart." }}
+{{- end }}
+{{- $definition := .Values.policyHook.policy.definition }}
+{{- /*
+Bound-value guards. Every one of these refuses a value the BROKER would happily
+accept, because each accepted-but-wrong value is silent: the PUT succeeds, this
+fail-closed hook reports success, and the damage shows up later as missing
+events. Null is guarded explicitly alongside the numeric range because Helm's
+`int64` coerces nil to 0 -- `--set ...maxLength=null` would otherwise render
+`max-length: 0` -- so "unset" and "zero" have to be refused together. A
+non-numeric value is refused for the same reason and by the same coercion: Helm
+maps an unparseable string to 0 too, so `deliveryLimit=abc` would pass a `>= 0`
+range check and ship `delivery-limit: 0`. That type check sits AFTER each null
+check so a null keeps its own message (`requireNumericPolicyBound` in
+_helpers.tpl). `expiresMs` gets the type check but no range or null guard: null
+is its documented omit-the-bound idiom (see the `QUEUE_POLICY_EXPIRES_MS` block
+below), while a string would coerce to a 0 the broker rejects, failing the
+release with a broker error instead of a named typo.
+
+A matching `delivery-limit: -1` triggers the RabbitMQ 4.0.5-4.1.4 policy-repair
+loop (rabbitmq-server#14202): the queue config is rewritten every 5 s, which
+resets the `expires` idle clock, so the queue NEVER expires and the auto-reap
+this policy ships for silently never fires. Refused outright rather than
+documented, because the symptom is invisible.
+*/}}
+{{- if kindIs "invalid" $definition.deliveryLimit }}
+{{- fail "policyHook.policy.definition.deliveryLimit must be an integer >= 0. A null renders as 0 here (Helm coerces nil), and delivery-limit: 0 is legal but drastic -- every requeued message is dead-lettered on its first redelivery -- so it has to be chosen deliberately, not arrived at by omission. Set policyHook.enabled=false to manage the policy outside this chart." }}
+{{- end }}
+{{- include "event-consumer-service.requireNumericPolicyBound" (dict "path" "deliveryLimit" "value" $definition.deliveryLimit) }}
+{{- if lt (int $definition.deliveryLimit) 0 }}
+{{- fail (printf "policyHook.policy.definition.deliveryLimit (%v) must be >= 0. A negative delivery-limit triggers the RabbitMQ 4.0.5-4.1.4 policy-repair loop, which resets the expires idle clock every 5 seconds so abandoned queues never auto-reap. Set policyHook.enabled=false if you must run an unbounded delivery limit." $definition.deliveryLimit) }}
+{{- end }}
+{{- /*
+`message-ttl: 0` is accepted by the broker and expires every message the instant
+it is published -- the queue stays empty, every event is dead-lettered on
+arrival, and nothing in the deploy reports a problem. Same >= 1 rule the DLQ's
+twin field enforces app-side (`dead_letter_queue_message_ttl_ms` in
+app/config/settings.py).
+*/}}
+{{- $messageTtlMsFailure := printf "policyHook.policy.definition.messageTtlMs (%v) must be an integer >= 1. A null renders as 0 here (Helm coerces nil), and message-ttl: 0 expires every message the moment it is published, so every event is dead-lettered on arrival while this hook still reports success. There is no omit form for this bound -- set policyHook.enabled=false to manage the policy outside this chart." $definition.messageTtlMs }}
+{{- if kindIs "invalid" $definition.messageTtlMs }}
+{{- fail $messageTtlMsFailure }}
+{{- end }}
+{{- include "event-consumer-service.requireNumericPolicyBound" (dict "path" "messageTtlMs" "value" $definition.messageTtlMs) }}
+{{- if lt (int $definition.messageTtlMs) 1 }}
+{{- fail $messageTtlMsFailure }}
+{{- end }}
+{{- /*
+`max-length: 0` is likewise accepted, and dead-letters EVERY message on every
+durable queue (the queue can never hold one). Same >= 1 rule as the DLQ's
+`dead_letter_queue_max_length`.
+*/}}
+{{- $maxLengthFailure := printf "policyHook.policy.definition.maxLength (%v) must be an integer >= 1. A null renders as 0 here (Helm coerces nil), and max-length: 0 dead-letters every message published to every durable queue while this hook still reports success. There is no omit form for this bound -- set policyHook.enabled=false to manage the policy outside this chart." $definition.maxLength }}
+{{- if kindIs "invalid" $definition.maxLength }}
+{{- fail $maxLengthFailure }}
+{{- end }}
+{{- include "event-consumer-service.requireNumericPolicyBound" (dict "path" "maxLength" "value" $definition.maxLength) }}
+{{- if lt (int $definition.maxLength) 1 }}
+{{- fail $maxLengthFailure }}
+{{- end }}
+{{- /*
+`expiresMs` is the one bound whose null is legitimate (it omits the auto-reap),
+so only the type check applies -- a string would coerce to a 0 the broker
+rejects, failing the release opaquely instead of naming the typo.
+*/}}
+{{- if not (kindIs "invalid" $definition.expiresMs) }}
+{{- include "event-consumer-service.requireNumericPolicyBound" (dict "path" "expiresMs" "value" $definition.expiresMs) }}
+{{- end }}
+{{- /*
+`consumerTimeoutMs` takes `expiresMs`'s null idiom -- null is its DEFAULT, and
+means "ship no consumer-timeout key" so the broker's own default applies -- plus
+a floor, because unlike `expiresMs` a small-but-numeric value here is accepted
+by the broker rather than rejected, and it is destructive. RabbitMQ documents
+values below 60000 (60 s) as NOT SUPPORTED, and the bottom of that range is
+reachable by a plain typo: a written-out `consumerTimeoutMs: 0` would render
+`consumer-timeout: 0` and cancel every consumer on every durable queue the
+instant it took a delivery -- a permanent kill/reconnect loop across all
+clients, with this hook still reporting success. The floor enforces the
+upstream hard bound only. The softer >= 300000
+recommendation and the prefetch-aware sizing formula stay guidance in
+values.yaml, because the safe value there depends on the client's per-message
+processing time, which the chart cannot see.
+*/}}
+{{- if not (kindIs "invalid" $definition.consumerTimeoutMs) }}
+{{- include "event-consumer-service.requireNumericPolicyBound" (dict "path" "consumerTimeoutMs" "value" $definition.consumerTimeoutMs) }}
+{{- if lt (int64 $definition.consumerTimeoutMs) 60000 }}
+{{- fail (printf "policyHook.policy.definition.consumerTimeoutMs (%v) must be an integer >= 60000 (60 seconds). RabbitMQ does not support a consumer-timeout below that, and a low value cancels healthy consumers mid-delivery -- at 0 it cancels every consumer on every durable queue immediately. Values below 300000 (5 minutes) are additionally not recommended; size it above durable_consumer_prefetch_count x your worst-case per-message processing time. Leave consumerTimeoutMs null to omit the key and keep the broker's own default, or set policyHook.enabled=false to manage the policy outside this chart." $definition.consumerTimeoutMs) }}
+{{- end }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "event-consumer-service.queuePolicyJobName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: queue-policy
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    # Jobs are immutable, so the previous run must be removed before this one is
+    # created or the second `helm upgrade` fails outright.
+    "helm.sh/hook-delete-policy": before-hook-creation
+    # Negative weight orders this ahead of the smoke-test Job, which carries no
+    # weight (implicit 0), so the bounds are in place before the smoke test
+    # exercises the queues.
+    "helm.sh/hook-weight": "-5"
+spec:
+  # Whole-pod retries only (image pull, eviction, OOM). Broker flakiness is
+  # handled by the script's own per-call retries.
+  backoffLimit: {{ .Values.policyHook.backoffLimit | int64 }}
+  # Bounds how long a broker outage can stall `helm upgrade`: the release fails
+  # rather than hanging. It spans ALL pod attempts, and the script's retry
+  # budget is sized to fit inside it so the script's own diagnostic is what an
+  # operator sees, not a bare DeadlineExceeded -- the arithmetic tying the two
+  # together is in values.yaml under `policyHook.activeDeadlineSeconds`.
+  activeDeadlineSeconds: {{ .Values.policyHook.activeDeadlineSeconds | int64 }}
+  {{- if gt (int .Values.policyHook.ttlSecondsAfterFinished) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.policyHook.ttlSecondsAfterFinished | int64 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "event-consumer-service.labels" . | nindent 8 }}
+        app.kubernetes.io/component: queue-policy
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      # The Job talks only to the broker's management API; it needs no
+      # Kubernetes API access.
+      automountServiceAccountToken: false
+      {{- include "event-consumer-service.imagePullSecrets" ( dict "images" (list .Values.image) "global" .Values) | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: apply-queue-policy
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The apply logic ships as a module in the service image (see
+          # `policyHook` in values.yaml for why), so the entrypoint is
+          # overridden to run it. Exec form, not a shell command: the
+          # production image is distroless and has no shell.
+          command: ["python", "-u", "-m", "public_scripts.apply_queue_policy"]
+          env:
+            - name: QUEUE_POLICY_MANAGEMENT_URL
+              value: {{ .Values.policyHook.managementApi.baseUrl | quote }}
+            - name: QUEUE_POLICY_VHOST
+              value: {{ .Values.policyHook.managementApi.vhost | quote }}
+            - name: QUEUE_POLICY_MANAGEMENT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.policyHook.managementApi.existingSecret.name }}
+                  key: {{ .Values.policyHook.managementApi.existingSecret.usernameKey }}
+            - name: QUEUE_POLICY_MANAGEMENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.policyHook.managementApi.existingSecret.name }}
+                  key: {{ .Values.policyHook.managementApi.existingSecret.passwordKey }}
+            - name: QUEUE_POLICY_NAME
+              value: {{ .Values.policyHook.policy.name | quote }}
+            # The pattern is NOT operator-tunable: it is derived from the app's
+            # queue-naming contract (`QUEUE_NAME_PREFIX` in
+            # app/lib/queue_names.py). An operator who changed it
+            # would silently un-bound every event queue.
+            - name: QUEUE_POLICY_PATTERN
+              value: "^event-queue:"
+            - name: QUEUE_POLICY_PRIORITY
+              value: {{ .Values.policyHook.policy.priority | int64 | quote }}
+            # Like the pattern above, the scope is NOT operator-tunable, and for
+            # the same reason: it is load-bearing scoping rather than a tuning
+            # knob. Durable and non-durable queues share the `event-queue:` name
+            # prefix, so the pattern alone cannot separate them; only durable
+            # queues are quorum queues. Widening this to `queues` would apply
+            # max-length + drop-head to the non-durable queues, silently
+            # dropping a live-but-slow consumer's backlog -- those queues have
+            # no dead-letter exchange, so the drops go nowhere observable --
+            # and breaking the reconnect-token "no missed events" guarantee.
+            # `quorum_queues` requires RabbitMQ >= 3.12.
+            - name: QUEUE_POLICY_APPLY_TO
+              value: "quorum_queues"
+            - name: QUEUE_POLICY_DELIVERY_LIMIT
+              value: {{ .Values.policyHook.policy.definition.deliveryLimit | int64 | quote }}
+            - name: QUEUE_POLICY_MESSAGE_TTL_MS
+              value: {{ .Values.policyHook.policy.definition.messageTtlMs | int64 | quote }}
+            - name: QUEUE_POLICY_MAX_LENGTH
+              value: {{ .Values.policyHook.policy.definition.maxLength | int64 | quote }}
+            - name: QUEUE_POLICY_OVERFLOW
+              value: {{ .Values.policyHook.policy.definition.overflow | quote }}
+            # Omitting the key is meaningful: null (or absent) ships a policy
+            # with NO `expires`, so no queue auto-reaps. This is an explicit nil
+            # test rather than `with`, which treats 0 as absent -- an operator
+            # who sets 0 must SURFACE it (the broker rejects a zero expires)
+            # rather than silently get a policy with the reaper switched off.
+            {{- if not (kindIs "invalid" .Values.policyHook.policy.definition.expiresMs) }}
+            - name: QUEUE_POLICY_EXPIRES_MS
+              value: {{ .Values.policyHook.policy.definition.expiresMs | int64 | quote }}
+            {{- end }}
+            # Same omit idiom, and null is the DEFAULT here: with no
+            # `consumer-timeout` key the broker's own default applies. The
+            # explicit nil test again keeps a 0 visible rather than silently
+            # equivalent to "unset".
+            {{- if not (kindIs "invalid" .Values.policyHook.policy.definition.consumerTimeoutMs) }}
+            - name: QUEUE_POLICY_CONSUMER_TIMEOUT_MS
+              value: {{ .Values.policyHook.policy.definition.consumerTimeoutMs | int64 | quote }}
+            {{- end }}
+            # Read only for the runtime cross-check that the policy targets the
+            # vhost the service actually consumes from.
+            - name: OMNI_EVENTS_RABBITMQ_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.envSecretName }}
+                  key: rabbitmq_uri
+          resources:
+            {{- toYaml .Values.policyHook.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

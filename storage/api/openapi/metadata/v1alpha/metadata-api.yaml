@@ -1,0 +1,530 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+openapi: 3.0.0
+info:
+  description: NVIDIA Omniverse Storage API Metadata service
+  title: nvidia.omniverse.storage.metadata.v1alpha
+  version: 1.0.0-beta.6.dev26+gfa7f6fe
+security:
+  - bearerAuth: []
+paths:
+  /metadata:
+    post:
+      summary: Update metadata for multiple uri/key pairs in a single request.
+      description: |
+        Apply a batch of metadata updates with best-effort, per-entry semantics.
+
+        Each entry is processed independently with the same rules as a single
+        update_metadata call (including its own optional `expected_etag` and
+        its own optional `namespace`); the server is free to fan entries out
+        concurrently. Callers must avoid conflicting writes to the same
+        (namespace, uri, key) within one batch -- the resulting state is one
+        of the conflicting writes, but which one is undefined.
+
+        The HTTP request itself is considered successful as long as the body
+        is well-formed; per-entry failures are reported via the `error` field
+        of the matching response entry, so callers can see exactly which
+        entries succeeded, which failed, and why, and retry only the failed
+        ones. The operation is not transactional.
+
+        Responses are not guaranteed to be in request order; clients match
+        responses to requests via the `request_index` field on each response
+        entry (the zero-based position of the originating entry in the
+        request's `requests` array).
+      operationId: update_metadata_batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMetadataBatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response, batch outcome in body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMetadataBatchResponse'
+    delete:
+      summary: Delete one or more metadata values in a batch.
+      operationId: delete_metadata_batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteMetadataBatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteMetadataBatchResponse'
+  /metadata/query:
+    post:
+      summary: Query metadata values for a resource within a namespace.
+      operationId: query_metadata
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryMetadataRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryMetadataResponse'
+  /metadata/get:
+    post:
+      summary: Read one or more metadata values in a batch.
+      operationId: get_metadata_batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMetadataBatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMetadataBatchResponse'
+  /metadata/{uri}:
+    post:
+      deprecated: true
+      operationId: get_metadata
+      summary: Get data object metadata by uri
+      description: Get data object metadata by uri
+      parameters:
+        - $ref: '#/components/parameters/uri'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserMetadataKeys'
+        required: true
+      responses:
+        '200':
+          description: Successful Response, data in body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMetadataResponse'
+  /metadata/{uri}/{key}:
+    parameters:
+      - $ref: '#/components/parameters/uri'
+      - $ref: '#/components/parameters/key'
+      - $ref: '#/components/parameters/expected_etag'
+    put:
+      deprecated: true
+      summary: Update metadata at the specified uri. The uri and key are plus-quoted strings.
+      description: Update metadata of a data object at the specified uri. The uri and key are plus-quoted string.
+      operationId: update_metadata
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          headers:
+            ETag:
+              description: The ETag of the updated metadata key.
+              required: true
+              schema:
+                type: string
+                format: etag
+                maxLength: 256
+    delete:
+      deprecated: true
+      summary: Delete metadata at the specified uri and metadata key. The uri and key are plus-quoted string.
+      description: Delete metadata at the specified uri and metadata key. The uri and key are plus-quoted string.
+      operationId: delete_metadata
+      responses:
+        '204':
+          description: Successful Response
+components:
+  parameters:
+    uri:
+      required: true
+      description: A metadata URI, the concrete format and semantics are storage-backend specific.
+      schema:
+        type: string
+        maxLength: 4096
+        format: uri
+      name: uri
+      in: path
+    key:
+      required: true
+      description: The identifier of a piece of metadata.
+      schema:
+        type: string
+        maxLength: 1024
+        format: key
+      name: key
+      in: path
+    expected_etag:
+      required: false
+      description: The etag of of a metadata key to check before modifying operation.
+      schema:
+        type: string
+        maxLength: 256
+        format: etag
+      name: If-Match
+      in: header
+  schemas:
+    UserMetadataKeys:
+      description: A list of metadata keys to retrieve. Passing an empty array will cause service to retrieve all metadata keys.
+      type: array
+      maxItems: 4096
+      items:
+        type: string
+        maxLength: 1024
+    UserMetadataValue:
+      type: object
+      properties:
+        value: {}
+        etag:
+          type: string
+          maxLength: 256
+      required:
+        - etag
+    UserMetadataResponse:
+      type: object
+      title: UserMetadataResponse
+      description: A map-type to store extended metadata
+      nullable: false
+      additionalProperties:
+        $ref: '#/components/schemas/UserMetadataValue'
+    GetMetadataBatchRequest:
+      description: A request message for the GetMetadataBatch operation.
+      type: object
+      properties:
+        requests:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/GetMetadataBatchRequestEntry'
+      required:
+        - requests
+    GetMetadataBatchRequestEntry:
+      description: A request entry within a GetMetadataBatch operation.
+      type: object
+      properties:
+        resource_location:
+          $ref: '#/components/schemas/ResourceLocation'
+        user_metadata_key:
+          $ref: '#/components/schemas/UserMetadataKey'
+        namespace:
+          $ref: '#/components/schemas/NullableNamespace'
+      required:
+        - resource_location
+        - user_metadata_key
+    GetMetadataBatchResponse:
+      description: A response message for a GetMetadataBatch operation.
+      type: object
+      properties:
+        results:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/GetMetadataBatchResponseEntry'
+      required:
+        - results
+    GetMetadataBatchResponseEntry:
+      description: A response entry within a GetMetadataBatch operation.
+      type: object
+      properties:
+        outcome:
+          $ref: '#/components/schemas/GetMetadataBatchResponseEntryOutcome'
+        request_index:
+          $ref: '#/components/schemas/ResponseRequestIndex'
+      required:
+        - outcome
+        - request_index
+    GetMetadataBatchResponseEntryOutcome:
+      type: object
+      properties:
+        success:
+          $ref: '#/components/schemas/UserMetadataValue'
+        error:
+          $ref: '#/components/schemas/BatchErrorEntry'
+      oneOf:
+        - required:
+            - success
+        - required:
+            - error
+    QueryMetadataRequest:
+      description: A request message for a QueryMetadata operation.
+      type: object
+      properties:
+        resource_location:
+          $ref: '#/components/schemas/ResourceLocation'
+        namespace:
+          $ref: '#/components/schemas/NullableNamespace'
+        continuation_handle:
+          $ref: '#/components/schemas/NullableContinuationHandle'
+        max_page_size:
+          $ref: '#/components/schemas/NullableMaxPageSize'
+      required:
+        - resource_location
+    QueryMetadataResponse:
+      description: A response message for a QueryMetadata operation.
+      type: object
+      properties:
+        results:
+          type: array
+          maxItems: 1024
+          items:
+            $ref: '#/components/schemas/QueryMetadataResponseEntry'
+        next_continuation_handle:
+          $ref: '#/components/schemas/NullableContinuationHandle'
+      required:
+        - results
+    QueryMetadataResponseEntry:
+      description: A response entry within a QueryMetadata operation.
+      type: object
+      properties:
+        user_metadata_key:
+          $ref: '#/components/schemas/UserMetadataKey'
+        user_metadata:
+          $ref: '#/components/schemas/UserMetadataValue'
+      required:
+        - user_metadata_key
+        - user_metadata
+    UpdateMetadataBatchRequest:
+      description: A request message for a UpdateMetadataBatch operation.
+      type: object
+      properties:
+        requests:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/UpdateMetadataBatchRequestEntry'
+      required:
+        - requests
+    UpdateMetadataBatchRequestEntry:
+      description: A request entry within a UpdateMetadataBatch operation.
+      type: object
+      properties:
+        resource_location:
+          $ref: '#/components/schemas/ResourceLocation'
+        user_metadata_key:
+          $ref: '#/components/schemas/UserMetadataKey'
+        user_metadata: {}
+        expected_etag:
+          $ref: '#/components/schemas/NullableETag'
+        namespace:
+          $ref: '#/components/schemas/NullableNamespace'
+      required:
+        - resource_location
+        - user_metadata_key
+        - user_metadata
+    UpdateMetadataBatchResponse:
+      description: A response message for an UpdateMetadataBatch operation.
+      type: object
+      properties:
+        results:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/UpdateMetadataBatchResponseEntry'
+      required:
+        - results
+    UpdateMetadataBatchResponseEntry:
+      description: A response entry within an UpdateMetadataBatch operation.
+      type: object
+      properties:
+        outcome:
+          $ref: '#/components/schemas/UpdateMetadataBatchResponseEntryOutcome'
+        request_index:
+          $ref: '#/components/schemas/ResponseRequestIndex'
+      required:
+        - outcome
+        - request_index
+    UpdateMetadataBatchResponseEntryOutcome:
+      type: object
+      properties:
+        success:
+          $ref: '#/components/schemas/UpdateMetadataBatchResponseEntrySuccess'
+        error:
+          $ref: '#/components/schemas/BatchErrorEntry'
+      oneOf:
+        - required:
+            - success
+        - required:
+            - error
+    UpdateMetadataBatchResponseEntrySuccess:
+      description: Update details for a single succeeded entry within an UpdateMetadataBatch operation.
+      type: object
+      properties:
+        etag:
+          $ref: '#/components/schemas/ETag'
+      required:
+        - etag
+    DeleteMetadataBatchRequest:
+      description: A request message for a DeleteMetadataBatch operation.
+      type: object
+      properties:
+        requests:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/DeleteMetadataBatchRequestEntry'
+      required:
+        - requests
+    DeleteMetadataBatchRequestEntry:
+      description: A request entry within a DeleteMetadataBatch operation.
+      type: object
+      properties:
+        resource_location:
+          $ref: '#/components/schemas/ResourceLocation'
+        user_metadata_key:
+          $ref: '#/components/schemas/UserMetadataKey'
+        expected_etag:
+          $ref: '#/components/schemas/NullableETag'
+        namespace:
+          $ref: '#/components/schemas/NullableNamespace'
+      required:
+        - resource_location
+        - user_metadata_key
+    DeleteMetadataBatchResponse:
+      description: A response message for a DeleteMetadataBatch operation.
+      type: object
+      properties:
+        results:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/DeleteMetadataBatchResponseEntry'
+      required:
+        - results
+    DeleteMetadataBatchResponseEntry:
+      description: A response entry within a DeleteMetadataBatch operation.
+      type: object
+      properties:
+        outcome:
+          $ref: '#/components/schemas/DeleteMetadataBatchResponseEntryOutcome'
+        request_index:
+          $ref: '#/components/schemas/ResponseRequestIndex'
+      required:
+        - outcome
+        - request_index
+    DeleteMetadataBatchResponseEntryOutcome:
+      type: object
+      properties:
+        success:
+          $ref: '#/components/schemas/DeleteMetadataBatchResponseEntrySuccess'
+        error:
+          $ref: '#/components/schemas/BatchErrorEntry'
+      oneOf:
+        - required:
+            - success
+        - required:
+            - error
+    DeleteMetadataBatchResponseEntrySuccess:
+      description: Delete details for a single succeeded entry within an DeleteMetadataBatch operation.
+      type: object
+    ResourceLocation:
+      description: A union of all possible resource locations.
+      type: object
+      properties:
+        resource_address:
+          type: string
+          maxLength: 4096
+          format: resource_address
+        resource_identity:
+          type: string
+          maxLength: 4096
+          format: resource_identity
+        folder_address:
+          type: string
+          maxLength: 4096
+          format: folder_address
+      oneOf:
+        - required:
+            - resource_address
+        - required:
+            - resource_identity
+        - required:
+            - folder_address
+    BatchErrorEntry:
+      description: Error details for a single failed entry within a batch operation.
+      type: object
+      properties:
+        code:
+          $ref: '#/components/schemas/BatchErrorEntryCode'
+        message:
+          type: string
+          maxLength: 4096
+      required:
+        - code
+        - message
+    BatchErrorEntryCode:
+      description: Per-entry error codes.
+      type: string
+      enum:
+        - invalid_argument
+        - not_found
+        - permission_denied
+        - failed_precondition
+        - internal
+        - resource_exhausted
+        - unavailable
+    ResponseRequestIndex:
+      description: Zero-based index of the corresponding entry in the request's results list.
+      type: integer
+      format: int32
+      minimum: 0
+      maximum: 255
+    UserMetadataKey:
+      type: string
+      format: key
+      maxLength: 1024
+    ETag:
+      type: string
+      format: etag
+      maxLength: 256
+    NullableETag:
+      allOf:
+        - nullable: true
+        - $ref: '#/components/schemas/ETag'
+    NullableNamespace:
+      type: string
+      format: namespace
+      maxLength: 256
+      nullable: true
+    ContinuationHandle:
+      type: string
+      maxLength: 512
+      format: page_handle
+    NullableContinuationHandle:
+      allOf:
+        - $ref: '#/components/schemas/ContinuationHandle'
+        - nullable: true
+    NullableMaxPageSize:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 65536
+      nullable: true

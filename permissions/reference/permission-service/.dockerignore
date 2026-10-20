@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+
+# The images build from this directory as the context, in NVIDIA's CI and in the
+# published repository alike. .cargo is not published, so it is kept out of the
+# context here too: the CI image build then sees exactly what a public build sees.
+.cargo
+.git
+target

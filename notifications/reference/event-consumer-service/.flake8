@@ -1,0 +1,3 @@
+[flake8]
+exclude = notification_protos,.git,scripts/manual_grpc_tests.py,scripts/manual_rest_tests.py,tools,.venv,.venv-linux,venv,_deps,db/migrations/models,_build,build,pytest_report/pytest_report.xml,proto,nvidia,conformance_tests
+max-line-length = 100

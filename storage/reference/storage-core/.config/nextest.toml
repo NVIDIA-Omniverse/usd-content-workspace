@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[profile.default]
+# Keep workspace runs broad for normal crates while limiting the expensive
+# storage-core-integration-tests crate to its smoke subset. For named rstest
+# cases, default runs case_01 and case_02 and leaves later cases to broader
+# integration profiles.
+default-filter = '''
+not package(storage-core-integration-tests)
+or (package(storage-core-integration-tests) and (
+    not (
+        test(/_full/)
+        or test(/_cdn/)
+        or test(/^cdn_/)
+        or test(/_too_long/)
+        or test(/stat_blob_name_control_chars/)
+        or test(/none_requests/)
+        or test(/write_.*_after_file_change/)
+        or test(/copy_overwrite/)
+        or test(/copy_after_source_change/)
+        or test(/copy_after_dest_change/)
+        or test(/delete_after_file_change/)
+        or test(/write_between_stat_and_read/)
+        or test(/move_overwrite/)
+        or test(/move_after_source_change/)
+        or test(/move_after_destination_change/)
+        or test(/case_(0[3-9]|[1-9][0-9])_/)
+    )
+))
+'''
+
+[profile.integration-small]
+default-filter = '''
+not package(storage-core-integration-tests)
+or (package(storage-core-integration-tests) and (
+    not (
+        test(/_full/)
+        or test(/_cdn/)
+        or test(/^cdn_/)
+        or test(/_too_long/)
+        or test(/stat_blob_name_control_chars/)
+        or test(/none_requests/)
+        or test(/write_.*_after_file_change/)
+        or test(/copy_overwrite/)
+        or test(/copy_after_source_change/)
+        or test(/copy_after_dest_change/)
+        or test(/delete_after_file_change/)
+        or test(/write_between_stat_and_read/)
+        or test(/move_overwrite/)
+        or test(/move_after_source_change/)
+        or test(/move_after_destination_change/)
+        or test(/case_(0[3-9]|[1-9][0-9])_/)
+    )
+))
+'''
+
+[profile.integration-medium]
+default-filter = '''
+not package(storage-core-integration-tests)
+or (package(storage-core-integration-tests) and (
+    (
+        not (
+            test(/_full/)
+            or test(/_cdn/)
+            or test(/^cdn_/)
+            or test(/_too_long/)
+            or test(/stat_blob_name_control_chars/)
+            or test(/none_requests/)
+            or test(/write_.*_after_file_change/)
+            or test(/copy_overwrite/)
+            or test(/copy_after_source_change/)
+            or test(/copy_after_dest_change/)
+            or test(/delete_after_file_change/)
+            or test(/write_between_stat_and_read/)
+            or test(/move_overwrite/)
+            or test(/move_after_source_change/)
+            or test(/move_after_destination_change/)
+        )
+    )
+    or test(/_too_long/)
+    or test(/stat_blob_name_control_chars/)
+    or test(/none_requests/)
+    or test(/read_invalid_version_full/)
+    or test(/read_corrupted_etag_full/)
+    or test(/^cdn_redirect_read_after_redirect_overwrite_uses_versioned_cache_key/)
+    or test(/read_cdn_redirect/)
+    or test(/read_versions_cdn/)
+    or test(/create_folder_full/)
+))
+'''
+
+[profile.integration-large]
+default-filter = '''
+not package(storage-core-integration-tests)
+or (package(storage-core-integration-tests) and (
+    not (
+        test(/^stat_full/)
+        or test(/^read_from_address_full/)
+        or test(/^read_full/)
+        or test(/^write_multipart_full/)
+        or test(/^read_cdn_body/)
+    )
+))
+'''
+
+[profile.integration-full]
+default-filter = 'all()'

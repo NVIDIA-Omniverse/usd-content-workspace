@@ -1,0 +1,105 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/auth",
+    "crates/common",
+    "crates/service",
+    "crates/task-worker",
+    "crates/thumbnail-convert",
+    "crates/thumbnail-smoke-test",
+    "crates/thumbnail-conformance-test",
+    "crates/proto/thumbnail",
+    "crates/proto/storage",
+    "crates/proto/notifications",
+    "crates/proto/discovery"
+]
+# Vendored first-party crates (see vendor/*/README.md); built as path dependencies only.
+exclude = ["vendor"]
+
+[workspace.package]
+# In-development version; CI uses this base and replaces it with the
+# release/tag-qualified value in version:cargo for build/publish jobs.
+version = "0.1.0"
+authors = ["NVIDIA"]
+edition = "2021"
+rust-version = "1.94.0"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# Core async runtime
+tokio = { version = "1.45", features = ["full"] }
+tokio-stream = "0.1"
+futures = "0.3"
+futures-util = "0.3"
+
+# gRPC and Protocol Buffers
+# tonic 0.14 extracted the prost integration into separate crates:
+# `tonic-prost` (runtime codec) and `tonic-prost-build` (codegen).
+tonic = { version = "0.14", features = ["transport", "gzip"] }
+tonic-prost = "0.14"
+tonic-build = "0.14"
+tonic-prost-build = "0.14"
+tonic-reflection = "0.14"
+tonic-health = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Web framework
+axum = "~0.8"
+utoipa = { version = "5.4", features = ["axum_extras", "chrono"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# OpenTelemetry
+otel-tools = { version = "0.14.0", path = "vendor/otel-tools" }
+tonic-observability = { version = "0.14.0", path = "vendor/tonic-observability" }
+opentelemetry = { version = "~0.31", default-features = false, features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "~0.31", default-features = false, features = ["rt-tokio", "metrics", "trace"] }
+tracing-opentelemetry = { version = "~0.32", default-features = false }
+
+# Utilities
+# Already in the tree via tonic; declared here so crates that need `async fn`
+# in a `dyn`-compatible trait of their own can say so, instead of reaching
+# through `tonic::async_trait` for a trait that has nothing to do with gRPC.
+async-trait = "0.1"
+uuid = { version = "1.17", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+clap = { version = "4.0", features = ["derive", "env"] }
+dotenvy = "0.15.7"
+# Already in the build graph via tonic/notifications; declared here so reconnect
+# backoff can jitter without pulling anything new into the lockfile.
+rand = "0.9"
+humantime = "2.1"
+time = { version = "0.3", features = ["parsing"] }
+
+# Dev dependencies
+tempfile = "3.0"
+serial_test = "3.0"
+proptest = "1.0"
+wiremock = "0.6"

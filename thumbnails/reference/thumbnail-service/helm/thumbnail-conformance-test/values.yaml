@@ -1,0 +1,166 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# This chart deploys a one-time Kubernetes Job that runs the black-box
+# REST/gRPC conformance test against a deployed thumbnail-service. Not run
+# automatically by any pipeline — install it on demand, pointed at whatever
+# instance you want to certify. See crates/thumbnail-conformance-test/README.md.
+
+## @param nameOverride Override the chart name portion of generated resource names.
+nameOverride: ""
+## @param fullnameOverride Override the full generated name of the Job and its ServiceAccount.
+fullnameOverride: ""
+
+image:
+  ## @param image.repository Container image repository for the conformance-test binary.
+  repository: "nvcr.io/nvidia/omniverse/thumbnail-conformance-test"
+  ## @param image.tag Overrides the image tag (defaults to the chart appVersion). The publish
+  ## pipeline bakes the release version in here at package time.
+  tag: ""
+  ## @param image.pullPolicy Image pull policy.
+  pullPolicy: IfNotPresent
+  ## @param image.pullSecrets Image pull secrets. Example: pullSecrets: [{name: "my-registry-secret"}]
+  pullSecrets: []
+
+serviceAccount:
+  ## @param serviceAccount.create Create a ServiceAccount for the Job pod.
+  create: true
+  ## @param serviceAccount.automount Automount the ServiceAccount's API credentials.
+  automount: true
+  ## @param serviceAccount.annotations Annotations on the ServiceAccount (e.g. workload-identity client-id).
+  annotations: {}
+  ## @param serviceAccount.name Override the generated ServiceAccount name.
+  name: ""
+
+## @param podAnnotations Additional annotations applied to the Job's pod template.
+podAnnotations: {}
+## @param podLabels Additional labels applied to the Job's pod template.
+## Required by Azure Workload Identity when using serviceIdentity.accessTokenFile.
+podLabels: {}
+## @param nodeSelector Kubernetes node labels applied to the pod.
+nodeSelector: {}
+## @param tolerations Tolerations applied to the pod.
+tolerations: []
+## @param affinity Affinity rules applied to the pod.
+affinity: {}
+## @param resources Resource requests/limits for the conformance-test container.
+## Matches the thumbnail-service orchestrator's own defaults: this is also a
+## REST/gRPC client exercising the same API surface.
+resources:
+  requests:
+    cpu: 250m
+    memory: 64Mi
+  limits:
+    cpu: "1"
+    memory: 256Mi
+
+## Container security context. distroless/cc's image runs as `nvs`, which the
+## admission controller cannot resolve to a numeric uid on its own — pin the
+## matching uid so runAsNonRoot can actually be verified, matching
+## helm/thumbnail-service's smoke-test Job convention.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+## ----------------------------------------------------------------------------
+## Outbound authentication toward the target thumbnail-service deployment.
+## At most one of the three modes below may be enabled. Leaving all disabled is
+## valid and supported here (unlike helm/thumbnail-service): it runs the suite
+## unauthenticated, which only succeeds against a deployment with
+## authentication disabled. See AGENTS.md's "Authentication modes" section.
+## ----------------------------------------------------------------------------
+serviceIdentity:
+  bearerToken:
+    ## @param serviceIdentity.bearerToken.enabled Enable direct bearer-token auth.
+    enabled: false
+    secretRef:
+      ## @param serviceIdentity.bearerToken.secretRef.name Existing Kubernetes Secret name.
+      name: ""
+      ## @param serviceIdentity.bearerToken.secretRef.key Key within the secret.
+      key: "BEARER_TOKEN"
+  clientCredentials:
+    ## @param serviceIdentity.clientCredentials.enabled Enable OAuth2 client-credentials auth.
+    enabled: false
+    ## @param serviceIdentity.clientCredentials.openIdConfigurationUri OpenID Connect discovery endpoint.
+    openIdConfigurationUri: ""
+    ## @param serviceIdentity.clientCredentials.clientId OAuth2 client (application) ID.
+    clientId: ""
+    ## @param serviceIdentity.clientCredentials.clientScope OAuth2 scope passed to the IdP.
+    clientScope: ""
+    clientSecretRef:
+      ## @param serviceIdentity.clientCredentials.clientSecretRef.name Existing Kubernetes Secret name.
+      name: ""
+      ## @param serviceIdentity.clientCredentials.clientSecretRef.key Key within the secret.
+      key: "CLIENT_SECRET"
+  accessTokenFile:
+    ## @param serviceIdentity.accessTokenFile.enabled Enable sidecar-driven file-based token auth.
+    enabled: false
+    ## @param serviceIdentity.accessTokenFile.path Path the container reads the bearer token from.
+    path: "/etc/secrets/access-token/token"
+    provisionerSidecar:
+      ## @param serviceIdentity.accessTokenFile.provisionerSidecar.container Sidecar container spec.
+      ## Rendered verbatim into the pod (except `volumeMounts`, which the chart appends the shared
+      ## `token-exchange` mount to). Populate from your environment's values file.
+      container: {}
+
+## ----------------------------------------------------------------------------
+## The conformance test's own knobs — everything crates/thumbnail-conformance-test's
+## README documents as a CLI flag / env var.
+## ----------------------------------------------------------------------------
+conformanceTest:
+  ## @param conformanceTest.testSuite Which suite(s) to run: "all", "rest", or "grpc".
+  testSuite: "all"
+  ## @param conformanceTest.restUrl HTTP base URL of the target deployment. Required for OpenAPI preflight in every suite, including grpc.
+  restUrl: ""
+  ## @param conformanceTest.grpcUrl gRPC endpoint of the target deployment. Required for grpc/all.
+  grpcUrl: ""
+  ## @param conformanceTest.grpcTlsEnabled Enable TLS on the gRPC channel.
+  grpcTlsEnabled: false
+  ## @param conformanceTest.sourceFile Source file the suite associates/disassociates its own fixtures
+  ## against. Must be an object that already exists in storage: the association cases only touch
+  ## metadata keyed on this address, but CreateThumbnails resolves the source's identity with a
+  ## storage Stat and fails with 404/NOT_FOUND if it does not resolve.
+  ##
+  ## Three acceptance cases per transport can generate real thumbnails into the deployment's configured
+  ## destination and leave both the blob and its association behind. The suite cannot remove them
+  ## and this is not a gap awaiting a fix: the destination is rendered by the deployment's own path
+  ## template from values a black-box client does not have, and DisassociateThumbnail removes
+  ## association metadata without deleting a blob. Choose an object whose thumbnail destination is a
+  ## location where leftover artefacts are acceptable.
+  ##
+  ## Larger cost, and only against a deployment that does NOT enforce the 1000-specification bound:
+  ## after OpenAPI advertises the expected 1000, the enforcement case submits 1001; a deployment which accepts
+  ## the request writes one association per specification onto this address. Past enough entries,
+  ## enumerating the source's metadata exceeds what storage returns in one response and reads and
+  ## disassociates for this address fail from then on. Both transports run that case, so a default
+  ## testSuite of "all" does it twice against the same source. A conformant deployment refuses the
+  ## request and writes nothing. Name an object whose associations can be abandoned, not a real asset whose
+  ## thumbnails matter. See crates/thumbnail-conformance-test/README.md.
+  sourceFile: ""
+  ## @param conformanceTest.readyPath REST path used by the readiness wait loop.
+  readyPath: "/health"
+  ## @param conformanceTest.httpTimeout Per-request timeout, humantime duration (e.g. "30s").
+  httpTimeout: "30s"
+  ## @param conformanceTest.waitRetries Readiness probe retry count.
+  waitRetries: 10
+  ## @param conformanceTest.waitInterval Interval between readiness retries, humantime duration (e.g. "5s").
+  waitInterval: "5s"
+
+job:
+  ## @param job.backoffLimit Number of retries before the Job is marked failed.
+  backoffLimit: 0
+  ## @param job.ttlSecondsAfterFinished Auto-cleanup delay after the Job finishes. Set to "" to keep it indefinitely.
+  ttlSecondsAfterFinished: 600

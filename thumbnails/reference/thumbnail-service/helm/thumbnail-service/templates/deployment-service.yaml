@@ -1,0 +1,162 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "service.validateServiceIdentity" . }}
+{{- include "service.validateObservability" . }}
+{{- include "service.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "service.fullname" . }}
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.thumbnailService.autoscaling.enabled }}
+  replicas: {{ .Values.thumbnailService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "service.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "service.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: thumbnail-service
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.thumbnailService.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/app/server"]
+          ports:
+            - containerPort: {{ .Values.service.restPort }}
+              name: rest
+            - containerPort: {{ .Values.service.grpcPort }}
+              name: grpc
+          {{- if .Values.thumbnailService.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.thumbnailService.startupProbe.httpGet.path }}
+              port: {{ .Values.thumbnailService.startupProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.thumbnailService.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.thumbnailService.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.thumbnailService.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.thumbnailService.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.thumbnailService.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.thumbnailService.livenessProbe.httpGet.path }}
+              port: {{ .Values.thumbnailService.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.thumbnailService.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.thumbnailService.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.thumbnailService.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.thumbnailService.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.thumbnailService.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.thumbnailService.readinessProbe.httpGet.path }}
+              port: {{ .Values.thumbnailService.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.thumbnailService.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.thumbnailService.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.thumbnailService.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.thumbnailService.readinessProbe.failureThreshold }}
+          {{- end }}
+          env:
+            - name: PORT
+              value: {{ .Values.service.restPort | quote }}
+            - name: GRPC_PORT
+              value: "0.0.0.0:{{ .Values.service.grpcPort }}"
+            - name: SERVICE_NAME
+              value: "thumbnail-service"
+            {{- include "service.sharedRuntimeEnv" . | nindent 12 }}
+            {{- include "service.eventConsumerEnvForServer" . | nindent 12 }}
+            # Event Aggregation (publishing omni.thumbnail.associated / disassociated)
+            {{- if and .Values.notifications.eventAggregation.enabled .Values.notifications.eventAggregation.endpoint }}
+            - name: NOTIFICATIONS_EVENT_AGGREGATION_ENDPOINT
+              value: {{ .Values.notifications.eventAggregation.endpoint | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.thumbnailService.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.thumbnailService.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- include "service.serviceIdentityVolumeMounts" . | nindent 12 }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+        {{- $provisioner := merge (deepCopy .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container) (dict "securityContext" .Values.securityContext) }}
+        # Sidecar that exchanges Azure Workload Identity for an access token
+        # and writes it atomically to /etc/secrets/access-token/token,
+        # which the main containers consume via ACCESS_TOKEN_FILE_PATH.
+        - name: {{ .Chart.Name }}-token-provisioner
+          {{- (omit $provisioner "name" "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+            {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            - name: token-exchange
+              mountPath: /etc/secrets/access-token
+        {{- end }}
+      volumes:
+        {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+        - name: service-identity-secret
+          secret:
+            secretName: {{ include "service.secretName" . }}
+        {{- end }}
+        {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+        # Volume names must be RFC1123 labels (lowercase + '-'); camelCase is rejected by Kubernetes.
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

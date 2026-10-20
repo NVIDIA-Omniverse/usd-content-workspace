@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+---
+version: v2
+
+plugins:
+  # Generates the base rust code for inputs
+  - local: protoc-gen-prost
+    out: src
+    opt:
+      - file_descriptor_set
+    include_imports: true
+    include_wkt: true
+
+    # Generates Tonic server and client
+  - local: protoc-gen-tonic
+    out: src
+    include_imports: true
+
+  # Generates a crate for the rust files
+  - local: protoc-gen-prost-crate
+    out: .
+    opt:
+      - gen_crate=Cargo.toml.template
+      - no_features
+    strategy: all
+    include_imports: true
+    include_wkt: true
+
+# The proto lives in this service's protos/ directory. Regenerate
+# the committed Rust from it with `buf generate`, run in this directory.
+inputs:
+  - directory: ../../protos

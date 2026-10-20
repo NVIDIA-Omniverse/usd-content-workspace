@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+edition = "2021"
+license = "Apache-2.0"
+name = "greeter-service"
+publish = false
+version = "0.1.0"
+
+[features]
+azure = ["storage-core/azure"]
+default = ["azure", "s3"]
+s3 = ["storage-core/s3"]
+
+[[bin]]
+name = "greeter-azure"
+path = "src/bin/greeter-azure.rs"
+required-features = ["azure"]
+
+[[bin]]
+name = "greeter-s3"
+path = "src/bin/greeter-s3.rs"
+required-features = ["s3"]
+
+[dependencies]
+axum = "0.8.9"
+clap = { version = "4.6.6", features = ["derive"] }
+figment = "0.10.19"
+http = "1.5.0"
+prost = "0.14.4"
+prost-types = "0.14.4"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+storage-core = { path = "../../storage-core", features = ["layers"] }
+storage-core-util = { path = "../../storage-core-util" }
+tokio = { version = "1.53.1", features = ["full"] }
+tonic = "0.14.6"
+tonic-prost = "0.14.6"
+tracing = "0.1.44"
+utoipa = "5.5.0"
+
+[build-dependencies]
+protoc-bin-vendored = "3.2.0"
+tonic-prost-build = "0.14.6"
+
+# cargo-machete isn't great about handling dependencies in the generated code.
+[package.metadata.cargo-machete]
+ignored = ["prost", "prost-types", "protoc-bin-vendored", "tonic-prost", "tonic-prost-build"]
