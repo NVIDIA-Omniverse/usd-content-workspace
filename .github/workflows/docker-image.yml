@@ -1,0 +1,132 @@
+# Reusable: build one component's container image.
+#
+# Build only. Nothing is pushed and no registry credentials exist in this
+# repository, so the signal this gives is exactly one thing: the Dockerfile and
+# the sources it references still produce an image. That is the claim the
+# monorepo build-context changes make, and until now nothing checked it -- the
+# other workflows here type-check and test Rust source, and rust-test.yml's
+# only containers are the Postgres and Valkey service containers.
+#
+# The build context defaults to the repository root for workspaces whose path
+# dependencies reach into sibling components. Self-contained snapshots can
+# select their component directory with build-context. BuildKit applies the
+# .dockerignore at the selected context root.
+#
+# Runs on GitHub-hosted runners. Every base image these Dockerfiles use --
+# nvcr.io/nvidia/distroless/cc, gcr.io/distroless/cc-debian12, and the Docker
+# Hub rust/python images -- is anonymously pullable, so no login step is needed
+# and none should be added. A Dockerfile that starts referencing an internal
+# NVIDIA registry will fail here loudly, which is the point.
+
+name: docker-image
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: Component name, used to label the job and scope the build cache.
+        required: true
+        type: string
+      dockerfile:
+        description: Path to the Dockerfile, relative to the repository root.
+        required: true
+        type: string
+      build-context:
+        description: Build context path, relative to the repository root.
+        required: false
+        default: '.'
+        type: string
+      cargo-manifest-dir:
+        description: >-
+          Directory of a Rust component's Cargo.toml. When set, the lockfile is
+          reconciled there before the build. The publish strips the first-party
+          crates' source and checksum lines from Cargo.lock so cargo resolves
+          them by path in this layout, which leaves the lock needing a
+          re-resolution that the image build cannot perform: its context is
+          mounted read-only and it vendors with --locked. Doing it here keeps
+          both of those properties intact.
+        required: false
+        default: ''
+        type: string
+      build-args:
+        description: >-
+          Newline-separated KEY=VALUE build arguments. storage-service's
+          Dockerfile needs COMPONENT_DIR when it is built from the repository
+          root.
+        required: false
+        default: ''
+        type: string
+      target:
+        description: >-
+          Build stage to stop at. Leave empty to build the last stage.
+          thumbnail-service's Dockerfile ends in two independent stages
+          (task-worker and server) and needs one call per stage.
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: docker build ${{ inputs.component }}${{ inputs.target && format(' ({0})', inputs.target) || '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # A Rust release build inside Docker, plus a `cargo vendor` tarball of
+      # every transitive dependency, does not fit in the ~14 GB a hosted runner
+      # leaves free. Same reclaim as rust-test.yml, and worth roughly 25 GB.
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+      - uses: actions/checkout@v4
+
+      # The docker-container driver, which the default docker driver is not:
+      # cache-to: type=gha and RUN --mount=type=cache both need BuildKit proper.
+      # These Dockerfiles lean on cache mounts heavily.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Only the first-party path crates are re-resolved; every third-party pin
+      # in the lock is preserved, so this does not drift dependency versions.
+      - name: Reconcile the published lockfile
+        if: inputs.cargo-manifest-dir != ''
+        run: cargo metadata --format-version 1 --manifest-path '${{ inputs.cargo-manifest-dir }}/Cargo.toml' > /dev/null
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          # Paths in COPY and RUN bind mounts resolve from this context.
+          # The Dockerfile path remains relative to the repository root.
+          context: ${{ inputs.build-context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
+          build-args: ${{ inputs.build-args }}
+          # Never push. There are no credentials and no reason to publish from
+          # a pull-request check.
+          push: false
+          # Not load: true either -- exporting a multi-hundred-MB image into the
+          # runner's docker daemon costs disk and time and buys nothing, since
+          # nothing downstream runs the image. A successful build is the signal.
+          load: false
+          # Layer cache only. The Dockerfiles' RUN --mount=type=cache mounts
+          # (cargo registry, CARGO_TARGET_DIR) are not layer content and are not
+          # exported by any BuildKit cache backend, so a warm run still
+          # recompiles the Rust. What this does save is the base images, apt
+          # layers and unchanged COPY stages.
+          #
+          # mode=min rather than max: the GitHub Actions cache is 10 GB for the
+          # whole repository, and five images exporting every intermediate layer
+          # evicts each other faster than it helps.
+          cache-from: type=gha,scope=${{ inputs.component }}${{ inputs.target && format('-{0}', inputs.target) || '' }}
+          cache-to: type=gha,mode=min,scope=${{ inputs.component }}${{ inputs.target && format('-{0}', inputs.target) || '' }}
+
+      - name: Disk after build
+        if: always()
+        run: df -h / | tail -1

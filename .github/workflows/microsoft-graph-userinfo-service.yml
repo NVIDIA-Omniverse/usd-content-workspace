@@ -1,0 +1,64 @@
+# Type-check and test microsoft-graph-userinfo-service.
+#
+# Self-contained: its workspace has no path dependency on anything published
+# outside its own tree -- the only path dep is the sibling crate
+# microsoft-graph-userinfo-capabilities-proto, which lives inside it, and its
+# protos are vendored under protos/. So, unlike thumbnail-service or
+# storage-service, the filter below is just the component plus the workflows
+# that run it; there is no common/observability or permission-service edge to
+# track. Add one here if the component ever grows a path dep on a sibling
+# component.
+
+name: microsoft-graph-userinfo-service
+
+on:
+  pull_request:
+    paths:
+      - 'user-identity/reference/microsoft-graph-userinfo-service/**'
+      - '.github/workflows/microsoft-graph-userinfo-service.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+  push:
+    # release/v*: the mirrored release branch in the public repository, whose
+    # pull request is opened with GITHUB_TOKEN and so gets no pull_request run.
+    branches: [main, 'release/v*']
+    paths:
+      - 'user-identity/reference/microsoft-graph-userinfo-service/**'
+      - '.github/workflows/microsoft-graph-userinfo-service.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    # Three crates build protos with tonic-prost-build, so this needs the protoc
+    # the reusable workflow installs. Note the floor: the vendored
+    # nvidia/omniverse/userinfo/v1alpha protos use proto3 `optional`, which
+    # protoc rejects before 3.15 with "This file contains proto3 optional
+    # fields, but --experimental_allow_proto3_optional was not set". ubuntu-latest's
+    # protobuf-compiler is well past that, but a runner image pinned back far
+    # enough would fail here rather than in anything the code changed.
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: user-identity/reference/microsoft-graph-userinfo-service
+
+  test:
+    # The whole workspace, nothing excluded and nothing skipped: 183 tests, all
+    # in-process. The suite fakes its Microsoft Graph calls with mockito and its
+    # Postgres-backed token loading with temp files, so it needs neither the
+    # Postgres nor the Valkey service container the reusable workflow starts,
+    # and no cloud credentials.
+    #
+    # microsoft-graph-userinfo-smoke-test and userinfo-conformance-test do
+    # target a deployed stack, but only from their `main` -- as test binaries
+    # they carry unit tests alone (6 config-parsing tests between them), which
+    # run here fine. That is why they are not excluded the way
+    # thumbnail-service excludes its equivalents.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: user-identity/reference/microsoft-graph-userinfo-service
+      test-args: '--workspace'

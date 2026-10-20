@@ -1,0 +1,26 @@
+{
+  "schema-version": 1,
+  "services": [
+    {
+      "id": "conformance-storage",
+      "name": "Conformance Storage Service",
+      "type": "storage",
+      "grpc": "grpc://conformance-storage:8011",
+      "rest": "http://conformance-storage:8012"
+    },
+    {
+      "id": "conformance-event-aggregation",
+      "name": "Conformance Event Aggregation Service",
+      "type": "notification-aggregation",
+      "grpc": "grpc://conformance-event-aggregation:50051",
+      "rest": "http://conformance-event-aggregation:8001"
+    },
+    {
+      "id": "conformance-event-consumer",
+      "name": "Conformance Event Consumer Service",
+      "type": "notification-consumer",
+      "grpc": "grpc://conformance-event-consumer:50052",
+      "rest": "http://conformance-event-consumer:8000"
+    }
+  ]
+}

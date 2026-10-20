@@ -1,0 +1,193 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+openapi: 3.0.3
+info:
+  title: Omniverse Discovery Catalog API
+  description: |
+    Catalog of discovered services and the REST and gRPC APIs each one implements.
+    A discovery service builds the catalog from the Capabilities API that each
+    target service exposes and returns it to clients as a single JSON document.
+  version: v2beta
+
+paths:
+  /api/v2beta/services:
+    get:
+      operationId: listDiscoveredServices
+      summary: Return the catalog of discovered services
+      description: |
+        Returns the current catalog snapshot. An empty catalog is returned as
+        `200 OK` with an empty `services` array.
+      tags:
+        - DiscoveryCatalog
+      responses:
+        "200":
+          description: The current catalog of discovered services.
+          headers:
+            Cache-Control:
+              description: Caching directive for the catalog, for example `max-age=30, must-revalidate`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServicesV2Response"
+
+  /api/v2/services:
+    get:
+      operationId: listDiscoveredServicesV2Alias
+      summary: Return the catalog of discovered services (compatibility alias)
+      description: |
+        Compatibility alias of `/api/v2beta/services` for clients written before
+        the v2beta path. Returns the identical response.
+      tags:
+        - DiscoveryCatalog
+      responses:
+        "200":
+          description: The current catalog of discovered services.
+          headers:
+            Cache-Control:
+              description: Caching directive for the catalog, for example `max-age=30, must-revalidate`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServicesV2Response"
+
+components:
+  schemas:
+    ServicesV2Response:
+      type: object
+      description: Catalog of discovered services.
+      required:
+        - schema-version
+        - services
+      properties:
+        schema-version:
+          type: integer
+          description: Catalog schema version. Always `2` for this representation.
+          enum:
+            - 2
+          example: 2
+        services:
+          type: array
+          description: Discovered services. Each `name` is unique within the array.
+          items:
+            $ref: "#/components/schemas/DiscoveredService"
+
+    DiscoveredService:
+      type: object
+      description: One discovered target service and the APIs it implements.
+      required:
+        - name
+        - capability_source
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Identifier of the target service, unique within the catalog.
+          example: storage
+        capability_source:
+          type: string
+          description: |
+            Capabilities API representation the entry was built from.
+            `grpc` for the gRPC representation, `openapi` for the REST representation.
+          enum:
+            - grpc
+            - openapi
+          example: grpc
+        rest:
+          $ref: "#/components/schemas/RestTransport"
+        grpc:
+          $ref: "#/components/schemas/GrpcTransport"
+
+    RestTransport:
+      type: object
+      description: REST base URL of the target service and the REST resources it implements.
+      required:
+        - url
+        - endpoints
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Absolute base URL for REST calls to the target service.
+          example: https://storage.example.com
+        endpoints:
+          type: array
+          minItems: 1
+          description: Named REST resources. Each `name` is unique within the array.
+          items:
+            $ref: "#/components/schemas/RestEndpoint"
+
+    RestEndpoint:
+      type: object
+      description: A named REST resource and its supported versions.
+      required:
+        - name
+        - versions
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: REST resource name.
+          example: fileobject
+        versions:
+          type: object
+          minProperties: 1
+          description: Map from version identifier (for example `v1` or `v1alpha`) to version detail.
+          additionalProperties:
+            $ref: "#/components/schemas/VersionDetail"
+
+    VersionDetail:
+      type: object
+      description: Version-specific REST detail.
+      properties:
+        path:
+          type: string
+          description: Path of the resource version, relative to the REST `url`. Begins with `/`.
+          example: /api/v1/fileobject
+
+    GrpcTransport:
+      type: object
+      description: gRPC target URL of the target service and the gRPC services it implements.
+      required:
+        - url
+        - endpoints
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Absolute gRPC target URL. The `https` scheme indicates TLS; `http` indicates plaintext.
+          example: https://grpc.storage.example.com
+        endpoints:
+          type: array
+          minItems: 1
+          description: gRPC services. Each `service` is unique within the array.
+          items:
+            $ref: "#/components/schemas/GrpcServiceEndpoint"
+
+    GrpcServiceEndpoint:
+      type: object
+      description: A gRPC service implemented by the target service.
+      required:
+        - service
+      properties:
+        service:
+          type: string
+          minLength: 1
+          description: Fully qualified Protocol Buffer service name.
+          example: nvidia.omniverse.storage.fileobject.v1.FileObjectService

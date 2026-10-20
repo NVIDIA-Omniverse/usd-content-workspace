@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "event-aggregation-service.fullname" . }}-settings
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-aggregation-service.labels" . | nindent 4 }}
+data:
+  # Observability (OpenTelemetry over OTLP/gRPC).
+  # The standardized `observability` block takes precedence; the service uses
+  # gRPC, so endpoints are read from `.endpoint.grpc`. notification-common gates
+  # the metrics and tracing signals independently via OMNI_EVENTS_METRICS_ENABLED
+  # and OMNI_EVENTS_TRACING_ENABLED, so each toggle maps straight to its own env
+  # var. There is no dedicated logs signal or endpoint in the standardized
+  # schema: notification-common ships logs whenever either signal is enabled and
+  # reuses the tracing endpoint (falling back to the metrics endpoint when only
+  # metrics is enabled). Each unset endpoint falls back to the other signal's
+  # endpoint so no OTLP endpoint is emitted empty (all point at the same
+  # collector). When neither signal is enabled, the legacy `telemetry` block is
+  # used so existing values render identically.
+  {{- $obs := .Values.observability }}
+  {{- if or $obs.metrics.enabled $obs.tracing.enabled }}
+  {{- $metricsEndpoint := dig "endpoint" "grpc" "" $obs.metrics }}
+  {{- $tracingEndpoint := dig "endpoint" "grpc" "" $obs.tracing }}
+  {{- if and $obs.metrics.enabled (not $metricsEndpoint) }}{{ fail "observability.metrics.endpoint.grpc must be set when observability.metrics.enabled is true" }}{{ end }}
+  {{- if and $obs.tracing.enabled (not $tracingEndpoint) }}{{ fail "observability.tracing.endpoint.grpc must be set when observability.tracing.enabled is true" }}{{ end }}
+  {{- $metricsEndpoint = $metricsEndpoint | default $tracingEndpoint }}
+  {{- $tracingEndpoint = $tracingEndpoint | default $metricsEndpoint }}
+  OMNI_EVENTS_METRICS_ENABLED: "{{ $obs.metrics.enabled }}"
+  OMNI_EVENTS_TRACING_ENABLED: "{{ $obs.tracing.enabled }}"
+  OMNI_EVENTS_OTLP_TRACING_ENDPOINT: {{ $tracingEndpoint | quote }}
+  OMNI_EVENTS_OTLP_METRICS_ENDPOINT: {{ $metricsEndpoint | quote }}
+  OMNI_EVENTS_OTLP_LOGS_ENDPOINT: {{ $tracingEndpoint | quote }}
+  {{- else }}
+  OMNI_EVENTS_TELEMETRY_ENABLED: "{{ .Values.telemetry.enabled }}"
+  OMNI_EVENTS_OTLP_TRACING_ENDPOINT: "{{ .Values.telemetry.otlp_tracing_endpoint }}"
+  OMNI_EVENTS_OTLP_METRICS_ENDPOINT: "{{ .Values.telemetry.otlp_metrics_endpoint }}"
+  OMNI_EVENTS_OTLP_LOGS_ENDPOINT: "{{ .Values.telemetry.otlp_logs_endpoint }}"
+  {{- end }}
+  OMNI_EVENTS_GRPC_PORT: "[::]:{{ .Values.service.port }}"
+  OMNI_EVENTS_REST_API_ENABLED: "{{ .Values.rest.enabled }}"
+  OMNI_EVENTS_REST_PORT: "{{ .Values.rest.port }}"
+  OMNI_EVENTS_CORS_ALLOW_ORIGINS: {{ include "event-aggregation-service.corsAllowOrigins" . | quote }}
+  # The byte cap is piped through int64 because Helm decodes a value this
+  # large as a float64 and would otherwise render it in scientific notation
+  # (4.194304e+06), which the service cannot parse as an integer.
+  OMNI_EVENTS_REST_MAX_REQUEST_BYTES: "{{ .Values.rest.maxRequestBytes | int64 }}"
+  OMNI_EVENTS_LOG_LEVEL: "{{ .Values.logging.level }}"
+  OMNI_EVENTS_GRPC_HEALTH_CHECKING_ENABLE: "True"
+  OMNI_EVENTS_PERMISSIONS_ENDPOINT: "{{ .Values.permissions.endpoint }}"
+  OMNI_EVENTS_PERMISSIONS_TTL_SECONDS: "{{ .Values.permissions.ttl_seconds }}"
+  {{- /*
+  The helpers in _helpers.tpl select the effective principalSource and fail
+  the render on any auth combination the service would refuse at startup
+  (notification-common's AuthSettings, and permissions.enabled without
+  permissions.endpoint).
+  */}}
+  {{- include "event-aggregation-service.validateAuthSettings" . }}
+  {{- $ps := include "event-aggregation-service.principalSource" . }}
+  OMNI_EVENTS_PERMISSIONS_ENABLED: "{{ .Values.permissions.enabled }}"
+  OMNI_EVENTS_PRINCIPAL_SOURCE: "{{ $ps }}"
+  OMNI_EVENTS_ALLOW_UNVERIFIED_JWT: "{{ include "event-aggregation-service.allowUnverifiedJwt" . }}"
+  OMNI_EVENTS_USER_INFO_SERVICE_URI: "{{ .Values.userInfoService.uri }}"
+  OMNI_EVENTS_OPENID_ENABLED: "{{ .Values.openId.enabled }}"
+  OMNI_EVENTS_TOKEN_VERIFICATION_TYPE: "{{ .Values.openId.tokenVerificationType | default "jwt" }}"
+  OMNI_EVENTS_OPENID_CONFIGURATION_URI: "{{ if or (eq $ps "jwt") (eq $ps "opaque") }}{{ .Values.openId.openIdConfigurationUri }}{{ end }}"
+  OMNI_EVENTS_PRINCIPAL_ID_CLAIM: "{{ if ne $ps "disabled" }}{{ .Values.openId.principalIdClaim }}{{ end }}"
+  OMNI_EVENTS_JWT_AUDIENCES: "{{ if or (eq $ps "jwt") (eq $ps "opaque") }}{{ include "event-aggregation-service.jwtAudiences" . }}{{ end }}"
+  OMNI_EVENTS_AUTH_CONTEXT_TTL: "{{ .Values.authContextTtl }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_SIZE: "{{ .Values.rabbitmq.channel_pool_size }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_POOL_MIN_SIZE: "{{ .Values.rabbitmq.channel_pool_min_size }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_CLIENT_LIMIT: "{{ .Values.rabbitmq.channel_client_limit }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_OVERFLOW_ENABLED: "{{ .Values.rabbitmq.channel_overflow_enabled }}"
+  OMNI_EVENTS_RABBITMQ_CHANNEL_WAIT_MS: "{{ .Values.rabbitmq.channel_wait_ms }}"
+  OMNI_EVENTS_SHUTDOWN_DRAIN_WINDOW_SECONDS: "{{ .Values.shutdown.drainWindowSeconds }}"
+  OMNI_EVENTS_SHUTDOWN_DRAIN_POLL_INTERVAL_SECONDS: "{{ .Values.shutdown.drainPollIntervalSeconds }}"
+  OMNI_EVENTS_SHUTDOWN_SETTLE_DELAY_SECONDS: "{{ .Values.shutdown.settleDelaySeconds }}"

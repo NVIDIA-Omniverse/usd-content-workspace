@@ -1,0 +1,95 @@
+# Git
+.git
+.gitignore
+.gitlab-ci.yml
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+
+# Testing
+tests
+pytest.ini
+pytest_report
+htmlcov
+.coverage
+.pytest_cache
+
+# Documentation (*.md matches only the repo root; **/*.md also catches
+# nested markdown such as docs/ and .bees/ plan files)
+README.md
+*.md
+**/*.md
+!ATTRIBUTIONS.md
+helm/README.md
+
+# OSS License files - ensure everything in oss directory is included
+!oss
+!oss/**
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+*.env.example
+
+# Scripts (development only). Nothing under here is needed at runtime.
+#
+# The chart's queue-policy hook module deliberately does NOT live here: it must
+# ship in BOTH the runtime image (the post-install/post-upgrade hook Job runs
+# `python -m public_scripts.apply_queue_policy` out of this image, which carries
+# app code via `COPY . /code` rather than installing the project) and the public
+# source mirror (the published chart references it, and
+# `.publishignore.service` drops `scripts/` wholesale as a pure denylist with no
+# negation available). Hence the separate top-level `public_scripts/` package,
+# which is intentionally excluded neither here nor there.
+scripts
+
+# Helm charts (not needed in runtime container)
+helm
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# Other
+.cursorignore
+.cursorrules
+notification_protos
+buf.gen.yaml
+openapi.yaml
+Dockerfile
+.dockerignore
+sonar-project.properties
+grafana-dashboard.json
+
+# Project planning / agent tooling (not needed at runtime; contains internal
+# index-URL token patterns the container scan flags as secrets)
+.bees
+.claude
+docs
+migration-metadata.csv
+migration-readiness-report.md
+
+# Dev / test / CI / security-scan config (not needed at runtime)
+.coveragerc
+.flake8
+.pre-commit-config.yaml
+.gitmodules
+.nspect-allowlist.toml
+.pulse-trufflehog-allowlist.json
+.spectral-extension.yml
+.spectral-extension.yml.example
+

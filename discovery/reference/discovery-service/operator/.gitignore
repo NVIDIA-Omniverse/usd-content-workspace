@@ -1,0 +1,17 @@
+.DS_Store
+
+
+**/target/*
+
+.idea
+.vscode
+
+*.swp
+*.swo
+
+
+/helm/auto-discovery-service/values.local.yaml
+/.env
+
+.netrc
+LICENSE-3rdparty.csv

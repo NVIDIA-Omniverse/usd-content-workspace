@@ -1,0 +1,1534 @@
+{
+	"info": {
+		"_postman_id": "842d5ab6-6097-47f4-bca6-04026a8333d7",
+		"name": "Permission Service",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "27986634"
+	},
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Health check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_uri}}/health",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Health check used to determine API availability."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Authorization",
+			"item": [
+				{
+					"name": "Authorize",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"principal\": {\r\n        \"sub\": \"\",\r\n        \"info\": {}\r\n    },\r\n    \"action\": {\r\n        \"service\": \"\",\r\n        \"name\": \"\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"\",\r\n        \"type\": \"\",\r\n        \"data\": {}\r\n    },\r\n    \"context\": {}\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/authorization/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"authorization",
+								""
+							]
+						},
+						"description": "Determines if the specified principal has access to perform the action on the specified resource."
+					},
+					"response": [
+						{
+							"name": "All fields",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"action\": {\r\n        \"service\": \"tags\",\r\n        \"name\": \"get\"\r\n    },\r\n    \"principal\": {\r\n        \"sub\": \"test-user\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"Astronaut.usd\",\r\n        \"type\": \"File\"\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/authorization/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"authorization",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "No resource",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"action\": {\r\n        \"service\": \"tags\",\r\n        \"name\": \"get\"\r\n    },\r\n    \"principal\": {\r\n        \"sub\": \"test-user\"\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/authorization/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"authorization",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "Authorize batch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"batches\": [\r\n        {\r\n            \"principal\": {\r\n                \"sub\": \"\",\r\n                \"info\": {}\r\n            },\r\n            \"actions\": [\r\n                {\r\n                    \"service\": \"\",\r\n                    \"name\": \"\"\r\n                }\r\n            ],\r\n            \"resource\": {\r\n                \"id\": \"\",\r\n                \"type\": \"\",\r\n                \"data\": {}\r\n            },\r\n            \"context\": {}\r\n        }\r\n    ],\r\n    \"condition\": \"none\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/authorization/batch/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"authorization",
+								"batch",
+								""
+							]
+						},
+						"description": "Batched variant of POST /authorization/ that allows checking multiple principals, actions and resources in a single request. The optional `condition` field controls aggregation: `none` (default), `or` (allow if any allowed), or `and` (allow only if all allowed)."
+					},
+					"response": [
+						{
+							"name": "Multiple actions for resource",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"batches\": [\r\n        {\r\n            \"principal\": {\"sub\": \"test-user\"},\r\n            \"actions\": [\r\n                {\"name\": \"read\", \"service\": \"storage\"},\r\n                {\"name\": \"write\", \"service\": \"storage\"},\r\n                {\"name\": \"set\", \"service\": \"tags\"},\r\n                {\"name\": \"get\", \"service\": \"tags\"}\r\n            ],\r\n            \"resource\": {\r\n                \"id\": \"Astronaut.usd\",\r\n                \"type\": \"File\",\r\n                \"data\": {\r\n                    \"resourceIdentity\": \"Astronaut.usd\",\r\n                    \"metadata\": {\r\n                        \"size\": 1024,\r\n                        \"timestamp\": 1726640120432\r\n                    }\r\n                }\r\n            }\r\n        }\r\n    ]\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/authorization/batch/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"authorization",
+										"batch",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Multiple resources for action",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"batches\": [\r\n        {\r\n            \"principal\": {\"sub\": \"test-user\"},\r\n            \"actions\": [{\"name\": \"get\", \"service\": \"tags\"}],\r\n            \"resource\": {\r\n                \"id\": \"Astronaut.usd\",\r\n                \"type\": \"File\"\r\n            }\r\n        },\r\n        {\r\n            \"principal\": {\"sub\": \"test-user\"},\r\n            \"actions\": [{\"name\": \"get\", \"service\": \"tags\"}],\r\n            \"resource\": {\r\n                \"id\": \"Marbles_Assets.usd\",\r\n                \"type\": \"File\"\r\n            }\r\n        }\r\n    ]\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/authorization/batch/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"authorization",
+										"batch",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Require all actions allowed (AND)",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"batches\": [\r\n        {\r\n            \"principal\": {\"sub\": \"test-user\"},\r\n            \"actions\": [{\"name\": \"read\", \"service\": \"storage\"}],\r\n            \"resource\": {\r\n                \"id\": \"Astronaut.usd\",\r\n                \"type\": \"File\"\r\n            }\r\n        },\r\n        {\r\n            \"principal\": {\"sub\": \"test-user\"},\r\n            \"actions\": [{\"name\": \"write\", \"service\": \"storage\"}],\r\n            \"resource\": {\r\n                \"id\": \"Marbles_Assets.usd\",\r\n                \"type\": \"File\"\r\n            }\r\n        }\r\n    ],\r\n    \"condition\": \"and\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/authorization/batch/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"authorization",
+										"batch",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Policies",
+			"item": [
+				{
+					"name": "List policies (paginated)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/?principal&action&resource&page=1&limit=10",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								""
+							],
+							"query": [
+								{
+									"key": "principal",
+									"value": null,
+									"description": "Optional principal filter. Use `NULL` to match policies without a principal scope."
+								},
+								{
+									"key": "action",
+									"value": null,
+									"description": "Optional action filter (format `service:name`). Use `NULL` to match policies without an action scope."
+								},
+								{
+									"key": "resource",
+									"value": null,
+									"description": "Optional resource filter (format `Type::\"id\"`). Use `NULL` to match policies without a resource scope."
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Start page (>=1)."
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Page size (1-50)."
+								}
+							]
+						},
+						"description": "Returns policies from the database using offset pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get policy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/{{policy_id}}",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								"{{policy_id}}"
+							]
+						},
+						"description": "Returns a Cedar policy by its ID or HTTP 404 if such ID does not exist."
+					},
+					"response": []
+				},
+				{
+					"name": "Add policy",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"policy\": \"\",\r\n    \"order\": null\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								""
+							]
+						},
+						"description": "Adds a single Cedar policy. Policy scopes (principal, action, resource) are inferred from policy text. The optional `order` field controls evaluation priority."
+					},
+					"response": [
+						{
+							"name": "Example",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"policy\": \"permit(principal == Principal::\\\"test-user\\\", action == Action::\\\"tags:get\\\", resource == File::\\\"Astronaut.usd\\\");\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/policies/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"policies",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "RBAC",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"policy\": \"permit(principal, action == Action::\\\"tags:get\\\", resource == File::\\\"Astronaut.usd\\\") when { principal.groups.contains(\\\"admin\\\") };\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/policies/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"policies",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "ABAC",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"policy\": \"permit(principal, action == Action::\\\"tags:get\\\", resource) when { resource is File && resource.path like \\\"/Projects/*\\\" };\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/policies/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"policies",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "With custom order",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"policy\": \"permit(principal == Principal::\\\"test-user\\\", action == Action::\\\"tags:get\\\", resource == File::\\\"Astronaut.usd\\\");\",\r\n    \"order\": 100\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/policies/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"policies",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "Add policies (batch)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\r\n    {\r\n        \"policy\": \"\",\r\n        \"order\": null\r\n    }\r\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/batch/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								"batch",
+								""
+							]
+						},
+						"description": "Batched variant of PUT /policies/. Each item must contain exactly one Cedar policy; scopes are inferred from policy text."
+					},
+					"response": [
+						{
+							"name": "Multiple policies",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "[\r\n    {\r\n        \"policy\": \"permit(principal == Principal::\\\"Alice\\\", action == Action::\\\"tags:get\\\", resource == File::\\\"Astronaut.usd\\\");\"\r\n    },\r\n    {\r\n        \"policy\": \"permit(principal, action == Action::\\\"tags:get\\\", resource) when { principal.groups.contains(\\\"admin\\\") };\",\r\n        \"order\": 200\r\n    }\r\n]",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/policies/batch/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"policies",
+										"batch",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				},
+				{
+					"name": "Delete policy",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/{{policy_id}}",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								"{{policy_id}}"
+							]
+						},
+						"description": "Removes a Cedar policy with the specified ID from the database."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Metadata",
+			"item": [
+				{
+					"name": "Services",
+					"item": [
+						{
+							"name": "List services",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										""
+									]
+								},
+								"description": "Returns all services and their metadata registered in the database."
+							},
+							"response": []
+						},
+						{
+							"name": "Get service",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										""
+									]
+								},
+								"description": "Returns metadata for the specified service."
+							},
+							"response": []
+						},
+						{
+							"name": "Set service metadata",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"service\": \"{{service}}\",\r\n    \"id_claim\": \"sub\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										""
+									]
+								},
+								"description": "Updates metadata for the specified service. The `id_claim` field selects which JWT claim is used as the principal identifier."
+							},
+							"response": [
+								{
+									"name": "Default",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"service\": \"storage\",\r\n    \"id_claim\": \"sub\"\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_uri}}/v1beta/services/storage/",
+											"host": [
+												"{{base_uri}}"
+											],
+											"path": [
+												"v1beta",
+												"services",
+												"storage",
+												""
+											]
+										}
+									},
+									"_postman_previewlanguage": null,
+									"header": null,
+									"cookie": [],
+									"body": null
+								},
+								{
+									"name": "Custom ID claim",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"service\": \"storage\",\r\n    \"id_claim\": \"email\"\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_uri}}/v1beta/services/storage/",
+											"host": [
+												"{{base_uri}}"
+											],
+											"path": [
+												"v1beta",
+												"services",
+												"storage",
+												""
+											]
+										}
+									},
+									"_postman_previewlanguage": null,
+									"header": null,
+									"cookie": [],
+									"body": null
+								}
+							]
+						},
+						{
+							"name": "Delete service",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										""
+									]
+								},
+								"description": "Removes metadata for the specified service."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Actions",
+					"item": [
+						{
+							"name": "List service actions",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/actions/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"actions",
+										""
+									]
+								},
+								"description": "Gets registered actions for the specified service."
+							},
+							"response": []
+						},
+						{
+							"name": "Replace service actions",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "[\r\n    {\r\n        \"service\": \"{{service}}\",\r\n        \"name\": \"\"\r\n    }\r\n]",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/actions/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"actions",
+										""
+									]
+								},
+								"description": "Replaces registered actions for the specified service (deletes all existing actions and replaces them with the specified value)."
+							},
+							"response": [
+								{
+									"name": "Example",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "[\r\n    {\"service\": \"tags\", \"name\": \"get\"},\r\n    {\"service\": \"tags\", \"name\": \"set\"}\r\n]",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_uri}}/v1beta/services/tags/actions/",
+											"host": [
+												"{{base_uri}}"
+											],
+											"path": [
+												"v1beta",
+												"services",
+												"tags",
+												"actions",
+												""
+											]
+										}
+									},
+									"_postman_previewlanguage": null,
+									"header": null,
+									"cookie": [],
+									"body": null
+								}
+							]
+						},
+						{
+							"name": "Set service action",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/actions/{{action}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"actions",
+										"{{action}}",
+										""
+									]
+								},
+								"description": "Adds or updates an action for the specified service."
+							},
+							"response": []
+						},
+						{
+							"name": "Delete service action",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/actions/{{action}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"actions",
+										"{{action}}",
+										""
+									]
+								},
+								"description": "Deletes an action with the specified name for the specified service."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Resource Types",
+					"item": [
+						{
+							"name": "List service resource types",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/resource-types/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"resource-types",
+										""
+									]
+								},
+								"description": "Gets registered resource types for the specified service."
+							},
+							"response": []
+						},
+						{
+							"name": "Replace service resource types",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "[\r\n    {\r\n        \"service\": \"{{service}}\",\r\n        \"type\": \"\",\r\n        \"evaluation_priority\": \"forbid\"\r\n    }\r\n]",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/resource-types/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"resource-types",
+										""
+									]
+								},
+								"description": "Replaces registered resource types for the specified service (deletes all existing resource types and replaces them with specified value). `evaluation_priority` must be `forbid` or `permit`."
+							},
+							"response": [
+								{
+									"name": "Example",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "[\r\n    {\r\n        \"service\": \"storage\",\r\n        \"type\": \"ResourceAddress\",\r\n        \"evaluation_priority\": \"forbid\"\r\n    },\r\n    {\r\n        \"service\": \"storage\",\r\n        \"type\": \"File\",\r\n        \"evaluation_priority\": \"forbid\"\r\n    }\r\n]",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_uri}}/v1beta/services/storage/resource-types/",
+											"host": [
+												"{{base_uri}}"
+											],
+											"path": [
+												"v1beta",
+												"services",
+												"storage",
+												"resource-types",
+												""
+											]
+										}
+									},
+									"_postman_previewlanguage": null,
+									"header": null,
+									"cookie": [],
+									"body": null
+								}
+							]
+						},
+						{
+							"name": "Get resource type",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/resource-types/{{resource_type}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"resource-types",
+										"{{resource_type}}",
+										""
+									]
+								},
+								"description": "Gets metadata for the specified service resource type."
+							},
+							"response": []
+						},
+						{
+							"name": "Set resource type",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"service\": \"{{service}}\",\r\n    \"type\": \"{{resource_type}}\",\r\n    \"evaluation_priority\": \"forbid\"\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/resource-types/{{resource_type}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"resource-types",
+										"{{resource_type}}",
+										""
+									]
+								},
+								"description": "Updates metadata for the specified service resource type. `evaluation_priority` must be `forbid` or `permit`."
+							},
+							"response": [
+								{
+									"name": "Forbid priority",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"service\": \"storage\",\r\n    \"type\": \"ResourceAddress\",\r\n    \"evaluation_priority\": \"forbid\"\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_uri}}/v1beta/services/storage/resource-types/ResourceAddress/",
+											"host": [
+												"{{base_uri}}"
+											],
+											"path": [
+												"v1beta",
+												"services",
+												"storage",
+												"resource-types",
+												"ResourceAddress",
+												""
+											]
+										}
+									},
+									"_postman_previewlanguage": null,
+									"header": null,
+									"cookie": [],
+									"body": null
+								},
+								{
+									"name": "Permit priority",
+									"originalRequest": {
+										"method": "PUT",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"service\": \"storage\",\r\n    \"type\": \"ResourceAddress\",\r\n    \"evaluation_priority\": \"permit\"\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{base_uri}}/v1beta/services/storage/resource-types/ResourceAddress/",
+											"host": [
+												"{{base_uri}}"
+											],
+											"path": [
+												"v1beta",
+												"services",
+												"storage",
+												"resource-types",
+												"ResourceAddress",
+												""
+											]
+										}
+									},
+									"_postman_previewlanguage": null,
+									"header": null,
+									"cookie": [],
+									"body": null
+								}
+							]
+						},
+						{
+							"name": "Delete resource type",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_uri}}/v1beta/services/{{service}}/resource-types/{{resource_type}}/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"services",
+										"{{service}}",
+										"resource-types",
+										"{{resource_type}}",
+										""
+									]
+								},
+								"description": "Deletes metadata for the specified service resource type."
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Diagnostics",
+			"item": [
+				{
+					"name": "Diagnostics authorize",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"principal\": {\r\n        \"sub\": \"\",\r\n        \"info\": {}\r\n    },\r\n    \"action\": {\r\n        \"service\": \"\",\r\n        \"name\": \"\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"\",\r\n        \"type\": \"\",\r\n        \"data\": {}\r\n    },\r\n    \"context\": {}\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/diagnostics/authorize/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"diagnostics",
+								"authorize",
+								""
+							]
+						},
+						"description": "Returns the list of policies that would be evaluated for the given PARC parameters and the evaluation priority, without returning a decision. Requires the `permissions:diagnostics` permission."
+					},
+					"response": [
+						{
+							"name": "Example",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"principal\": {\"sub\": \"test-user\"},\r\n    \"action\": {\"service\": \"tags\", \"name\": \"get\"},\r\n    \"resource\": {\"id\": \"Astronaut.usd\", \"type\": \"File\"}\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_uri}}/v1beta/diagnostics/authorize/",
+									"host": [
+										"{{base_uri}}"
+									],
+									"path": [
+										"v1beta",
+										"diagnostics",
+										"authorize",
+										""
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "IDP",
+			"item": [
+				{
+					"name": "Get JWKS",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_uri}}/v1beta/idp/keys/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"idp",
+								"keys",
+								""
+							]
+						},
+						"description": "Returns the JWK Set containing public keys used for token validation."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Demo",
+			"item": [
+				{
+					"name": "Can Alice read tags for Astronaut.usd?",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"principal\": {\r\n        \"sub\": \"Alice\"\r\n    },\r\n    \"action\": {\r\n        \"service\": \"tags\",\r\n        \"name\": \"get\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"Astronaut.usd\",\r\n        \"type\": \"File\"\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/authorization/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"authorization",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Allow Alice to read tags for Astronaut.usd",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"policy\": \"permit(principal == Principal::\\\"Alice\\\", action == Action::\\\"tags:get\\\", resource == File::\\\"Astronaut.usd\\\");\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Can Bob read tags for Astronaut.usd?",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"principal\": {\r\n        \"sub\": \"Bob\",\r\n        \"info\": {\r\n           \"groups\": [\"admin\"]\r\n        }\r\n    },\r\n    \"action\": {\r\n        \"service\": \"tags\",\r\n        \"name\": \"get\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"Astronaut.usd\",\r\n        \"type\": \"File\"\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/authorization/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"authorization",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Allow system administrators to read tags for all files",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"policy\": \"permit(principal, action == Action::\\\"tags:get\\\", resource) when { principal.groups.contains(\\\"admin\\\") };\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Can Alice read tags for /Public/Marbles.usd?",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"action\": {\r\n        \"service\": \"tags\",\r\n        \"name\": \"get\"\r\n    },\r\n    \"principal\": {\r\n        \"sub\": \"Alice\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"/Public/Marbles.usd\",\r\n        \"type\": \"File\"\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/authorization/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"authorization",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Allow all users to read tags from /Public/ folder",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"policy\": \"permit(principal, action == Action::\\\"tags:get\\\", resource) when { resource is File && resource.id like \\\"/Public/*\\\" };\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/policies/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"policies",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Read ResourceAddress",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"action\": {\r\n        \"service\": \"storage\",\r\n        \"name\": \"read\"\r\n    },\r\n    \"resource\": {\r\n        \"id\": \"/Users/\",\r\n        \"type\": \"ResourceAddress\"\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_uri}}/v1beta/authorization/",
+							"host": [
+								"{{base_uri}}"
+							],
+							"path": [
+								"v1beta",
+								"authorization",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "policy_id",
+			"value": "1"
+		},
+		{
+			"key": "service",
+			"value": "storage",
+			"type": "string"
+		},
+		{
+			"key": "action",
+			"value": "read",
+			"type": "string"
+		},
+		{
+			"key": "resource_type",
+			"value": "ResourceAddress",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "base_uri",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

@@ -1,0 +1,283 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ if .Values.tests.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "storage-service.fullname" . }}-test-smoke
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  {{- if gt (int (.Values.tests.ttlSecondsAfterFinished | default 0)) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.tests.ttlSecondsAfterFinished }}
+  {{- end }}
+  backoffLimit: 0
+  template:
+    metadata:
+      {{- $podLabels := .Values.smokeTest.podLabels | default .Values.podLabels }}
+      {{- with $podLabels }}
+      labels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "storage-service.smokeTestServiceAccountName" . }}
+      restartPolicy: Never
+      {{- with .Values.smokeTest.image.pullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 6 }}
+      {{- end }}
+      {{- if and .Values.tests.serviceIdentity.accessTokenFile.enabled .Values.tests.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+      initContainers:
+        - name: {{ .Chart.Name }}-token-provisioner
+          restartPolicy: Always
+            {{- (omit .Values.tests.serviceIdentity.accessTokenFile.provisionerSidecar.container "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+              {{- with .Values.tests.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+                {{- toYaml . | nindent 12 }}
+              {{- end }}
+            - name: token-exchange
+              mountPath: "/etc/secrets/access-token"
+      {{- end }}
+
+      volumes:
+        - name: smoke-tests
+          configMap:
+            name: {{ include "storage-service.fullname" . }}-smoke-tests
+        {{- if .Values.tests.serviceIdentity.accessTokenFile.enabled }}
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end }}
+
+      containers:
+        - name: smoke-test
+          image: {{ .Values.smokeTest.image.repository }}:{{ .Values.smokeTest.image.tag }}
+          imagePullPolicy: {{ .Values.smokeTest.image.pullPolicy }}
+          workingDir: /workspace/tests
+          volumeMounts:
+            # Test files
+            - name: smoke-tests
+              mountPath: /workspace/tests/pytest.ini
+              subPath: pytest.ini
+            - name: smoke-tests
+              mountPath: /workspace/tests/conftest.py
+              subPath: conftest.py
+            - name: smoke-tests
+              mountPath: /workspace/tests/utils.py
+              subPath: utils.py
+            - name: smoke-tests
+              mountPath: /workspace/tests/storage_grpc_helpers.py
+              subPath: storage_grpc_helpers.py
+            - name: smoke-tests
+              mountPath: /workspace/tests/storage_rest_helpers.py
+              subPath: storage_rest_helpers.py
+            - name: smoke-tests
+              mountPath: /workspace/tests/smoke-tests/test_storage_grpc.py
+              subPath: test_storage_grpc.py
+            - name: smoke-tests
+              mountPath: /workspace/tests/smoke-tests/test_storage_rest.py
+              subPath: test_storage_rest.py
+
+            # gRPC package __init__.py files (same empty file mounted multiple times)
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/capabilities/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/capabilities/v1alpha/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/filefolder/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/filefolder/v1alpha/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/fileobject/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/fileobject/v1alpha/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/metadata/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/metadata/v1alpha/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/versioning/__init__.py
+              subPath: __init__.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/versioning/v1alpha/__init__.py
+              subPath: __init__.py
+
+            # gRPC stubs - Capabilities
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/capabilities/v1alpha/capabilities_pb2.py
+              subPath: capabilities_pb2.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/capabilities/v1alpha/capabilities_pb2_grpc.py
+              subPath: capabilities_pb2_grpc.py
+
+            # gRPC stubs - FileFolder
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/filefolder/v1alpha/filefolder_service_pb2.py
+              subPath: filefolder_service_pb2.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/filefolder/v1alpha/filefolder_service_pb2_grpc.py
+              subPath: filefolder_service_pb2_grpc.py
+
+            # gRPC stubs - FileObject
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_pb2.py
+              subPath: fileobject_pb2.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_pb2_grpc.py
+              subPath: fileobject_pb2_grpc.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_service_pb2.py
+              subPath: fileobject_service_pb2.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/fileobject/v1alpha/fileobject_service_pb2_grpc.py
+              subPath: fileobject_service_pb2_grpc.py
+
+            # gRPC stubs - Metadata
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/metadata/v1alpha/metadata_pb2.py
+              subPath: metadata_pb2.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/metadata/v1alpha/metadata_pb2_grpc.py
+              subPath: metadata_pb2_grpc.py
+
+            # gRPC stubs - Versioning
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/versioning/v1alpha/versioning_pb2.py
+              subPath: versioning_pb2.py
+            - name: smoke-tests
+              mountPath: /workspace/grpc/nvidia/omniverse/storage/versioning/v1alpha/versioning_pb2_grpc.py
+              subPath: versioning_pb2_grpc.py
+
+            {{- if .Values.tests.serviceIdentity.accessTokenFile.enabled }}
+            # Workload-identity access token written by the sidecar
+            - name: token-exchange
+              readOnly: true
+              mountPath: "/etc/secrets/access-token"
+            {{- end }}
+
+          env:
+            - name: PYTHONPATH
+              value: "/workspace/grpc:/workspace/tests"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: SMOKE_TESTS_RESOURCE_BASE
+              value: {{ .Values.tests.storageApiResourceBase | quote }}
+            {{- /* Endpoints: if set, use tests.grpcStorageEndpoint and tests.httpStorageEndpoint as-is; else default (ingress URLs when ingress on, in-cluster when off). Do not modify user-provided endpoints. */}}
+            {{- $ingressEnabled := .Values.httpProxy.enabled }}
+            {{- $serviceName := include "storage-service.servicename" . }}
+            {{- $namespace := .Release.Namespace }}
+            {{- $grpcPort := .Values.service.grpc.port }}
+            {{- $restPort := .Values.service.rest.port }}
+            {{- $inClusterGrpc := printf "http://%s.%s.svc.cluster.local:%v" $serviceName $namespace $grpcPort }}
+            {{- $inClusterRest := printf "http://%s.%s.svc.cluster.local:%v" $serviceName $namespace $restPort }}
+            {{- $defaultGrpc := $inClusterGrpc }}
+            {{- $defaultRest := $inClusterRest }}
+
+            {{- if $ingressEnabled }}
+              {{- $scheme := ternary "https" "http" .Values.httpProxy.tls.enabled }}
+              {{- $fqdn := printf "%s.%s" .Values.httpProxy.fqdn.host .Values.httpProxy.fqdn.domain }}
+              {{- $defaultGrpc = printf "%s://grpc.%s" $scheme $fqdn }}
+              {{- $defaultRest = printf "%s://%s%s" $scheme $fqdn (.Values.httpProxy.path | default "/") }}
+            {{- else }}
+              {{- /* keep $defaultGrpc and $defaultRest as in-cluster (set above) */}}
+            {{- end }}
+
+            {{- $grpcVal := .Values.tests.grpcStorageEndpoint | default $defaultGrpc }}
+            {{- $restVal := .Values.tests.httpStorageEndpoint | default $defaultRest }}
+            - name: SMOKE_TESTS_GRPC_ENDPOINT
+              value: {{ $grpcVal | quote }}
+            - name: SMOKE_TESTS_REST_ENDPOINT
+              value: {{ $restVal | quote }}
+            {{- if .Values.tests.timeout }}
+            - name: SMOKE_TESTS_TIMEOUT
+              value: {{ .Values.tests.timeout | quote }}
+            {{- end }}
+            {{- if .Values.tests.grpcSkipTls }}
+            - name: SMOKE_TESTS_GRPC_SKIP_TLS
+              value: {{ .Values.tests.grpcSkipTls | quote }}
+            {{- end }}
+            {{- if .Values.tests.restSkipTls }}
+            - name: SMOKE_TESTS_REST_SKIP_TLS
+              value: {{ .Values.tests.restSkipTls | quote }}
+            {{- end }}
+            {{- with .Values.tests.auth.microsoftUrl }}
+            {{- if or .value .valueFrom }}
+            - name: SMOKE_TESTS_AUTH_MICROSOFT_URL
+              {{- if .value }}
+              value: {{ .value | quote }}
+              {{- else }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.tests.auth.credentials }}
+            {{- if or .value .valueFrom }}
+            - name: SMOKE_TESTS_AUTH_CREDENTIALS
+              {{- if .value }}
+              value: {{ .value | quote }}
+              {{- else }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.tests.auth.scope }}
+            {{- if or .value .valueFrom }}
+            - name: SMOKE_TESTS_AUTH_SCOPE
+              {{- if .value }}
+              value: {{ .value | quote }}
+              {{- else }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.tests.serviceIdentity.accessTokenFile.enabled }}
+            - name: SMOKE_TESTS_ACCESS_TOKEN_FILE_PATH
+              value: "/etc/secrets/access-token/token"
+            {{- end }}
+            {{- $runGrpc := .Values.tests.runGrpcTests }}
+            {{- $runRest := .Values.tests.runRestTests }}
+            {{- if and $runGrpc (not $runRest) }}
+            - name: PYTEST_ADDOPTS
+              value: "-m grpc"
+            {{- else if and $runRest (not $runGrpc) }}
+            - name: PYTEST_ADDOPTS
+              value: "-m rest"
+            {{- end }}
+          command: ["python", "-m", "pytest"]
+          args: ["-v", "-s", "--tb=short", "-p", "no:cacheprovider", "--log-cli-level=INFO", "smoke-tests/"]
+{{- end }}

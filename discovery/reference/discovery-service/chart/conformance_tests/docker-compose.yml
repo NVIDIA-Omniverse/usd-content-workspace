@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Local development: starts a test discovery NGINX and runs conformance tests.
+#
+#   docker compose up --abort-on-container-exit --exit-code-from conformance-tests
+
+services:
+  discovery-service:
+    build:
+      context: ./nginx
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  conformance-tests:
+    build: .
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+    environment:
+      CONFORMANCE_REST_ENDPOINT: http://discovery-service:8080
+      CONFORMANCE_HEALTH_ENDPOINT: http://discovery-service:8080/health
+    volumes:
+      - ./reports:/app/reports

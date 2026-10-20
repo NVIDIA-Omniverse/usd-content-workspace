@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "envoy-auth-ext"
+description = "Contour/Envoy Authorization Extension"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "envoy-auth-ext"
+path = "src/main.rs"
+
+[lib]
+doctest = false
+
+[dependencies]
+otel-tools = { workspace = true }
+permission-auth = { workspace = true }
+tonic-observability = { workspace = true }
+
+clap = { workspace = true, features = ["derive"] }
+config = { workspace = true }
+reqwest = { workspace = true, features = ["json", "default-tls"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-stream = { workspace = true }
+toml = { workspace = true }
+tower = { workspace = true }
+tonic-health = { workspace = true }
+tonic-reflection = { workspace = true }
+tonic = { workspace = true }
+tonic-prost = { workspace = true }
+tracing = { workspace = true }
+opentelemetry = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+tracing-subscriber = { workspace = true, default-features = false, features = [
+    "ansi",
+    "std",
+    "fmt",
+    "registry",
+    "env-filter",
+] }
+opentelemetry_sdk = { workspace = true, default-features = false, features = [
+    "rt-tokio",
+    "trace",
+    "metrics",
+] }
+opentelemetry-otlp = { workspace = true, features = [
+    "grpc-tonic",
+    "http-json",
+    "http-proto",
+    "reqwest-client",
+] }
+serde = { workspace = true, features = ["std", "derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+
+[build-dependencies]
+tonic-prost-build = { workspace = true }

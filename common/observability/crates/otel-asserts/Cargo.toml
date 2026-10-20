@@ -1,0 +1,107 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "otel-asserts"
+description = "Mock OpenTelemetry collectors and assertion helpers"
+
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+authors.workspace = true
+license.workspace = true
+
+autobins = false
+autoexamples = false
+autobenches = false
+
+include = ["/src", "/LICENSE.txt"]
+readme = "../../README.md"
+homepage = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/common/observability"
+repository = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/common/observability"
+
+publish = ["ct-omniverse-cargo-local"]
+
+[lib]
+
+[features]
+default = []
+with-serde = []
+
+[dependencies]
+
+# helper to display raw trace/span IDs
+hex = { workspace = true, default-features = false, features = ["std"] }
+
+# required for `SpanContext` and other context types
+opentelemetry = { workspace = true, default-features = false, features = [] }
+
+# required for gRPC/HTTP servers
+tokio = { workspace = true, default-features = false, features = [
+    "net",
+    "sync",
+    "rt-multi-thread",
+] }
+
+# the Otel protobuf definitions
+# TODO: can we replace this with compiling our own protobuf defs, and avoid
+# pulling in a lot of unneeded deps?
+opentelemetry-proto = { workspace = true, default-features = false, features = [
+    "gen-tonic",
+    "trace",
+    "logs",
+    "metrics",
+] }
+opentelemetry-semantic-conventions = { workspace = true, default-features = false, features = [
+    "semconv_experimental",
+] }
+
+# required for gRPC server
+# the tonic version must match the version used by `opentelemetry-proto`, and
+# not the version from the workspace.
+tonic = { version = "=0.14.2", default-features = false, features = [
+    "server",
+    "router",
+] }
+
+# required for gRPC server
+tower-layer = { workspace = true, default-features = false }
+
+# required for HTTP server
+# the axum version should match the version used by `tonic`, and not the version
+# from the workspace.
+axum = { version = "~0.8", default-features = false, features = [
+    "http1",
+    "tokio",
+] }
+
+# required for HTTP server (manual proto deserialization)
+prost = { workspace = true, default-features = false, features = ["std"] }
+
+# tracing
+tracing = { workspace = true, default-features = false }
+tracing-subscriber = { workspace = true, default-features = false, features = [
+    "fmt",
+] }
+serde = { workspace = true, default-features = false, features = [
+    "std",
+    "derive",
+] }
+serde_json = { workspace = true, default-features = false, features = ["std"] }
+time = { workspace = true, default-features = false, features = [
+    "formatting",
+    "parsing",
+] }

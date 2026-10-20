@@ -1,0 +1,21 @@
+# sync me with .dockerignore
+
+_*/
+.DS_Store
+/.idea
+/.vscode
+/build
+/target
+/codecov
+/scratch
+/generated
+/conformance_tests/reports
+
+*.tgz
+*.profraw
+
+.env
+
+# git only
+.netrc
+http-client.private.env.json

@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Reports whether each release pull request in the public
+# NVIDIA-Omniverse/usd-content-workspace repository is still exactly one
+# commit on top of the current default branch.
+#
+# mirror-to-public.yml builds `release/<tag>` as a single commit whose tree is
+# the whole tagged tree, deletions included, on top of the default branch as
+# it was at that moment. Merging it gives the default branch exactly that tree
+# only while its parent is still the default branch head. Once the default
+# branch moves (another release, a direct commit) or the default branch is
+# merged into the release branch ("Update branch"), the merge becomes a
+# three-way merge that can keep files the tag deleted or changes the tag does
+# not contain.
+#
+# The status `release-tree / up to date` is set on the head commit of every
+# open release pull request: success when it is one commit ahead of the
+# default branch and zero behind, failure otherwise. It is refreshed when a
+# release branch is pushed and whenever the default branch moves. To fix a
+# failure, re-run "Mirror release to public repository" in the internal
+# repository for the same tag; it rebuilds the branch on the current default
+# branch. Make the status required in the default branch's protection rules
+# so a stale release cannot be merged.
+
+name: Release tree
+
+on:
+  push:
+    branches:
+      - main
+      - "release/v*"
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: release-tree
+  cancel-in-progress: false
+
+jobs:
+  status:
+    if: github.repository == 'NVIDIA-Omniverse/usd-content-workspace'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Set up-to-date status on release branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          base_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE" --jq .object.sha)"
+          # Every open release pull request, plus the branch just pushed (its
+          # pull request may not be open yet).
+          heads="$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$BASE" --state open --limit 100 \
+            --json headRefName,headRefOid \
+            --jq '.[] | select(.headRefName | startswith("release/v")) | "\(.headRefName) \(.headRefOid)"')"
+          case "$GITHUB_REF" in
+            refs/heads/release/v*) heads="$(printf '%s\n%s %s' "$heads" "${GITHUB_REF#refs/heads/}" "$GITHUB_SHA")" ;;
+          esac
+          printf '%s\n' "$heads" | sort -u | while read -r branch sha; do
+            [ -n "$branch" ] || continue
+            read -r ahead behind < <(gh api "repos/$GITHUB_REPOSITORY/compare/$base_sha...$sha" \
+              --jq '"\(.ahead_by) \(.behind_by)"')
+            if [ "$ahead" = 1 ] && [ "$behind" = 0 ]; then
+              state=success
+              desc="One commit on top of $BASE: merging gives exactly the release tree."
+            else
+              state=failure
+              desc="$ahead ahead, $behind behind $BASE: re-run the mirror for this tag."
+            fi
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$sha" \
+              -f state="$state" -f context="release-tree / up to date" \
+              -f description="$desc" -f target_url="$RUN_URL" > /dev/null
+            echo "$branch $sha: $state ($desc)"
+          done

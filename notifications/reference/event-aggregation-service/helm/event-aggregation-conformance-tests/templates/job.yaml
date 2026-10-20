@@ -1,0 +1,57 @@
+{{/*
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "event-aggregation-conformance-tests.fullname" . }}
+  labels:
+    {{- include "event-aggregation-conformance-tests.labels" . | nindent 4 }}
+  {{- with .Values.podAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.backoffLimit }}
+  {{- if not (kindIs "invalid" .Values.ttlSecondsAfterFinished) }}
+  ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "event-aggregation-conformance-tests.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: {{ .Values.restartPolicy }}
+      serviceAccountName: {{ include "event-aggregation-conformance-tests.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: conformance-tests
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: CONFORMANCE_GRPC_ENDPOINT
+              value: {{ .Values.service.grpcEndpoint | quote }}
+            - name: CONFORMANCE_REST_ENDPOINT
+              value: {{ .Values.service.restEndpoint | quote }}
+            - name: CONFORMANCE_HEALTH_ENDPOINT
+              value: {{ .Values.service.healthEndpoint | quote }}
+            - name: CONFORMANCE_AUTH_TOKEN
+              value: {{ .Values.auth.token | quote }}
+            - name: CONFORMANCE_AUTH_REQUIRED
+              value: {{ .Values.auth.required | quote }}
+            - name: CONFORMANCE_REQUEST_TIMEOUT
+              value: {{ .Values.timeouts.request | quote }}
+            - name: SKIP_OPTIONAL_TESTS
+              value: {{ .Values.skipOptionalTests | quote }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Check Private Paths
+
+on:
+  push:
+    branches:
+      - main
+      # The mirrored release branch in the public repository, whose pull
+      # request is opened with GITHUB_TOKEN and so gets no pull_request run.
+      - "release/v*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check links into private paths
+        run: python3 .github/scripts/check_private_paths.py
+
+      - name: Check skill versions are released
+        run: python3 .github/scripts/check_skill_versions.py
+
+      - name: Check publish export
+        run: |
+          export_dir="$(mktemp -d)"
+          git archive HEAD -- . ':(exclude).ovplc' ':(exclude)docs/plc' ':(exclude,glob)**/evals/**' \
+            | tar -x -C "$export_dir"
+          python3 .github/scripts/check_private_paths.py --tree "$export_dir"

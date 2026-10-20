@@ -1,0 +1,176 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# Default values for permission-ui.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: nvcr.io/nvidia/omniverse/permission-ui
+  pullPolicy: IfNotPresent
+
+  pullSecrets: []
+
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+
+## OpenID IDP and related auth settings.
+## Only OpenID integration supported at this point
+openId:
+  ## @param openId.openIdConfigurationUri
+  ## The endpoint from the identity provider to retrieve OpenID Connect Metadata (/.well-known/openid-configuration).
+  ## https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+  ## The metadata includes other IdP endpoints such as jwks_uri, token_endpoint and userinfo_endpoint.
+  openIdConfigurationUri: ""
+
+  ## @param openId.clientRegistrations
+  ## Client registrations (will be used to create a set of allowed audience).
+  ## Audience is the expected value of `aud` claim in JWTs passed in the Authorization header.
+  clientRegistrations:
+    # Default should be always present
+    - name: "default"
+      clientId: ""
+      scope: "openid email profile"
+
+config:
+  endpoints:
+    # The Permission Service URL
+    backend: ""
+
+  # Defines Content-Security-Policy header for hosted content
+  csp: ""
+
+# The User Info Service. When disabled, user and group pages and principal
+# name resolution are turned off in the UI.
+userService:
+  # Set to a falsy value to disable the User Info Service integration.
+  enabled: false
+
+  # The User Info Service URL. When left empty and httpProxy is enabled, it is
+  # derived from the httpProxy FQDN, similar to config.endpoints.backend.
+  endpoint: ""
+
+
+# Enable external ingress via Contour's `httpproxy` objects
+httpProxy:
+  enabled: false
+
+  # Final ingress hostname will be composed as "<host>.<domain>".
+  fqdn:
+    host:   "web.permissions"
+    domain: "nodomain.none"
+
+  # The prefix for all routes of this service,
+  # e.g. if a route is available on /v1/myroute and this path equals to /api,
+  # the route will become on /api/v1/myroute
+  path: "/"
+
+  tls:
+    enabled: false
+
+    secretName: "" # Name of secret containing the TLS cert
+
+    # If enabled, will create a Certificate resource for CertManager,
+    # using either default TLS secret name or one above
+    # (httpProxy.tls.secretName) if specified.
+    #
+    # This secret will be added as tls.secretName of the httpProxy CR for
+    # Contour.
+    #
+    certManager:
+      enabled: false
+      issuerRef:
+        # Issuer name and kind must be set correctly if enabling certManager
+        # certificates
+        name: my-issuer
+        kind: my-issuer-kind
+
+  # Additional annotations for HTTPProxy CRD
+  annotations: {}
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

@@ -1,0 +1,58 @@
+{
+  "name": "@storage-navigator/cli",
+  "version": "0.1.1",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "sn": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --target node22 --out-dir dist --dts",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run eslint",
+    "eslint": "eslint . --cache",
+    "prettier": "prettier --check \"**/*.{ts,tsx}\"",
+    "prettier:write": "prettier --write \"**/*.{ts,tsx}\"",
+    "prepack": "npm run build",
+    "test:package": "node scripts/check-package.mjs"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "date-fns": "^4.1.0",
+    "eventsource-client": "^1.1.5",
+    "ky": "^1.7.2",
+    "proper-lockfile": "^4.1.2",
+    "radash": "^12.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@ianvs/prettier-plugin-sort-imports": "^4.3.1",
+    "@types/node": "^22.0.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "@vitest/coverage-v8": "^5.0.3",
+    "eslint": "^9.9.1",
+    "msw": "^2.7.0",
+    "prettier": "^3.3.3",
+    "tsup": "^8.4.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.58.2",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE.txt",
+    ".agents/skills/storage-navigator-cli/SKILL.md"
+  ],
+  "overrides": {
+    "esbuild": "^0.28.1"
+  }
+}

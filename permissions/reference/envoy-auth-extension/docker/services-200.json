@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "services": [
+    {
+      "id": "thumbnail-service-01",
+      "name": "Thumbnail Service",
+      "type": "thumbnail",
+      "rest": "https://host:port/path/to/service",
+      "grpc": "grpc://host:port/path/to/service"
+    },
+    {
+      "id": "tagging-service-01",
+      "name": "Tagging Service",
+      "type": "tagging",
+      "rest": "https://host:port/path/to/service",
+      "grpc": "grpc://host:port/path/to/service"
+    },
+    {
+      "id": "search-service-01",
+      "name": "Search Service",
+      "type": "search",
+      "rest": "https://host:port/path/to/service",
+      "grpc": "grpc://host:port/path/to/service"
+    },
+    {
+      "id": "permission-service-01",
+      "name": "Permission Service",
+      "type": "permission",
+      "rest": "https://host:port/path/to/service",
+      "grpc": "grpc://host:port/path/to/service"
+    },
+    {
+      "id": "storage-service-01",
+      "name": "Storage API 1",
+      "type": "storage",
+      "rest": "https://host:port/path/to/service",
+      "grpc": "grpc://host:port/path/to/service"
+    },
+    {
+      "id": "storage-service-02",
+      "name": "Storage API 2",
+      "type": "storage",
+      "rest": "https://host:port/path/to/service",
+      "grpc": "grpc://host:port/path/to/service"
+    }
+  ]
+}

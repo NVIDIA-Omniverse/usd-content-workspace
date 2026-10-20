@@ -1,0 +1,816 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Chart values layout (breaking change from the post-!182 flat/worker: shape):
+#   - Root (unwrapped): settings with exactly one correct value across both
+#     Deployments — image metadata, ServiceAccount behavior, pod metadata,
+#     security contexts, serviceIdentity/secret, storage.endpoint, streaming.*,
+#     and observability.logging.level
+#   - thumbnailService: orchestrator-specific settings (repository, names,
+#     replicas, resources, HPA, probes, extraVars)
+#   - thumbnailWorker: worker-specific settings (enabled, repository, names,
+#     replicas, resources, HPA, probes, grace period, extraVars)
+# There is no `common:` wrapper. See helm/thumbnail-service/README.md for the
+# current values layout.
+
+## Image settings shared by both Deployments. The repositories remain
+## component-specific because the orchestrator and worker are different binaries.
+image:
+  ## @param image.tag Container image version tag for both Deployments (leave empty to use the chart appVersion).
+  tag: ""
+  ## @param image.pullPolicy Image pull policy for both Deployments.
+  pullPolicy: IfNotPresent
+  ## @param image.pullSecrets Image pull secrets applied to both pods.
+  ## Example: pullSecrets: [{name: "my-registry-secret"}]
+  pullSecrets: []
+
+## Shared ServiceAccount behavior. The chart still renders two ServiceAccount
+## objects; their optional names remain under the component keys.
+serviceAccount:
+  ## @param serviceAccount.create Whether to create each component's ServiceAccount.
+  create: true
+  ## @param serviceAccount.automount Whether to mount Kubernetes API credentials.
+  ## Neither binary calls the Kubernetes API.
+  automount: false
+  ## @param serviceAccount.annotations Annotations applied to both ServiceAccount objects.
+  annotations: {}
+  ## @param serviceAccount.name Shared ServiceAccount name for both components.
+  ## Type: string. Default: "" (each component gets its own generated name).
+  ## Set this to put both components on one ServiceAccount — which is what an Azure
+  ## Workload Identity federated credential wants, since the binding is keyed to a
+  ## single name. A component key below still overrides it for that component.
+  ## With `create: false` this must name a ServiceAccount that already exists;
+  ## leaving it empty in that mode falls back to the namespace `default`, which
+  ## carries no Workload Identity annotations.
+  name: ""
+
+## @param podLabels Additional labels applied to both pod templates.
+## Required by Azure Workload Identity when using access-token-file mode.
+podLabels: {}
+
+## @param podAnnotations Additional annotations applied to both pod templates.
+podAnnotations: {}
+
+## @param nodeSelector Kubernetes node labels applied to both Deployments.
+nodeSelector: {}
+
+## @param tolerations Tolerations applied to both Deployments.
+tolerations: []
+
+## @param affinity Affinity rules applied to both Deployments.
+affinity: {}
+
+## Extra volumes mounted into both Deployments. Identity/token volumes are
+## still rendered by the templates; these are operator add-ons.
+## @param volumes Additional Kubernetes volume definitions.
+volumes: []
+
+## @param volumeMounts Additional mount points inside both component containers.
+volumeMounts: []
+
+## Service configuration for the orchestrator's public REST and gRPC API.
+service:
+  ## @param service.type How the API is exposed: ClusterIP, LoadBalancer, or NodePort.
+  type: ClusterIP
+  ## @param service.restPort TCP port for the REST API.
+  restPort: 3000
+  ## @param service.restNodePort Optional fixed NodePort for REST when service.type=NodePort.
+  restNodePort: null
+  ## @param service.grpcPort TCP port for the gRPC API.
+  grpcPort: 50051
+  ## @param service.grpcNodePort Optional fixed NodePort for gRPC when service.type=NodePort.
+  grpcNodePort: null
+  ## @param service.nameOverride Override the Service object name.
+  nameOverride: ""
+  ## @param service.annotations Extra annotations for the Service object, merged over the
+  ## chart's defaults so an environment can add keys or override one.
+  ## Type: object. Default: {}. Optional.
+  ## By default the Service is annotated `discovery.omniverse.nvidia.com/enabled: "true"`,
+  ## which is how the v2 discovery operator selects which pods to interrogate; it then dials
+  ## the `grpc`-named port and calls CapabilitiesService.ListServices. Because values merge
+  ## over the defaults, setting that key here overrides it — including to `"false"`, which
+  ## opts this deployment out of discovery entirely and leaves callers unable to resolve
+  ## thumbnails through it. No `visibility` default is set, so the operator's own default of
+  ## `both` applies: reachable over cluster DNS internally and over the HTTPProxy URL
+  ## externally, which is what Navigator needs. Set
+  ## `discovery.omniverse.nvidia.com/visibility` here to narrow it, or
+  ## `.../external-rest-endpoint` / `.../external-grpc-endpoint` to override the URLs the
+  ## operator otherwise derives from this chart's HTTPProxy routes.
+  ## Example: { "discovery.omniverse.nvidia.com/visibility": "internal" }
+  annotations: {}
+
+## @param podSecurityContext Pod-level security context aligned with the Kubernetes "restricted"
+## Pod Security Standard. Shared by both the orchestrator and worker pods.
+## The container image pins `USER nvs` (UID 1000) at build
+## time; pinning `runAsUser: 1000` here lets the kubelet verify non-root at admission
+## time without resolving the named user from the image config. This block mirrors
+## the canonical pattern used by event-aggregation-service / event-consumer-service.
+## Type: object. Default: runAsNonRoot with user 1000. Optional.
+## Example: { fsGroup: 2000 }
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+## @param securityContext Container-level security context. Shared by both
+## components. Neither writes to the container filesystem at runtime (secrets are
+## mounted read-only; the worker buffers conversions in memory), so a read-only
+## root filesystem is safe.
+## Type: object. Default: restricted security context. Optional.
+## Example: { capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+## Storage service endpoint shared by both Deployments.
+## The orchestrator's StorageEventQueue consumer and the worker's WorkerEventQueue consumer MUST
+## talk to the same storage backend — historically-independent values here
+## drifted in local-dev fixtures. There is no per-component override.
+storage:
+  ## @param storage.endpoint gRPC endpoint URL for the Storage Service (reading source files and writing thumbnails)
+  ## Internal: "storage-service:8011" | External: "storage.example.com:443"
+  endpoint: "storage-service:8011"
+
+## Notifications: durable-queue consumption and event-aggregation publishing.
+## StorageEventQueue (storage-created) and WorkerEventQueue (thumbnail-generate) share
+## resourcePrefixes. Both ids are derived at runtime from that sorted set, prefixed with the
+## hardcoded literal "thumbnail-service-" — the orchestrator computes
+## thumbnail-service-storage-sha256("<prefixes>"), the worker computes
+## thumbnail-service-worker-sha256("<prefixes>") — and Helm injects neither.
+## The digest carries no queue-kind discriminator, so the storage/worker segment is what keeps
+## the ids distinct, and the two ids share a digest whenever both Deployments read the same
+## resourcePrefixes. Matching digests in a queue listing mean the two components agree;
+## differing digests mean one side is stale. See the chart README, "Queue ids".
+notifications:
+  eventConsumer:
+    ## @param notifications.eventConsumer.endpoint gRPC endpoint URL for the Notifications event-consumer service (StorageEventQueue and WorkerEventQueue)
+    ## Internal: "event-consumer-service:50051" | External: "events.example.com:443"
+    ## Required whenever either consumer is enabled.
+    endpoint: "event-consumer-service:50051"
+    ## @param notifications.eventConsumer.resourcePrefixes Storage-container prefixes applied to both durable queues.
+    ## Also the input to both StorageEventQueue's and WorkerEventQueue's derived ids
+    ## (each computed by its own binary, not Helm). Order is not significant; the chart sorts.
+    resourcePrefixes: []
+    storageEventQueue:
+      ## @param notifications.eventConsumer.storageEventQueue.enabled Enable StorageEventQueue consumption of storage created/deleted events.
+      enabled: true
+  eventAggregation:
+    ## @param notifications.eventAggregation.enabled Enable publishing associated/disassociated events.
+    enabled: true
+    ## @param notifications.eventAggregation.endpoint gRPC endpoint for the Event Aggregation Service.
+    ## Internal: "event-aggregation-service:50051" | External: "events-agg.example.com:443"
+    endpoint: "event-aggregation-service:50051"
+
+## Event stream tuning (connection resilience and concurrency) shared by both
+## Notification consumers (StorageEventQueue on the orchestrator, WorkerEventQueue on the worker).
+## Both binaries already use the same env var names and defaults
+## (STREAM_TIMEOUT_SECS=90s, MAX_RECONNECT_BACKOFF_SECONDS=60s).
+## - maxConcurrent: How many events to process at the same time (orchestrator
+##   StorageEventQueue prefetch). Higher = more throughput; lower = less CPU/memory pressure.
+## - streamTimeoutSecs: Bound used by shared stream helpers (e.g. provisioning).
+## - maxReconnectBackoffSecs: Maximum wait between reconnect attempts during outages.
+## Worker decode parallelism is `workerRuntime.maxConcurrentConversions`
+## — that is sized against memory limits, not Notifications stream concurrency.
+streaming:
+  ## @param streaming.maxConcurrent Maximum number of events processed concurrently (matches server-side prefetch_count)
+  maxConcurrent: 100
+  ## @param streaming.streamTimeoutSecs Stream helper timeout in seconds (kept for shared session/provisioning bounds)
+  streamTimeoutSecs: 90
+  ## @param streaming.maxReconnectBackoffSecs Maximum backoff delay in seconds between reconnection attempts (exponential backoff capped at this value)
+  maxReconnectBackoffSecs: 60
+
+## Required template used to resolve one exact output address per generated thumbnail.
+## Supported variables: {resource_path}, {resource_filename},
+## {resource_address_md5}, {resource_identity_md5}, {width}, {height},
+## {output_encoding}, and {quality}. See README.md#thumbnail-destination-path-template.
+## Substitution is verbatim — no variable contributes a separator of its own, so write
+## every slash you want: `{resource_path}/.thumbs/...` colocates thumbnails in a
+## `.thumbs` directory under the source, while `{resource_path}.thumbs/...` puts them in
+## a sibling directory whose name ends in `.thumbs`.
+## @param thumbnailPathTemplate Environment-owned absolute destination template.
+thumbnailPathTemplate: ""
+
+## @param thumbnailSizes Comma-separated WxH dimensions generated per source asset.
+thumbnailSizes: "256x256,512x512"
+
+## Defaults injected when request/event specifications omit processing fields.
+thumbnailConfig:
+  ## @param thumbnailConfig.encodingFormat One of PNG, JPEG, GIF, WEBP.
+  encodingFormat: "PNG"
+  ## @param thumbnailConfig.transformType One of SQUARE, SCALE_BY_WIDTH, SCALE_BY_HEIGHT, CROP, FIT, SCALE_AND_CROP.
+  ##
+  ## FIT rather than CROP: with preserveAspectRatio true it scales the whole
+  ## source to fit inside the requested box and pads the remainder, so nothing is
+  ## cut off. CROP fills the box by discarding whatever falls outside it, which
+  ## for a thumbnail of an asset means the edges are gone with no indication that
+  ## they were there.
+  ##
+  ## Two consequences worth knowing. Every thumbnail is now exactly the requested
+  ## size with padding, rather than a cropped fill, so an aspect ratio far from
+  ## the box produces visible padding. And the padding is transparent for
+  ## alpha-capable encodings (the PNG default) and opaque white for JPEG, because
+  ## the canvas mode follows the output format the way Pillow's did.
+  transformType: "FIT"
+  ## @param thumbnailConfig.cropStrategy One of SMART, CENTER, TOP, BOTTOM, LEFT, RIGHT, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT.
+  ##
+  ## Inert while transformType is FIT — a crop strategy only applies to CROP and
+  ## SCALE_AND_CROP. Kept configured so a caller requesting one of those per
+  ## specification, or an operator switching transformType back, gets a sensible
+  ## anchor rather than a startup failure for an unset required field.
+  cropStrategy: "SMART"
+  ## @param thumbnailConfig.quality Integer encoding quality in [1, 100].
+  quality: "85"
+  ## @param thumbnailConfig.preserveAspectRatio Preserve source aspect ratio.
+  preserveAspectRatio: "true"
+
+## Worker process runtime configuration. Kubernetes deployment settings remain
+## under thumbnailWorker; these values are injected into the worker process.
+workerRuntime:
+  ## @param workerRuntime.healthPort Worker health and metrics listener port.
+  healthPort: 8080
+  ## @param workerRuntime.maxConcurrentConversions Conversions in flight per replica.
+  ##
+  ## Two, not four: the memory limit is this times maxTransformPeakBytes plus
+  ## idle, so each additional concurrent conversion costs a gigabyte of ceiling.
+  ## The HPA (2-20 replicas) buys throughput more cheaply by scaling out.
+  maxConcurrentConversions: 2
+  ## @param workerRuntime.redeliveryRecycleInterval Maximum age of a withheld acknowledgement before reconnect.
+  redeliveryRecycleInterval: "60s"
+  ## @param workerRuntime.outboundRequestTimeout Deadline on storage and association calls.
+  outboundRequestTimeout: "30s"
+  ## @param workerRuntime.shutdownDrainTimeout Grace period for in-flight conversions on SIGTERM.
+  shutdownDrainTimeout: "30s"
+  ## @param workerRuntime.maxSourceBytes Largest source the worker downloads.
+  maxSourceBytes: 67108864
+  ## @param workerRuntime.maxDecodedPixels Largest decoded image the worker allocates.
+  maxDecodedPixels: 64000000
+  ## @param workerRuntime.maxTransformPeakBytes Largest peak allocation one resample may reach.
+  ##
+  ## This, not maxDecodedPixels, is what the memory limit is sized against.
+  ## `imageops::resize` allocates a working buffer of source_width x new_height
+  ## at 16 B/px on top of the source and the result, so a source inside the
+  ## decode bound can still peak in gigabytes for a small thumbnail. 1 GiB
+  ## gives 1.8x headroom over the realistic worst case (a 64 MP source reduced
+  ## to 512 with a flatten, ~553 MiB) while still refusing the shapes that
+  ## motivated the bound. worker.validate fails the render if
+  ## maxConcurrentConversions x this + 200Mi exceeds limits.memory.
+  maxTransformPeakBytes: 1073741824
+
+## Service identity (M2M authentication) used to authenticate outbound calls
+## from both the orchestrator and the worker to other services (storage-service,
+## event-consumer, event-aggregation). Both components authenticate as the same
+## external principal; each still gets its own ServiceAccount (Azure AD
+## federated-credential binding is keyed to the worker's existing ServiceAccount
+## name). This block has TWO mutually exclusive modes:
+##
+##   1. clientCredentials (in-process OAuth2): the service exchanges
+##      client_id + client_secret for an access token at startup and
+##      refreshes it itself. Suitable for local dev and any environment
+##      where Workload Identity is not available.
+##
+##   2. accessTokenFile (sidecar-driven): a `client-credentials-sidecar`
+##      container provisions the access token and writes it to a shared
+##      `emptyDir` volume; the main containers read and watch the file.
+##      Suitable for clusters with Azure Workload Identity (or equivalent).
+##
+## Operators MUST enable exactly one mode. The chart enforces this at
+## template-time via the `service.validateServiceIdentity` helper, and the
+## binary additionally fails fast at startup if both or neither are set.
+## Client-credentials mode mounts an existing Kubernetes Secret named by
+## `clientSecretRef.name`; this chart does not create Secrets.
+serviceIdentity:
+  clientCredentials:
+    ## @param serviceIdentity.clientCredentials.enabled Enable in-process OAuth2 client credentials flow
+    enabled: false
+    ## @param serviceIdentity.clientCredentials.clientId OAuth2 client (application) ID
+    clientId: ""
+    ## @param serviceIdentity.clientCredentials.clientScope OAuth2 scope passed to the IdP
+    clientScope: ""
+    ## @param serviceIdentity.clientCredentials.openIdConfigurationUri OpenID Connect discovery endpoint (token_endpoint resolved at runtime)
+    openIdConfigurationUri: ""
+    ## @param serviceIdentity.clientCredentials.extraHeaders Additional HTTP headers for token requests (JSON object, e.g., {"X-Custom": "value"})
+    extraHeaders: {}
+    ## @param serviceIdentity.clientCredentials.extraBodyParams Additional body parameters for token requests (JSON object, e.g., {"resource": "api://myapp"})
+    extraBodyParams: {}
+    ## @param serviceIdentity.clientCredentials.clientSecretRef Reference to an existing Kubernetes Secret containing the client secret
+    clientSecretRef:
+      ## @param serviceIdentity.clientCredentials.clientSecretRef.name Existing Kubernetes Secret name. Required when clientCredentials.enabled is true.
+      name: ""
+      ## @param serviceIdentity.clientCredentials.clientSecretRef.key Key within the secret containing the client secret value (mounted as the file referenced by CLIENT_SECRET_FILE)
+      key: "CLIENT_SECRET"
+  accessTokenFile:
+    ## @param serviceIdentity.accessTokenFile.enabled Enable sidecar-driven file-based access-token authentication
+    enabled: false
+    ## @param serviceIdentity.accessTokenFile.path Path the main containers read for the Bearer token (must match the sidecar's TOKEN_OUTPUT_PATH)
+    path: "/etc/secrets/access-token/token"
+    ## @param serviceIdentity.accessTokenFile.pollInterval How often the main containers re-stat the token file looking for a rotation (humantime, e.g. "15s")
+    pollInterval: "15s"
+    provisionerSidecar:
+      ## @param serviceIdentity.accessTokenFile.provisionerSidecar.container Sidecar container spec (image / env / volumeMounts / etc.)
+      ## When this object is non-empty AND accessTokenFile.enabled=true the chart appends it to the pod
+      ## with an additional /etc/secrets/access-token mount onto the shared `token-exchange` emptyDir.
+      ## Operators populate this from their environment values file (see usd-storage-api-deployment).
+      container:
+        # No default resources here. Both HPAs use the ContainerResource metric
+        # type targeting the main container by name (thumbnail-service /
+        # thumbnail-worker) rather than the pod-aggregate Resource type, so this
+        # sidecar carrying no request does not affect autoscaling the way it
+        # once did (see hpa-service.yaml / hpa-worker.yaml). Leave any resources
+        # for this container to the operator's environment values file: this
+        # sidecar owns the auth path, and throttling or OOMKilling it via too
+        # tight a limit stops token refresh for the container it serves.
+
+## Logging and telemetry shared by both components.
+observability:
+  logging:
+    ## @param observability.logging.level RUST_LOG filter for both the orchestrator and the worker.
+    ## See [RUST_LOG](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html)
+    ## (e.g. "info", "debug", "warn", "error", "thumbnail_service=debug").
+    level: "info"
+    ## No `structured.enabled` here on purpose: JSON log output is unconditional on both
+    ## binaries, and a value that cannot change anything only invites the belief that it can.
+
+  ## @param observability.tracing.enabled Export trace spans to an OpenTelemetry collector.
+  ## Takes effect only when observability.tracing.endpoint.grpc is also set; otherwise
+  ## OTEL_TRACES_EXPORTER=none is injected regardless, so otel-tools does not fall back
+  ## to exporting at localhost:4317.
+  ## @param observability.tracing.endpoint.grpc OTLP/gRPC collector endpoint for trace spans (e.g. "http://otel-collector:4317").
+  ## @param observability.tracing.samplingRatio Sampling ratio for parentbased_traceidratio sampling (0.0-1.0).
+  ## Context crosses the generate queue and every outbound gRPC call, so child spans --
+  ## including the worker's conversion spans -- inherit the root's sampling decision.
+  ## See helm/thumbnail-service/README.md#tracing.
+  tracing:
+    enabled: true
+    endpoint:
+      grpc: ""
+    samplingRatio: "0.1"
+
+  ## @param observability.metrics.enabled Export metrics to an OpenTelemetry collector.
+  ## Takes effect only when observability.metrics.endpoint.grpc is also set; otherwise
+  ## OTEL_METRICS_EXPORTER=none is injected regardless.
+  ## @param observability.metrics.endpoint.grpc OTLP/gRPC collector endpoint for metrics (e.g. "http://otel-collector:4317").
+  ## Independent of observability.tracing.endpoint.grpc: each signal can point at its own
+  ## collector via the standard per-signal OTLP endpoint variables.
+  metrics:
+    enabled: true
+    endpoint:
+      grpc: ""
+
+  ## @param observability.resourceAttributes Additional resource attributes appended to OTEL_RESOURCE_ATTRIBUTES (key=value,key2=value2).
+  ## service.instance.id is always set to the pod name and does not need to be listed here.
+  ## Applied whenever tracing or metrics export is active.
+  ## Note: OTEL_SERVICE_NAME is not injected -- ResourceBuilder::new(name) gives
+  ## code-supplied attributes priority over env, so the env var would be silently
+  ## ignored; the binary name is always the one passed to init_tracing().
+  resourceAttributes: ""
+
+## External ingress for the orchestrator's public REST and gRPC API.
+httpProxy:
+  ## @param httpProxy.enabled Enable Contour HTTPProxy resources.
+  enabled: false
+  ## @param httpProxy.fqdn Host and domain used for external endpoints.
+  fqdn:
+    host: "thumbnails"
+    domain: "example.com"
+  ## @param httpProxy.path Base path for the REST API.
+  path: "/"
+  tls:
+    ## @param httpProxy.tls.enabled Enable TLS termination.
+    enabled: false
+    ## @param httpProxy.tls.secretName Secret containing the TLS certificate.
+    secretName: ""
+    certManager:
+      ## @param httpProxy.tls.certManager.enabled Create a cert-manager Certificate.
+      enabled: false
+      issuerRef:
+        ## @param httpProxy.tls.certManager.issuerRef.name Issuer name.
+        name: ""
+        ## @param httpProxy.tls.certManager.issuerRef.kind ClusterIssuer or Issuer.
+        kind: "ClusterIssuer"
+  corsPolicy:
+    allowCredentials: false
+    allowOrigin:
+      - "*"
+    allowHeaders:
+      - "*"
+    allowMethods:
+      - "GET"
+      - "POST"
+      - "DELETE"
+      - "OPTIONS"
+    ## @param httpProxy.corsPolicy.exposeHeaders Exposed headers for CORS requests that clients are allowed to read.
+    exposeHeaders:
+      - "*"
+  authExtension:
+    enabled: false
+    responseTimeout: 2s
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+  ## @param httpProxy.annotations Annotations added to the HTTPProxy resources.
+  annotations: {}
+  timeoutPolicy:
+    response: "10s"
+    idle: "10s"
+  ## Per-protocol values deep-merge over the shared configuration.
+  grpc: {}
+  rest: {}
+
+## Helm test hook for the orchestrator's public API.
+smokeTest:
+  ## @param smokeTest.enabled Enable the Helm smoke-test Job.
+  enabled: false
+  ## @param smokeTest.extraAnnotations Additional Job annotations.
+  extraAnnotations: {}
+  image:
+    ## @param smokeTest.image.repository Optional repository override; defaults to thumbnailService.image.repository.
+    repository: ""
+    ## @param smokeTest.image.pullPolicy Optional override; defaults to image.pullPolicy.
+    pullPolicy: ""
+    ## @param smokeTest.image.tag Optional override; defaults to image.tag or chart appVersion.
+    tag: ""
+    ## @param smokeTest.image.pullSecrets Optional override; defaults to image.pullSecrets.
+    pullSecrets: []
+  ## @param smokeTest.serviceUrl Explicit API URL; empty uses the in-cluster Service.
+  serviceUrl: ""
+  ## @param smokeTest.serviceAccountName Optional dedicated ServiceAccount.
+  serviceAccountName: ""
+  ## @param smokeTest.sourceFile Internal source fixture used by the test.
+  sourceFile: ""
+  ## @param smokeTest.waitRetries Readiness retries.
+  waitRetries: 10
+  ## @param smokeTest.waitInterval Seconds between readiness retries.
+  waitInterval: 5
+  ## @param smokeTest.requestTimeout Per-request timeout in seconds.
+  requestTimeout: 15
+  ## @param smokeTest.ttlSecondsAfterFinished Completed Job cleanup TTL; 0 disables.
+  ttlSecondsAfterFinished: 1800
+  ## @param smokeTest.podAnnotations Additional smoke-test pod annotations; override the shared podAnnotations.
+  podAnnotations: {}
+  ## @param smokeTest.podLabels Additional smoke-test pod labels; override the shared podLabels.
+  podLabels: {}
+  ## @param smokeTest.resources Smoke-test container resources. Matches the
+  ## orchestrator's own defaults: the test exercises the same REST/gRPC surface.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 64Mi
+    limits:
+      cpu: "1"
+      memory: 256Mi
+
+## Orchestrator (thumbnail-service) configuration.
+## Everything under this key was previously flat at the chart's top level.
+thumbnailService:
+  ## Component-specific image repository. Tag, pull policy, and pull secrets are root `image`.
+  image:
+    ## @param thumbnailService.image.repository Docker registry path for the thumbnail service container image
+    ## IMPORTANT: Must be set explicitly for each environment
+    repository: "nvcr.io/nvidia/omniverse/thumbnail-service"
+
+  ## @param thumbnailService.nameOverride Custom name for the Helm chart (overrides Chart.yaml name in resource labels)
+  nameOverride: ""
+  ## @param thumbnailService.fullnameOverride Custom name for all Kubernetes resources (overrides auto-generated names)
+  fullnameOverride: ""
+
+  ## Optional component-specific ServiceAccount name. Creation, automount, and
+  ## annotations are shared under root `serviceAccount`.
+  serviceAccount:
+    ## @param thumbnailService.serviceAccount.name Name of the service account to use (defaults to fullname when create=true)
+    name: ""
+
+  ## @param thumbnailService.replicaCount Number of pod replicas to run (increase for high availability and load distribution)
+  ## Recursion-prevention note: the `generated_by_thumbnail_pipeline` marker and writer-principal
+  ## checks are inert until storage propagates those signals, leaving template-shape matching as the
+  ## only active guard. That check is stateless (pure function of the configured
+  ## root `thumbnailPathTemplate` and the event's address), so unlike an earlier revision of this
+  ## design it does not depend on which replica handles a given event — replicaCount is not
+  ## constrained by recursion-prevention correctness. See ADR 0001
+  ## (docs/adr/0001-thumbnail-storage.md) and helm/DEPLOYMENT_ARCHITECTURE.md.
+  ## Note: `GENERATED_THUMBNAIL_PRINCIPAL_IDENTITY` is no longer chart-configurable (see ADR 0001);
+  ## inject via thumbnailService.extraVars only if an environment needs it before Helm support returns.
+  replicaCount: 1
+
+  ## @param thumbnailService.resources CPU and memory for the `thumbnail-service` container only.
+  ## The token-provisioner sidecar (see serviceIdentity.accessTokenFile.provisionerSidecar)
+  ## carries no resources of its own; the HPA's ContainerResource metric targets this
+  ## container by name, so sidecar resources don't affect autoscaling.
+  ##
+  ## Measured in sapi-rc during a storage-CREATE ingest (~500 MB/s of files, all
+  ## notifications read and filtered here; conversion is on the worker). The
+  ## orchestrator drew ~146m CPU and ~11Mi RSS with no main-container request.
+  ## Request is that draw with headroom, not a decode budget. Limit caps a
+  ## runaway consumer without throttling the observed ingest.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 64Mi
+    limits:
+      cpu: 1
+      memory: 256Mi
+
+  ## @param thumbnailService.extraVars Pass additional environment variables to the deployment.
+  extraVars: {}
+
+  ## Horizontal Pod Autoscaler configuration
+  ## When enabled, scales the thumbnail-service deployment based on CPU utilization.
+  ## Off by default — operators must explicitly opt in.
+  autoscaling:
+    ## @param thumbnailService.autoscaling.enabled Enable HorizontalPodAutoscaler for the deployment
+    ## Do not enable with event consumption on (see the replicaCount warning above) until storage
+    ## propagates the writer principal — the HPA can silently scale past the single replica the
+    ## in-process recursion-prevention cache requires.
+    enabled: false
+    ## @param thumbnailService.autoscaling.minReplicas Minimum number of replicas the HPA may scale down to
+    minReplicas: 1
+    ## @param thumbnailService.autoscaling.maxReplicas Maximum number of replicas the HPA may scale up to
+    maxReplicas: 10
+    ## @param thumbnailService.autoscaling.targetCPUUtilizationPercentage Target CPU utilization (% of request) at which to scale up
+    targetCPUUtilizationPercentage: 80
+    # ## @param thumbnailService.autoscaling.targetMemoryUtilizationPercentage Optional memory utilization target
+    # targetMemoryUtilizationPercentage: 80
+
+  ## Startup probe — delays liveness until the process has finished waiting for
+  ## the first service-identity bearer (TOKEN_READY_TIMEOUT = 60s) and bound HTTP.
+  ## Without this, liveness (~50s kill budget) SIGKILLs a pod that is still in
+  ## OutboundClients::build and the gate's own timeout never fires.
+  startupProbe:
+    ## @param thumbnailService.startupProbe.enabled Enable the startup probe
+    enabled: true
+    httpGet:
+      ## @param thumbnailService.startupProbe.httpGet.path Same dependency-free live path as liveness
+      path: /health/live
+      ## @param thumbnailService.startupProbe.httpGet.port HTTP health check endpoint port
+      port: 3000
+    ## @param thumbnailService.startupProbe.initialDelaySeconds Delay before the first startup check
+    initialDelaySeconds: 5
+    ## @param thumbnailService.startupProbe.periodSeconds Startup check interval
+    periodSeconds: 10
+    ## @param thumbnailService.startupProbe.timeoutSeconds Startup check must respond within this many seconds
+    timeoutSeconds: 5
+    ## @param thumbnailService.startupProbe.failureThreshold Give ~125s (5 + 10×12) for token wait + bind
+    failureThreshold: 12
+
+  ## Liveness probe configuration (Kubernetes check to restart pod if it becomes unresponsive)
+  ## Uses dependency-free /health/live so transient gRPC unavailability does not trigger restarts
+  livenessProbe:
+    ## @param thumbnailService.livenessProbe.enabled Enable liveness probe (disable only for debugging startup issues)
+    enabled: true
+    httpGet:
+      ## @param thumbnailService.livenessProbe.httpGet.path HTTP liveness endpoint path (must not depend on gRPC)
+      path: /health/live
+      ## @param thumbnailService.livenessProbe.httpGet.port HTTP health check endpoint port
+      port: 3000
+    ## @param thumbnailService.livenessProbe.initialDelaySeconds Wait time after pod starts before first check (allows time for initialization)
+    initialDelaySeconds: 30
+    ## @param thumbnailService.livenessProbe.periodSeconds Check interval in seconds
+    periodSeconds: 10
+    ## @param thumbnailService.livenessProbe.timeoutSeconds Health check must respond within this many seconds
+    timeoutSeconds: 5
+    ## @param thumbnailService.livenessProbe.failureThreshold Restart pod after this many consecutive failures
+    failureThreshold: 3
+
+  ## Readiness probe configuration (Kubernetes check to determine if pod is ready to receive traffic)
+  ## Uses /health, which returns 503 until the gRPC side of the unified process is serving
+  readinessProbe:
+    ## @param thumbnailService.readinessProbe.enabled Enable readiness probe (disable only for debugging startup issues)
+    enabled: true
+    httpGet:
+      ## @param thumbnailService.readinessProbe.httpGet.path HTTP health check endpoint path
+      path: /health
+      ## @param thumbnailService.readinessProbe.httpGet.port HTTP health check endpoint port
+      port: 3000
+    ## @param thumbnailService.readinessProbe.initialDelaySeconds Wait time after pod starts before first check (faster than liveness)
+    initialDelaySeconds: 10
+    ## @param thumbnailService.readinessProbe.periodSeconds Check interval in seconds (more frequent than liveness)
+    periodSeconds: 5
+    ## @param thumbnailService.readinessProbe.timeoutSeconds Health check must respond within this many seconds
+    timeoutSeconds: 3
+    ## @param thumbnailService.readinessProbe.failureThreshold Remove pod from service after this many consecutive failures
+    failureThreshold: 3
+
+## Task-worker (WorkerEventQueue consumer) configuration.
+## Everything under this key was previously under `worker:` (and before that the
+## standalone helm/thumbnail-task-worker chart). Shared settings (security
+## contexts, serviceIdentity/secret, storage.endpoint, streaming, log format)
+## live at the chart root — see the top of this file.
+thumbnailWorker:
+  ## @param thumbnailWorker.enabled Render the task-worker Deployment (and its HPA, ServiceAccount, Secret)
+  ## as part of this release. Set false to install the orchestrator only — e.g. an orchestrator-only
+  ## values file with no other `thumbnailWorker.*` overrides. When true (the default), the worker's
+  ## required fields (`notifications.eventConsumer.endpoint`, `notifications.eventConsumer.resourcePrefixes`,
+  ## and `storage.endpoint`) have no usable default and the chart fails at render time until they're set.
+  ## WorkerEventQueue's id is derived at runtime from `resourcePrefixes`; there is no values key for it.
+  ## `THUMBNAIL_SERVICE_GRPC_ENDPOINT` is not a values key: the worker always
+  ## associates against this release's in-cluster Service (`service.servicename`:`service.grpcPort`).
+  enabled: true
+
+  ## Component-specific image repository. Tag, pull policy, and pull secrets are root `image`.
+  image:
+    ## @param thumbnailWorker.image.repository Docker registry path for the task-worker container image
+    ## Built from `docker/Dockerfile` with `--target task-worker`.
+    repository: "nvcr.io/nvidia/omniverse/thumbnail-task-worker"
+
+  ## @param thumbnailWorker.nameOverride Custom name for the worker component
+  nameOverride: ""
+  ## @param thumbnailWorker.fullnameOverride Custom name for all worker Kubernetes resources
+  fullnameOverride: ""
+  ## Optional component-specific ServiceAccount name. Creation, automount, and
+  ## annotations are shared under root `serviceAccount`.
+  serviceAccount:
+    ## @param thumbnailWorker.serviceAccount.name Name of the service account to use
+    name: ""
+
+  ## @param thumbnailWorker.replicaCount Number of worker replicas.
+  ##
+  ## This *is* the "number of workers" knob. The worker is single-process and
+  ## scales horizontally: one blast radius per pod for image decode, and the HPA
+  ## does the scaling. `workerRuntime.maxConcurrentConversions` controls how much each
+  ## replica does at once, and the two are sized together — see
+  ## `thumbnailWorker.resources` below.
+  replicaCount: 2
+
+  # No replicaCount override here: `thumbnailWorker.autoscaling` is enabled with
+  # minReplicas=2 (chart default) and the maxReplicas set below, which supersedes
+  # any static replicaCount post-rollout -- the standalone thumbnail-task-worker's
+  # single fixed replica is no longer this chart's model.
+
+  # Measured during the migration load test, replacing the 500Mi-per-core sizing
+  # rule these numbers previously came from.
+  #
+  # A worker draws 2.3-2.7 cores whenever it has backlog, and that held at 2, 4, 7
+  # and 10 replicas alike: each ran `maxConcurrentConversions: 4` flat out until
+  # the queue is empty, so per-pod CPU does not fall as replicas are added. The
+  # request matches that real draw rather than a target utilization. Requesting
+  # less (2) understated it by ~25% and left pods liable to throttling under node
+  # contention; requesting more (4) put utilization inside the HPA's 10% dead band
+  # around its 70% target, so it never scaled at all.
+  #
+  # The CPU numbers below are that measurement halved for
+  # `maxConcurrentConversions: 2`, not a second load test. The run never reached
+  # its 4-core limit, so the four slots were not contending for a saturated CPU:
+  # each averaged ~0.6 of a core across its download, convert, upload and
+  # associate phases. Two slots therefore draw ~1.2-1.4 cores including stream,
+  # probe and metrics overhead, and the request tracks that at 1300m -- keeping
+  # utilization above the 70% target under backlog exactly as 2500m did at four
+  # slots. Re-measure when there is a load test to re-measure with; this is a
+  # derivation and is marked as one.
+  #
+  # The limit is the ceiling on CPU the pod can usefully draw, not a multiple of
+  # the request. Conversion is single-threaded, so two slots cannot exceed two
+  # cores of conversion work; 2500m leaves ~500m for the runtime to deliver
+  # acknowledgements and answer probes while both slots are in their CPU phase.
+  #
+  # Worth knowing before lowering it further: the limit, not the node, sizes the
+  # async runtime. `available_parallelism()` reads the cgroup quota and rounds
+  # *down* -- verified in the CI image, where a 2.5-core quota reports 2 while
+  # `nproc` still says 32 -- and `#[tokio::main]` takes its worker-thread count
+  # from it. Two async threads are enough here only because conversion runs on
+  # `spawn_blocking` (`pipeline.rs`), so the CPU-bound work sits on the blocking
+  # pool and the async threads stay free for the consume loop. Move conversion
+  # onto the async threads and this limit becomes a starvation bound rather than
+  # a throughput one.
+  #
+  # Memory is deliberately not halved alongside it. The 750Mi request is the
+  # typical JPEG working set from a concurrency-4 run, so it is now conservative,
+  # but memory is not compressible and over-requesting costs only packing
+  # density; the limit below is a correctness bound and is derived separately.
+  #
+  # Peak memory was 744Mi per worker at two replicas (424-648Mi at four to ten,
+  # ~200Mi settled idle). That run was 0.3-3.2MB JPEGs and never approached
+  # worst case.
+  #
+  # Worst case is set by the *resample*, not the decode. `imageops::resize` runs
+  # two passes and the first allocates a working buffer of source_width ×
+  # new_height at 16 B/px (Rgba32F) while the source and the result are both
+  # resident. Its width comes from the source, so it does not shrink with the
+  # request: a 1,000,000×64 source is exactly 64 MP and passes every decode
+  # check, yet a 100×100 thumbnail of it allocates 1.6 GB. No transform is safe
+  # merely because its output dimensions are fixed.
+  #
+  # The largest conversion the contract permits — a 64 MP source at 8000×8000
+  # resampled to the 8192×8192 MAX_DIMENSION ceiling — costs:
+  #
+  #   source   64e6 px × 8 B/px      =  488 MiB   (512 MB decimal)
+  #   working  8000 × 8192 × 16 B    = 1000 MiB
+  #   result   8192 × 8192 × 4 B     =  256 MiB
+  #                                    --------
+  #                                    1744 MiB
+  #
+  # That ceiling is reachable only through the CreateThumbnails API — the
+  # configured THUMBNAIL_SIZES are 256×256 and 512×512, whose realistic worst
+  # case is a 64 MP source with a flatten at ~553 MiB. So the budget is sized on
+  # the workload, not the ceiling:
+  #
+  #   maxTransformPeakBytes 1 GiB × 2 concurrent + ~200 MiB idle ≈ 2.2 GiB → 2304Mi
+  #
+  # It was never safe to serve that 1768 MiB ceiling here: at the previous
+  # 2560Mi it fit only on an idle replica and OOM-killed under any concurrency.
+  # It is now a deterministic permanent failure instead of an intermittent pod
+  # death. Raise maxTransformPeakBytes and the limit together if the API
+  # genuinely needs to serve 8192×8192.
+  #
+  # The previous 2560Mi came from `conc × pixels × 8`, which counted one buffer
+  # per conversion and so described the decode, not the conversion. Anything
+  # over the budget is now a permanent ConversionError rather than an OOM kill,
+  # so lowering maxTransformPeakBytes trades rejected extremes for a smaller
+  # pod: the configured THUMBNAIL_SIZES (256×256, 512×512) peak in tens of MB.
+  #
+  # The 8 B/px source term is the La16-at-full-bound case: decode is 4 B/px
+  # (16-bit RGBA is refused by max_alloc, La16 is not) and flatten allocates a
+  # second 4 B/px RGBA8 buffer while the original is alive. Chart-default PNG
+  # output skips flatten. Source bytes are freed after decode.
+  #
+  # The 750Mi request is the typical JPEG working set from the load test, not
+  # this worst case — the gap is left on purpose so HPA packs on observed draw.
+  # worker.validate fails the render if limits.memory cannot cover
+  # conc × maxTransformPeakBytes + 200 Mi idle.
+  #
+  # Throughput for reference: ~600 conversions/min per worker, ~84/s across ten.
+  resources:
+    requests:
+      cpu: 1300m
+      memory: 750Mi
+    limits:
+      cpu: 2500m
+      memory: 2304Mi
+
+  autoscaling:
+    ## @param thumbnailWorker.autoscaling.enabled Enable a HorizontalPodAutoscaler for the worker
+    enabled: true
+    ## @param thumbnailWorker.autoscaling.minReplicas Minimum replicas
+    minReplicas: 2
+    ## @param thumbnailWorker.autoscaling.maxReplicas Maximum replicas
+    maxReplicas: 20
+    ## @param thumbnailWorker.autoscaling.targetCPUUtilizationPercentage CPU target
+    ## Conversion is CPU-bound, so CPU is the meaningful signal here — unlike the
+    ## API deployment, where it mostly tracks request volume.
+    targetCPUUtilizationPercentage: 70
+
+  ## Probe surface. The worker links no HTTP framework; these hit a minimal
+  ## listener in the binary.
+  ## Startup probe — covers TOKEN_READY_TIMEOUT (60s) plus provisioning before
+  ## liveness begins. The worker also binds `/healthz` before outbound auth build,
+  ## so probes answer as soon as the process is up; this budget is the safety net
+  ## if bind is delayed.
+  startupProbe:
+    ## @param thumbnailWorker.startupProbe.enabled Enable the startup probe
+    enabled: true
+    ## @param thumbnailWorker.startupProbe.path Same live path as liveness
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    ## @param thumbnailWorker.startupProbe.failureThreshold ~125s budget (5 + 10×12) for token wait
+    failureThreshold: 12
+
+  livenessProbe:
+    ## @param thumbnailWorker.livenessProbe.enabled Enable the liveness probe
+    enabled: true
+    ## @param thumbnailWorker.livenessProbe.path Liveness path. Fails only while draining, so a
+    ## worker reconnecting to a downed dependency is not restarted — a restart
+    ## abandons its in-flight work and fixes nothing.
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  readinessProbe:
+    ## @param thumbnailWorker.readinessProbe.enabled Enable the readiness probe
+    enabled: true
+    ## @param thumbnailWorker.readinessProbe.path Readiness path. "Ready" means the WorkerEventQueue
+    ## consume stream is established, not merely that the process started: a
+    ## worker that stays Ready while consuming nothing is the failure this exists
+    ## to catch.
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  ## @param thumbnailWorker.terminationGracePeriodSeconds Time the kubelet allows for the drain.
+  ## Must exceed `workerRuntime.shutdownDrainTimeout` so the worker finishes its own drain
+  ## before SIGKILL; anything unfinished stays unacknowledged and is redelivered.
+  terminationGracePeriodSeconds: 45
+
+  ## @param thumbnailWorker.extraVars Additional environment variables for the worker container
+  extraVars: {}

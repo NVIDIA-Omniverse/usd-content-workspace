@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: OV-PLC validate
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    # Lifecycle metadata exists only in the development repository.
+    if: github.event.repository.private
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: NVIDIA-Omniverse/OV-PLC/.github/actions/ovplc-validate@5eed98f02bf220ed97caf871923bb7d74f0641ca
+        with:
+          # Release PRs are code-only snapshots from each source project's
+          # release job, and the central changed-doc check has no rationale
+          # override, so only structural validation runs here.
+          changed-doc-check: 'false'

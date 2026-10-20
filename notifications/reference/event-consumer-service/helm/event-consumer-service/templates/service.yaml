@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Main Service — the readiness-gated half of a deliberate two-Service
+# pair. It publishes only READY pod addresses, so it is used for
+# cluster-internal traffic and for the discovery operator's capability
+# query (both want a healthy pod), and it carries the discovery
+# annotations. External ingress does NOT route here — it routes through
+# the sibling publishNotReadyAddresses Service in service-envoy.yaml.
+# The two Services have opposite, mutually exclusive readiness semantics
+# and cannot be merged; see service-envoy.yaml before changing either.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "event-consumer-service.servicename" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+  {{- /*
+       Discovery v2 external endpoints. The discovery-service-operator
+       resolves a service's external URL by finding the HTTPProxy whose
+       route backend name equals this Service's name. That match can never
+       exist here: the discovery annotation lives on this (readiness-gated)
+       Service, but the HTTPProxy routes through the separate
+       publishNotReadyAddresses Service (see service-envoy.yaml), so the
+       consumer would be dropped from the operator's external list. We
+       instead publish the external URLs explicitly via the operator's
+       external-*-endpoint annotations, derived from the same httpProxy.fqdn
+       used to build the HTTPProxy so they cannot drift.
+    */}}
+  {{- $annotations := deepCopy (.Values.service.annotations | default dict) }}
+  {{- if .Values.httpProxy.enabled }}
+  {{-   $scheme := ternary "https" "http" .Values.httpProxy.tls.enabled }}
+  {{-   $fqdn := printf "%s.%s" .Values.httpProxy.fqdn.host .Values.httpProxy.fqdn.domain }}
+  {{-   $derived := dict
+          "discovery.omniverse.nvidia.com/external-rest-endpoint" (printf "%s://%s" $scheme $fqdn)
+          "discovery.omniverse.nvidia.com/external-grpc-endpoint" (printf "%s://grpc.%s" $scheme $fqdn) }}
+  {{-   $annotations = merge $annotations $derived }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.grpc.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    {{- if .Values.service.rest.enabled }}
+    - port: {{ .Values.service.rest.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    {{- end }}
+  selector:
+    {{- include "event-consumer-service.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: server

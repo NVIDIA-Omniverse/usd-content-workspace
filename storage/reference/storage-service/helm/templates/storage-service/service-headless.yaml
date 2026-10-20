@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-headless" (include "storage-service.servicename" .) }}
+  labels:
+    {{- include "storage-service.labels" . | nindent 4 }}
+  annotations:
+    {{ toYaml .Values.service.annotations | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: {{ .Values.service.grpc.port }}
+      targetPort: {{ .Values.service.grpc.port }}
+      protocol: TCP
+      name: grpc
+    {{- if .Values.service.metrics.enabled }}
+    - port: {{ .Values.service.metrics.port }}
+      targetPort: {{ .Values.service.metrics.port }}
+      protocol: TCP
+      name: metrics
+    {{- end }}
+    - port: {{ .Values.service.rest.port }}
+      targetPort: {{ .Values.service.rest.port }}
+      protocol: TCP
+      name: rest
+  selector:
+    {{- include "storage-service.selectorLabels" . | nindent 4 }}

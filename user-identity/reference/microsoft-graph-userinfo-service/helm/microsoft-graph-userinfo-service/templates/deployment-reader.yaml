@@ -1,0 +1,168 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- include "userinfoservice.validateAppRoleAssignments" . }}
+{{- if .Values.reader.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "userinfoservice.fullname" . }}-reader
+  labels:
+    {{- include "userinfoservice.readerLabels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.reader.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "userinfoservice.readerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- if or .Values.staticDirectory.enabled .Values.podAnnotations }}
+      annotations:
+        {{- if .Values.staticDirectory.enabled }}
+        checksum/static-directory: {{ include (print $.Template.BasePath "/configmap-static-directory.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      labels:
+        {{- include "userinfoservice.readerLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if eq .Values.providers.entra.authMode "workload-identity" }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      {{- include "userinfoservice.imagePullSecrets" ( dict "images" (list .Values.image) "global" .Values) | nindent 6 }}
+      serviceAccountName: {{ include "userinfoservice.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-reader
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.ports.rest }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.service.ports.grpc }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.reader.resources | nindent 12 }}
+          env:
+            - name: STARTUP_MODE
+              value: "reader"
+            - name: PORT
+              value: {{ .Values.service.ports.rest | quote }}
+            - name: GRPC_PORT
+              value: {{ .Values.service.ports.grpc | quote }}
+            {{- include "userinfoservice.loggingEnv" . | nindent 12 }}
+            {{- include "userinfoservice.entraEnv" . | nindent 12 }}
+            - name: CACHE_ENABLED
+              value: {{ .Values.providers.cache.enabled | quote }}
+            {{- include "userinfoservice.cacheKindsEnv" . | nindent 12 }}
+            {{- include "userinfoservice.appRoleAssignmentsEnv" . | nindent 12 }}
+            - name: READER_RELOAD_INTERVAL
+              value: {{ .Values.reader.reloadInterval | quote }}
+            - name: PERMISSION_ENABLED
+              value: {{ .Values.permission.enabled | quote }}
+            {{- if .Values.permission.enabled }}
+            - name: PERMISSION_URL
+              value: {{ .Values.permission.url | quote }}
+            - name: PERMISSION_SERVICE_NAME
+              value: {{ .Values.permission.serviceName | quote }}
+            - name: PERMISSION_CACHE_TTL
+              value: {{ .Values.permission.cacheTtl | quote }}
+            - name: PERMISSION_CACHE_MAX_CAPACITY
+              value: {{ .Values.permission.cacheMaxCapacity | quote }}
+            {{- end }}
+            {{- include "userinfoservice.postgresEnv" . | nindent 12 }}
+            {{- include "userinfoservice.observabilityEnv" . | nindent 12 }}
+            {{- include "userinfoservice.forwardHeadersEnv" . | nindent 12 }}
+            {{- if .Values.staticDirectory.enabled }}
+            - name: STATIC_DIRECTORY_FILE
+              value: "/etc/userinfo/static-directory.json"
+            {{- end }}
+            {{- range $key, $value := .Values.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- $pgTokenSidecar := eq (include "userinfoservice.postgresTokenSidecarEnabled" .) "true" }}
+          {{- $accessTokenSidecar := eq (include "userinfoservice.accessTokenSidecarEnabled" .) "true" }}
+          {{- $staticDirectory := .Values.staticDirectory.enabled }}
+          {{- if or .Values.volumeMounts $pgTokenSidecar $accessTokenSidecar $staticDirectory }}
+          volumeMounts:
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if $pgTokenSidecar }}
+            {{- include "userinfoservice.postgresTokenVolumeMount" . | nindent 12 }}
+            {{- end }}
+            {{- if $accessTokenSidecar }}
+            {{- include "userinfoservice.accessTokenVolumeMount" . | nindent 12 }}
+            {{- end }}
+            {{- if $staticDirectory }}
+            - name: static-directory
+              readOnly: true
+              mountPath: "/etc/userinfo/static-directory.json"
+              subPath: static-directory.json
+            {{- end }}
+          {{- end }}
+        {{- if $pgTokenSidecar }}
+        {{- include "userinfoservice.postgresTokenSidecar" . | nindent 8 }}
+        {{- end }}
+        {{- if $accessTokenSidecar }}
+        {{- include "userinfoservice.accessTokenSidecar" . | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.volumes $pgTokenSidecar $accessTokenSidecar $staticDirectory }}
+      volumes:
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if $pgTokenSidecar }}
+        {{- include "userinfoservice.postgresTokenVolume" . | nindent 8 }}
+        {{- end }}
+        {{- if $accessTokenSidecar }}
+        {{- include "userinfoservice.accessTokenVolume" . | nindent 8 }}
+        {{- end }}
+        {{- if $staticDirectory }}
+        - name: static-directory
+          configMap:
+            name: {{ include "userinfoservice.fullname" . }}-static-directory
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

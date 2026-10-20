@@ -1,0 +1,320 @@
+// SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+package nvidia.omniverse.storage.metadata.v1alpha;
+
+import "google/protobuf/struct.proto";
+import "nvidia/omniverse/storage/filefolder/v1alpha/filefolder_service.proto";
+import "nvidia/omniverse/storage/fileobject/v1alpha/fileobject.proto";
+
+option go_package = "pb.api.nvidia.com/omniverse/storage/metadata/v1alpha;storage";
+option java_multiple_files = true;
+option java_outer_classname = "MetadataProto";
+option java_package = "com.nvidia.omniverse.storage.metadata.v1alpha";
+
+// The MetadataService provides methods to set and retrieve metadata for data objects.
+service MetadataService {
+  // Get metadata for a specific URI
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
+
+  // Update metadata for a specific URI
+  rpc UpdateMetadata(UpdateMetadataRequest) returns (UpdateMetadataResponse);
+
+  // Delete metadata for a specific URI
+  rpc DeleteMetadata(DeleteMetadataRequest) returns (DeleteMetadataResponse);
+
+  // Read one or more metadata values in a batch.
+  //
+  // Responses may arrive in any order, not necessarily the order the requests were sent. To match
+  // each response to its request, use `GetMetadataBatchResponseEntry.request_index`, which gives
+  // the zero-based position of the request that produced it.
+  //
+  // Each entry succeeds or fails independently; a failed entry is safe to retry according to its
+  // error code.
+  rpc GetMetadataBatch(GetMetadataBatchRequest) returns (stream GetMetadataBatchResponse);
+
+  // Query metadata values for a resource within a namespace.
+  rpc QueryMetadata(QueryMetadataRequest) returns (stream QueryMetadataResponse);
+
+  // Update one or more metadata values in a batch.
+  //
+  // Responses may arrive in any order, not necessarily the order the requests were sent. To match
+  // each response to its request, use `UpdateMetadataBatchResponseEntry.request_index`, which
+  // gives the zero-based position of the request that produced it.
+  //
+  // Each entry succeeds or fails independently; a failed entry is safe to retry according to its
+  // error code.
+  rpc UpdateMetadataBatch(UpdateMetadataBatchRequest) returns (stream UpdateMetadataBatchResponse);
+
+  // Delete one or more metadata values in a batch.
+  //
+  // Responses may arrive in any order, not necessarily the order the requests were sent. To match
+  // each response to its request, use `DeleteMetadataBatchResponseEntry.request_index`, which
+  // gives the zero-based position of the request that produced it.
+  //
+  // Each entry succeeds or fails independently; a failed entry is safe to retry according to its
+  // error code.
+  rpc DeleteMetadataBatch(DeleteMetadataBatchRequest) returns (stream DeleteMetadataBatchResponse);
+}
+
+// The GetMetadata defines the input parameters for the GetMetadata() operation
+message GetMetadataRequest {
+  // The Resource URI
+  string uri = 1;
+  // A list of metadata keys to retrieve. Omitting the value or passing an empty
+  // array will cause service to retrieve all metadata keys.
+  repeated string user_metadata_keys = 2;
+}
+
+// The response of the GetMetadata operation
+message GetMetadataResponse {
+  // Metadata. Specifications for each piece of metadata are defined separately.
+  map<string, UserMetadataValue> user_metadata = 1;
+}
+
+// UpdateMetadataRequest is the request message for setting metadata for a given uri.
+message UpdateMetadataRequest {
+  // The Resource URI
+  string uri = 1;
+  // The identifier of a client
+  string user_metadata_key = 2;
+  // The opaque metadata specified separately
+  // NOTE: we're not reusing UserMetadataValue, because the etag is optional here,
+  // as the input value, while it's not as the return value
+  google.protobuf.Value user_metadata = 3;
+  // If-Match metadata key Etag
+  optional string expected_etag = 4;
+}
+
+// UpdateMetadataResponse is the response for UpdateMetadata request.
+message UpdateMetadataResponse {
+  // Metadata key Etag
+  string etag = 1;
+}
+
+// DeleteMetadataRequest is the request message for deleting metadata
+// for a given uri.
+message DeleteMetadataRequest {
+  // The Resource URI
+  string uri = 1;
+  // The identifier of a client
+  string user_metadata_key = 2;
+  // If-Match metadata key Etag
+  optional string expected_etag = 3;
+}
+
+// DeleteMetadataResponse is the response for DeleteMetadata request.
+message DeleteMetadataResponse {}
+
+// A combination of metadata value and etag for that metadata
+message UserMetadataValue {
+  // The metadata value
+  google.protobuf.Value value = 1;
+  // Metadata key ETag
+  string etag = 2;
+}
+
+// A request message for the GetMetadataBatch operation.
+message GetMetadataBatchRequest {
+  // A list of metadata items to retrieve.
+  repeated GetMetadataBatchRequestEntry requests = 1;
+}
+
+// A request entry within a GetMetadataBatch operation.
+message GetMetadataBatchRequestEntry {
+  // Resource location.
+  ResourceLocation resource_location = 1;
+  // Metadata key.
+  string user_metadata_key = 2;
+  // Override the default metadata namespace name for the request.
+  optional string namespace = 3;
+}
+
+// A response message for a GetMetadataBatch operation.
+message GetMetadataBatchResponse {
+  // The result for each request entry; use request_index to correlate with
+  // the request.
+  repeated GetMetadataBatchResponseEntry results = 1;
+}
+
+// A response entry within a GetMetadataBatch operation.
+message GetMetadataBatchResponseEntry {
+  // Either the successful update result or the error that caused this entry
+  // to fail.
+  oneof outcome {
+    // A successful oucome.
+    UserMetadataValue success = 1;
+    // An error outcome.
+    BatchErrorEntry error = 2;
+  }
+  // Zero-based index of the corresponding entry in the request's results list.
+  uint32 request_index = 3;
+}
+
+// A request message for a QueryMetadata operation.
+message QueryMetadataRequest {
+  // Resource location.
+  ResourceLocation resource_location = 1;
+  // Override the default metadata namespace name for the request.
+  optional string namespace = 2;
+}
+
+// A response message for a QueryMetadata operation.
+message QueryMetadataResponse {
+  // A page of matching user metadata values.
+  repeated QueryMetadataResponseEntry results = 1;
+}
+
+// A response entry within a QueryMetadata operation.
+message QueryMetadataResponseEntry {
+  // Metadata key.
+  string user_metadata_key = 1;
+  // Metadata value for the key.
+  UserMetadataValue user_metadata = 2;
+}
+
+// A request message for a UpdateMetadataBatch operation.
+message UpdateMetadataBatchRequest {
+  // A list of metadata items to update.
+  repeated UpdateMetadataBatchRequestEntry requests = 1;
+}
+
+// A request entry within a UpdateMetadataBatch operation.
+message UpdateMetadataBatchRequestEntry {
+  // Resource location.
+  ResourceLocation resource_location = 1;
+  // Metadata key.
+  string user_metadata_key = 2;
+  // Metadata value.
+  google.protobuf.Value user_metadata = 3;
+  // If set, the update only succeeds when the current value's ETag matches.
+  optional string expected_etag = 4;
+  // Override the default metadata namespace name for the request.
+  optional string namespace = 5;
+}
+
+// A response message for an UpdateMetadataBatch operation.
+message UpdateMetadataBatchResponse {
+  // The result for each request entry; use request_index to correlate with the
+  // request.
+  repeated UpdateMetadataBatchResponseEntry results = 1;
+}
+
+// A response entry within an UpdateMetadataBatch operation.
+message UpdateMetadataBatchResponseEntry {
+  // Either the successful update result or the error that caused this entry
+  // to fail.
+  oneof outcome {
+    // A successful oucome.
+    UpdateMetadataBatchResponseEntrySuccess success = 1;
+    // An error outcome.
+    BatchErrorEntry error = 2;
+  }
+  // Zero-based index of the corresponding entry in the request's results list.
+  uint32 request_index = 3;
+}
+
+// Update details for a single succeeded entry within an UpdateMetadataBatch
+// operation.
+message UpdateMetadataBatchResponseEntrySuccess {
+  // ETag of the updated metadata key.
+  string etag = 1;
+}
+
+// A request message for a DeleteMetadataBatch operation.
+message DeleteMetadataBatchRequest {
+  // A list of metadata items to delete.
+  repeated DeleteMetadataBatchRequestEntry requests = 1;
+}
+
+// A request entry within a DeleteMetadataBatch operation.
+message DeleteMetadataBatchRequestEntry {
+  // Resource location.
+  ResourceLocation resource_location = 1;
+  // Metadata key.
+  string user_metadata_key = 2;
+  // If set, the delete only succeeds when the current value's ETag matches.
+  optional string expected_etag = 3;
+  // Override the default metadata namespace name for the request.
+  optional string namespace = 4;
+}
+
+// A response message for a DeleteMetadataBatch operation.
+message DeleteMetadataBatchResponse {
+  // The result for each request entry; use request_index to correlate with
+  // the request.
+  repeated DeleteMetadataBatchResponseEntry results = 1;
+}
+
+// A response entry within a DeleteMetadataBatch operation.
+message DeleteMetadataBatchResponseEntry {
+  // Either the successful update result or the error that caused this entry
+  // to fail.
+  oneof outcome {
+    // A successful oucome.
+    DeleteMetadataBatchResponseEntrySuccess success = 1;
+    // An error outcome.
+    BatchErrorEntry error = 2;
+  }
+  // Zero-based index of the corresponding entry in the request's results list.
+  uint32 request_index = 3;
+}
+
+// Delete details for a single succeeded entry within an DeleteMetadataBatch
+// operation.
+message DeleteMetadataBatchResponseEntrySuccess {}
+
+// A union of all possible resource locations.
+message ResourceLocation {
+  // Either of a resource address, a resource identity, or a folder address.
+  oneof resource {
+    // A resource address.
+    string resource_address = 1;
+    // A resource identity.
+    nvidia.omniverse.storage.fileobject.v1alpha.ResourceIdentity resource_identity = 2;
+    // A folder address.
+    nvidia.omniverse.storage.filefolder.v1alpha.FolderAddress folder_address = 3;
+  }
+}
+
+// Error details for a single failed entry within a batch operation.
+message BatchErrorEntry {
+  // Per-entry error codes.
+  enum Code {
+    // An unspecified error code - do not use.
+    CODE_UNSPECIFIED = 0;
+    // One or more arguments are invalid.
+    CODE_INVALID_ARGUMENT = 1;
+    // The specified metadata key, namespace, or resource were not found.
+    CODE_NOT_FOUND = 2;
+    // The caller does not have permission to execute the operation.
+    CODE_PERMISSION_DENIED = 3;
+    // The precondition - the expected etag - was not met while updating
+    // the entry.
+    CODE_FAILED_PRECONDITION = 4;
+    // Internal server error - the underlying system have been broken.
+    CODE_INTERNAL = 5;
+    // Request quota has been exhausted. Safe to retry with backoff.
+    CODE_RESOURCE_EXHAUSTED = 6;
+    // Metadata backend is currently unavailabe. Safe to retry with backoff.
+    CODE_UNAVAILABLE = 7;
+  }
+
+  // Per-entry status code.
+  Code code = 1;
+  // Human-readable diagnostic message describing the failure.
+  string message = 2;
+}

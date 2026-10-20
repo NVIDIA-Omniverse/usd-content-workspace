@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Vendored from permission-auth 0.0.54-rc.3 (permission-service); see README.md.
+
+[package]
+edition = "2021"
+rust-version = "1.88.0"
+name = "permission-auth"
+version = "0.0.54-rc.3"
+authors = ["NVIDIA"]
+build = false
+publish = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/permissions/reference/permission-service"
+
+[features]
+grpc = [
+    "dep:tonic",
+    "tokio/fs",
+    "tokio/sync",
+    "tokio/time",
+]
+
+[lib]
+name = "permission_auth"
+path = "src/lib.rs"
+
+[dependencies.clap]
+version = "4.5.41"
+features = [
+    "derive",
+    "env",
+    "derive",
+    "env",
+]
+
+[dependencies.humantime]
+version = "2.2.0"
+
+[dependencies.jsonwebtoken]
+version = "9.3.1"
+
+[dependencies.moka]
+version = "0.12.10"
+features = ["future"]
+
+[dependencies.permission-core]
+version = "0.0.54-rc.3"
+path = "../permission-core"
+
+[dependencies.reqwest]
+version = "0.12.20"
+features = [
+    "json",
+    "default-tls",
+]
+
+[dependencies.serde]
+version = "1.0.218"
+
+[dependencies.serde_json]
+version = "1.0.139"
+
+[dependencies.time]
+version = "0.3.47"
+features = ["parsing"]
+
+[dependencies.tokio]
+version = "1.45.1"
+
+[dependencies.tonic]
+version = "0.14.2"
+optional = true
+
+[dependencies.tracing]
+version = "0.1.43"
+features = ["attributes"]
+default-features = false
+
+[dev-dependencies.tempfile]
+version = "3.26.0"
+
+[dev-dependencies.tokio]
+version = "1.45.1"
+features = [
+    "macros",
+    "rt",
+]
+
+[dev-dependencies.wiremock]
+version = "0.6.5"
