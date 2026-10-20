@@ -1,0 +1,561 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-config" (include "storage-service.fullname" .) }}
+  labels:
+    {{- include "storage-service.labels" . | nindent 4 }}
+data:
+  config.toml: |
+    [grpc]
+    enabled = true
+    addr = "0.0.0.0"
+    port = {{ .Values.service.grpc.port }}
+
+    [rest]
+    enabled = true
+    addr = "0.0.0.0"
+    port = {{ .Values.service.rest.port }}
+    serve_openapi = {{ .Values.service.rest.serveOpenapi }}
+
+    [grpc_probe_service]
+    enabled = true
+    addr = "0.0.0.0"
+    port = 8100
+
+    {{- with .Values.config.metrics }}
+      {{- with .prefix }}
+
+    [metrics]
+    prefix = {{ . | quote }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.redis }}
+      {{- if .enabled }}
+
+    [redis]
+    address = {{ required "config.redis.address must be set when config.redis.enabled is true" .address | quote }}
+        {{- with .namespace }}
+    namespace = {{ quote . }}
+        {{- end }}
+    command_timeout = {{ quote .commandTimeout }}
+    connect_timeout = {{ quote .connectTimeout }}
+    broadcast_channel_capacity = {{ .broadcastChannelCapacity }}
+    pool_size = {{ .poolSize }}
+    reconnect_max_attempts = {{ .reconnectMaxAttempts }}
+    reconnect_min_delay = {{ quote .reconnectMinDelay }}
+    reconnect_max_delay = {{ quote .reconnectMaxDelay }}
+    reconnect_base = {{ .reconnectBase }}
+    reconnect_jitter = {{ quote .reconnectJitter }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.storage.azureBlob }}
+
+    [storage.azure_blob]
+    read_redirect_size = {{ .readRedirectSize | quote }}
+    write_body_max_size = {{ .writeBodyMaxSize |quote }}
+    write_redirect_max_size = {{ .writeRedirectMaxSize | quote }}
+    allow_unconfigured_endpoints = {{ .allowUnconfiguredEndpoints }}
+    native_metadata_enabled = {{ .nativeMetadataEnabled }}
+      {{- if not (kindIs "invalid" .poolMaxIdlePerHost) }}
+    pool_max_idle_per_host = {{ .poolMaxIdlePerHost }}
+      {{- end }}
+      {{- with .timeouts }}
+    timeouts.connect = {{ .connect | quote }}
+    timeouts.read = {{ .read | quote }}
+    timeouts.operation = {{ .operation | quote }}
+    timeouts.operation_attempt = {{ .operationAttempt | quote }}
+    timeouts.keepalive = {{ .keepalive | quote }}
+      {{- end }}
+      {{- with .expiration }}
+    expiration.presigned_expiration = {{ .presignedExpiration | quote }}
+      {{- end }}
+      {{- range $host, $config := .endpoints }}
+
+    [storage.azure_blob.endpoints.{{ include "storage-service.config.endpoint-url" (dict "endpoint" $host) | quote }}]
+        {{- if hasKey $config "versioningEnabled" }}
+    versioning_enabled = {{ $config.versioningEnabled }}
+        {{- end }}
+        {{- if hasKey $config "readOnly" }}
+    read_only = {{ $config.readOnly }}
+        {{- end }}
+        {{- if hasKey $config "storageAccount" }}
+    storage_account = {{ quote $config.storageAccount }}
+        {{- end }}
+        {{- with (required "config.storage.azureBlob.endpoints.<name>.credentials must be set when an Azure Blob endpoint is configured" .credentials) }}
+          {{- with .storageKey }}
+    credentials.storage_key.storage_key = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.storageKey.storageKey must be set when storageKey credentials are configured" .storageKey | quote }}
+          {{- end }}
+          {{- with .clientSecret }}
+    credentials.client_secret.tenant_id = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.clientSecret.tenantId must be set when clientSecret credentials are configured" .tenantId | quote }}
+    credentials.client_secret.client_id = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.clientSecret.clientId must be set when clientSecret credentials are configured" .clientId | quote }}
+    credentials.client_secret.client_secret = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.clientSecret.clientSecret must be set when clientSecret credentials are configured" .clientSecret | quote }}
+            {{- with .authorityHost }}
+    credentials.client_secret.authority_host = {{ . | quote }}
+            {{- end }}
+          {{- end }}
+          {{- with .federated}}
+    credentials.federated.client_id = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.federated.clientId must be set when federated credentials are configured" .clientId | quote }}
+    credentials.federated.tenant_id = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.federated.tenantId must be set when federated credentials are configured" .tenantId | quote }}
+    credentials.federated.federated_token_file = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.federated.federatedTokenFile must be set when federated credentials are configured" .federatedTokenFile | quote }}
+            {{- with .authorityHost }}
+    credentials.federated.authority_host = {{ quote . }}
+            {{- end }}
+          {{- end }}
+          {{- with .accessTokenFile }}
+    credentials.access_token_file.path = {{ required "config.storage.azureBlob.endpoints.<name>.credentials.accessTokenFile.path must be set when accessTokenFile credentials are configured" .path | quote }}
+          {{- end }}
+          {{- with .anonymous }}
+    credentials.anonymous = true
+          {{- end }}
+        {{- end }}
+        {{- with .frontDoor }}
+    front_door.url = {{ required "config.storage.azureBlob.endpoints.<name>.frontDoor.url must be set when frontDoor is configured" .url | quote }}
+        {{- end }}
+        {{- with $config.metadataBackend }}
+    metadata_backend = {{ quote . }}
+        {{- end }}
+    permissions_enabled = {{ if hasKey $config "permissionsEnabled" }}{{ $config.permissionsEnabled }}{{ else if hasKey $config "enablePermissions" }}{{ $config.enablePermissions }}{{ else }}true{{ end }}
+    list_in_top_level_addresses = {{ if hasKey $config "listInTopLevelAddresses" }}{{ $config.listInTopLevelAddresses }}{{ else }}true{{ end }}
+    list_in_routes = {{ if hasKey $config "listInRoutes" }}{{ $config.listInRoutes }}{{ else }}true{{ end }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.storage.s3 }}
+
+    [storage.s3]
+    read_redirect_size = {{ .readRedirectSize | quote }}
+    write_body_size = {{ .writeBodyMaxSize |quote }}
+    write_redirect_size = {{ .writeRedirectMaxSize | quote }}
+    allow_unconfigured_endpoints = {{ .allowUnconfiguredEndpoints }}
+    native_metadata_enabled = {{ .nativeMetadataEnabled }}
+    native_metadata_list_fanout_enabled = {{ .nativeMetadataListFanoutEnabled }}
+      {{- with .timeouts }}
+    timeouts.connect = {{ .connect | quote }}
+    timeouts.read = {{ .read | quote }}
+    timeouts.operation = {{ .operation | quote }}
+    timeouts.operation_attempt = {{ .operationAttempt | quote }}
+    timeouts.keepalive = {{ .keepalive | quote }}
+      {{- end }}
+      {{- with .expiration }}
+    expiration.presigned_expiration = {{ .presignedExpiration | quote }}
+      {{- end }}
+      {{- range $host, $config := .endpoints }}
+
+    [storage.s3.endpoints.{{ include "storage-service.config.endpoint-url" (dict "endpoint" $host) | quote }}]
+        {{- $_ := required "config.storage.s3.endpoints.<name>.credentials must be set when an S3 endpoint is configured" .credentials }}
+        {{- include "storage-service.config.aws-credentials" . | trim | nindent 4 }}
+        {{- with $config.bucket }}
+    bucket = {{ quote . }}
+        {{- end }}
+        {{- with $config.region }}
+    region = {{ quote . }}
+        {{- end }}
+        {{- with $config.endpointUrl }}
+    endpoint_url = {{ quote . }}
+        {{- end }}
+        {{- with $config.addressingStyle }}
+    addressing_style = {{ quote . }}
+        {{- end }}
+        {{- if hasKey $config "versioningEnabled" }}
+    versioning_enabled = {{ $config.versioningEnabled }}
+        {{- end }}
+        {{- if hasKey $config "readOnly" }}
+    read_only = {{ $config.readOnly }}
+        {{- end }}
+        {{- with $config.metadataBackend }}
+    metadata_backend = {{ quote . }}
+        {{- end }}
+        {{- with $config.cloudfront }}
+    cloudfront.distribution_url = {{ required "config.storage.s3.endpoints.<name>.cloudfront.distributionUrl must be set when cloudfront is configured" .distributionUrl | quote }}
+          {{- with .keyPairId }}
+    cloudfront.key_pair_id = {{ . | quote }}
+          {{- end }}
+          {{- with .privateKeyPem }}
+    cloudfront.private_key_pem = {{ . | quote }}
+          {{- end }}
+        {{- end }}
+    permissions_enabled = {{ if hasKey $config "permissionsEnabled" }}{{ $config.permissionsEnabled }}{{ else if hasKey $config "enablePermissions" }}{{ $config.enablePermissions }}{{ else }}true{{ end }}
+    list_in_top_level_addresses = {{ if hasKey $config "listInTopLevelAddresses" }}{{ $config.listInTopLevelAddresses }}{{ else }}true{{ end }}
+    list_in_routes = {{ if hasKey $config "listInRoutes" }}{{ $config.listInRoutes }}{{ else }}true{{ end }}
+      {{- end }}
+    {{- end }}
+
+    {{- range $id, $config := .Values.config.metadata }}
+      {{- with .dynamodb }}
+
+    [metadata.{{ quote $id }}.dynamodb]
+    table = {{ required "config.metadata.<id>.dynamodb.table must be set when a DynamoDB backend is configured" .table | quote }}
+    region = {{ required "config.metadata.<id>.dynamodb.region must be set when a DynamoDB backend is configured" .region | quote }}
+        {{- with .endpointUrl }}
+    endpoint_url = {{ . | quote }}
+        {{- end }}
+    {{- include "storage-service.config.aws-credentials" . | trim | nindent 4 }}
+    query_threshold = {{ default 100 .queryThreshold }}
+    max_concurrency = {{ default 1000 .maxConcurrency }}
+      {{- end }}
+      {{- with .cosmosdb }}
+
+    [metadata.{{ quote $id }}.cosmosdb]
+    account = {{ required "config.metadata.<id>.cosmosdb.account must be set when a Cosmos DB backend is configured" .account | quote }}
+    database_id = {{ required "config.metadata.<id>.cosmosdb.databaseId must be set when a Cosmos DB backend is configured" .databaseId | quote }}
+    container_id = {{ required "config.metadata.<id>.cosmosdb.containerId must be set when a Cosmos DB backend is configured" .containerId | quote }}
+    query_batch_size = {{ default 100 .queryBatchSize }}
+    query_all_threshold = {{ default 100 .queryAllThreshold }}
+    max_concurrency = {{ default 1000 .maxConcurrency }}
+        {{- if (ne .maxIdleConnectionsPerHost nil) }}
+    max_idle_connections_per_host = {{ .maxIdleConnectionsPerHost }}
+        {{- end }}
+        {{- with (required "config.metadata.<id>.cosmosdb.credentials must be set when a Cosmos DB backend is configured" .credentials) }}
+          {{- with .primaryKey }}
+    credentials.primary_key.key = {{ required "config.metadata.<id>.cosmosdb.credentials.primaryKey.key must be set when primaryKey credentials are configured" .key | quote }}
+          {{- end }}
+          {{- with .clientSecret }}
+    credentials.client_secret.tenant_id = {{ required "config.metadata.<id>.cosmosdb.credentials.clientSecret.tenantId must be set when clientSecret credentials are configured" .tenantId | quote }}
+    credentials.client_secret.client_id = {{ required "config.metadata.<id>.cosmosdb.credentials.clientSecret.clientId must be set when clientSecret credentials are configured" .clientId | quote }}
+    credentials.client_secret.client_secret = {{ required "config.metadata.<id>.cosmosdb.credentials.clientSecret.clientSecret must be set when clientSecret credentials are configured" .clientSecret | quote }}
+            {{- with .authorityHost }}
+    credentials.client_secret.authority_host = {{ . | quote }}
+            {{- end }}
+          {{- end }}
+          {{- with .federated}}
+    credentials.federated.client_id = {{ required "config.metadata.<id>.cosmosdb.credentials.federated.clientId must be set when federated credentials are configured" .clientId | quote }}
+    credentials.federated.tenant_id = {{ required "config.metadata.<id>.cosmosdb.credentials.federated.tenantId must be set when federated credentials are configured" .tenantId | quote }}
+    credentials.federated.federated_token_file = {{ required "config.metadata.<id>.cosmosdb.credentials.federated.federatedTokenFile must be set when federated credentials are configured" .federatedTokenFile | quote }}
+            {{- with .authorityHost }}
+    credentials.federated.authority_host = {{ quote . }}
+            {{- end }}
+          {{- end }}
+          {{- with .accessTokenFile }}
+    credentials.access_token_file.path = {{ required "config.metadata.<id>.cosmosdb.credentials.accessTokenFile.path must be set when accessTokenFile credentials are configured" .path | quote }}
+          {{- end }}
+        {{- end }}
+        {{- with .consistencyLevels }}
+    consistency_levels.query = {{ default "strong" .query | quote }}
+    consistency_levels.create = {{ default "strong" .create | quote }}
+    consistency_levels.delete = {{ default "strong" .delete | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .postgres }}
+
+    [metadata.{{ quote $id }}.postgres]
+    host = {{ required "config.metadata.<id>.postgres.host must be set when a PostgreSQL backend is configured" .host | quote }}
+    port = {{ default 5432 .port }}
+    dbname = {{ required "config.metadata.<id>.postgres.dbname must be set when a PostgreSQL backend is configured" .dbname | quote }}
+    schema = {{ default "public" .schema | quote }}
+    ssl_mode = {{ default "prefer" .sslMode | quote }}
+    connection_pool_size = {{ default 10 .connectionPoolSize }}
+        {{- with (required "config.metadata.<id>.postgres.credentials must be set when a PostgreSQL backend is configured" .credentials) }}
+          {{- with .password }}
+    credentials.password.user = {{ required "config.metadata.<id>.postgres.credentials.password.user must be set when password credentials are configured" .user | quote }}
+    credentials.password.password = {{ required "config.metadata.<id>.postgres.credentials.password.password must be set when password credentials are configured" .password | quote }}
+          {{- end }}
+          {{- with .accessTokenFile }}
+    credentials.access_token_file.user = {{ required "config.metadata.<id>.postgres.credentials.accessTokenFile.user must be set when accessTokenFile credentials are configured" .user | quote }}
+    credentials.access_token_file.path = {{ required "config.metadata.<id>.postgres.credentials.accessTokenFile.path must be set when accessTokenFile credentials are configured" .path | quote }}
+          {{- end }}
+        {{- end }}
+    query_batch_size = {{ default 100 .queryBatchSize }}
+    query_all_threshold = {{ default 100 .queryAllThreshold }}
+    query_byte_size_budget = {{ default "16MiB" .queryByteSizeBudget | quote }}
+    max_metadata_value_size = {{ default "2MiB" .maxMetadataValueSize | quote }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.metadataCache }}
+
+    [metadata_cache]
+    enabled = {{ .enabled }}
+    cache_capacity = {{ quote .cacheCapacity }}
+    cache_time_to_live = {{ quote .cacheTimeToLive }}
+    page_size_limit = {{ quote .pageSizeLimit }}
+    l2_enabled = {{ .l2Enabled }}
+    l2_claim_time_to_live = {{ quote .l2ClaimTimeToLive }}
+    {{- end }}
+
+    {{- with .Values.config.storageEvents }}
+      {{- range $id, $config := . }}
+        {{- with $config.azureServiceBus }}
+    
+    [storage_events.{{ quote $id }}.azure_service_bus]
+    queue_namespace = {{ required "config.storageEvents.<id>.azureServiceBus.queueNamespace must be set when an Azure Service Bus subscriber is configured" .queueNamespace | quote }}
+    queue_name = {{ required "config.storageEvents.<id>.azureServiceBus.queueName must be set when an Azure Service Bus subscriber is configured" .queueName | quote }}
+    workers = {{ default 10 .workers }}
+    receive_batch_size = {{ default 20 .receiveBatchSize }}
+    receive_max_wait_time = {{ default "100ms" .receiveMaxWaitTime | quote }}
+          {{- with (required "config.storageEvents.<id>.azureServiceBus.credentials must be set when an Azure Service Bus subscriber is configured" .credentials) }}
+            {{- with .sharedAccessPolicyKey }}
+    credentials.shared_access_policy_key.policy_name = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.sharedAccessPolicyKey.policyName must be set when sharedAccessPolicyKey credentials are configured" .policyName | quote }}
+    credentials.shared_access_policy_key.policy_key = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.sharedAccessPolicyKey.policyKey must be set when sharedAccessPolicyKey credentials are configured" .policyKey | quote }}
+            {{- end }}
+            {{- with .clientSecret }}
+    credentials.client_secret.tenant_id = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.clientSecret.tenantId must be set when clientSecret credentials are configured" .tenantId | quote }}
+    credentials.client_secret.client_id = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.clientSecret.clientId must be set when clientSecret credentials are configured" .clientId | quote }}
+    credentials.client_secret.client_secret = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.clientSecret.clientSecret must be set when clientSecret credentials are configured" .clientSecret | quote }}
+              {{- with .authorityHost }}
+    credentials.client_secret.authority_host = {{ . | quote }}
+              {{- end }}
+            {{- end }}
+            {{- with .federated}}
+    credentials.federated.client_id = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.federated.clientId must be set when federated credentials are configured" .clientId | quote }}
+    credentials.federated.tenant_id = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.federated.tenantId must be set when federated credentials are configured" .tenantId | quote }}
+    credentials.federated.federated_token_file = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.federated.federatedTokenFile must be set when federated credentials are configured" .federatedTokenFile | quote }}
+              {{- with .authorityHost }}
+    credentials.federated.authority_host = {{ quote . }}
+              {{- end }}
+            {{- end }}
+            {{- with .accessTokenFile }}
+    credentials.access_token_file.path = {{ required "config.storageEvents.<id>.azureServiceBus.credentials.accessTokenFile.path must be set when accessTokenFile credentials are configured" .path | quote }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- with $config.sqs }}
+
+    [storage_events.{{ quote $id }}.sqs]
+    region = {{ required "config.storageEvents.<id>.sqs.region must be set when an SQS subscriber is configured" .region | quote }}
+    queue_url = {{ required "config.storageEvents.<id>.sqs.queueUrl must be set when an SQS subscriber is configured" .queueUrl | quote }}
+    max_number_of_messages = {{ default 10 .maxNumberOfMessages }}
+    visibility_timeout = {{ default "30s" .visibilityTimeout | quote }}
+    wait_time = {{ default "20s" .waitTime | quote }}
+    workers = {{ default 10 .workers }}
+          {{- with .endpointUrl }}
+    endpoint_url = {{ quote . }}
+          {{- end }}
+          {{- include "storage-service.config.aws-credentials" . | trim | nindent 4 }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.urlRemapper }}
+
+    [url_remapper]
+    enabled = {{ .enabled }}
+      {{- with .checkpointMetadataKey }}
+    checkpoint_metadata_key = {{ quote . }}
+      {{- end }}
+    expose_child_rules_as_folders = {{ .exposeChildRulesAsFolders }}
+      {{- with .rewriteRules }}
+        {{- range $mapped, $original := . }}
+          {{- if kindIs "string" $original }}
+
+    [url_remapper.rewrite_rules.{{ quote $mapped }}]
+    target = {{ required "config.urlRemapper.rewriteRules.<alias> must not be empty" $original | quote }}
+    list_in_top_level_addresses = true
+          {{- else }}
+
+    [url_remapper.rewrite_rules.{{ quote $mapped }}]
+    target = {{ required "config.urlRemapper.rewriteRules.<alias>.target must be set when a rewrite rule object is configured" $original.target | quote }}
+    list_in_top_level_addresses = {{ if hasKey $original "listInTopLevelAddresses" }}{{ $original.listInTopLevelAddresses }}{{ else }}true{{ end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+
+    [url_normalizer]
+    enabled = {{ .Values.config.urlNormalizer.enabled }}
+
+    {{- with .Values.config.permissions }}
+
+    [permissions]
+    enabled = {{ .enabled }}
+      {{- with .client.rest }}
+    client.rest.endpoint = {{ required "config.permissions.client.rest.endpoint must be set when a REST permissions client is configured" .endpoint | quote }}
+          {{- $retry := default (dict) .retry }}
+    client.rest.retry.initial_backoff = {{ default "100ms" $retry.initialBackoff | quote }}
+    client.rest.retry.max_backoff = {{ default "10s" $retry.maxBackoff | quote }}
+    client.rest.retry.attempts = {{ default 5 $retry.attempts }}
+      {{- else }}
+        {{- with .client.grpc }}
+    client.grpc.endpoint = {{ required "config.permissions.client.grpc.endpoint must be set when a gRPC permissions client is configured" .endpoint | quote }}
+    client.grpc.dns_refresh_interval = {{ default "5s" .dnsRefreshInterval | quote }}
+    client.grpc.tcp_keepalive = {{ default "30s" .tcpKeepalive | quote }}
+    client.grpc.http2_keep_alive_interval = {{ default "30s" .http2KeepAliveInterval | quote }}
+    client.grpc.connections_per_host = {{ default 4 .connectionsPerHost }}
+          {{- $retry := default (dict) .retry }}
+    client.grpc.retry.initial_backoff = {{ default "100ms" $retry.initialBackoff | quote }}
+    client.grpc.retry.max_backoff = {{ default "10s" $retry.maxBackoff | quote }}
+    client.grpc.retry.attempts = {{ default 5 $retry.attempts }}
+        {{- else }}
+          {{- if .enabled }}
+    client.grpc.endpoint = "http://permission-service:3010"
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    batch_size = {{ .batchSize }}
+    include_acl_in_all_keys = {{ .includeAclInAllKeys }}
+      {{- with (default dict $.Values.observability.headers).forward }}
+    forward_headers = {{ toJson . }}
+      {{- end }}
+      {{- with .actionNames }}
+    action_names = {{ toJson . }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.notificationClient }}
+      {{- if .enabled }}
+
+    [notification_client]
+    enabled = true
+    batch_size = {{ .batchSize }}
+    endpoint = {{ required "config.notificationClient.endpointUrl must be set when config.notificationClient.enabled is true" .endpointUrl | quote }}
+        {{- with .credentials }}
+          {{- with .accessTokenFile }}
+    credentials.access_token_file.path = {{ required "config.notificationClient.credentials.accessTokenFile.path must be set when config.notificationClient.enabled is true" .path | quote }}
+          {{- end }}
+        {{- else }}
+          {{- with $.Values.serviceIdentity.clientCredentials }}
+            {{- if .enabled }}
+    credentials.oauth2_client_credentials.openid_configuration_uri = {{ .openIdConfigurationUri | quote }}
+    credentials.oauth2_client_credentials.parameters = [
+      { name = "client_id", value = {{ .clientId | quote }} },
+      { name = "client_secret", value = "${STORAGE_SERVICE_SERVICE_IDENTITY_CLIENT_SECRET}" },
+              {{- if .clientScope }}
+      { name = "scope", value = {{ .clientScope | quote }} },
+              {{- end }}
+              {{- range $key, $value := .extraBodyParams }}
+      { name = {{ $key | quote }}, value = {{ $value | quote }} },
+              {{- end }}
+    ]
+              {{- if .extraHeaders }}
+    credentials.oauth2_client_credentials.headers = [
+                {{- range $key, $value := .extraHeaders }}
+      { name = {{ $key | quote }}, value = {{ $value | quote }} },
+                {{- end }}
+    ]
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- with $.Values.serviceIdentity.accessTokenFile }}
+            {{- if .enabled }}
+    credentials.access_token_file.path = {{ required "serviceIdentity.accessTokenFile.path must be set when config.notificationClient.enabled is true" .path | quote }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- with .eventTypes }}
+    event_types.object_created = {{ .objectCreated | quote }}
+    event_types.object_deleted = {{ .objectDeleted | quote }}
+    event_types.dir_created = {{ .dirCreated | quote }}
+    event_types.dir_deleted = {{ .dirDeleted | quote }}
+        {{- end }}
+        {{- with .timeouts }}
+    timeouts.request = {{ .request | quote }}
+    timeouts.connect = {{ .connect | quote }}
+        {{- end }}
+    connections_per_host = {{ .connectionsPerHost }}
+    dns_refresh_interval = {{ quote .dnsRefreshInterval }}
+    tcp_keepalive = {{ quote .tcpKeepalive }}
+    http2_keep_alive_interval = {{ quote .http2KeepAliveInterval }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.syntheticDirEvents }}
+
+    [synthetic_dir_events]
+    enabled = {{ .enabled }}
+    flush_interval = {{ .flushInterval | quote }}
+    {{- end }}
+
+    {{- with .Values.config.smallObjectCache }}
+
+    [small_object_cache]
+    enabled = {{ .enabled }}
+    l2_enabled = {{ .l2Enabled }}
+    capacity = {{ .capacity | quote }}
+    small_object_size = {{ .smallObjectSize | quote }}
+    time_to_live = {{ .timeToLive | quote }}
+    in_flight_read_channel_capacity = {{ .inFlightReadChannelCapacity }}
+      {{- with .errors }}
+    errors = {{ toJson . }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.statCache }}
+
+    [stat_cache]
+    enabled = {{ .enabled }}
+    l2_enabled = {{ .l2Enabled }}
+    capacity = {{ .capacity | quote }}
+    time_to_live = {{ .timeToLive | quote }}
+    invalidate_on_update = {{ .invalidateOnUpdate }}
+      {{- with .errors }}
+    errors = {{ toJson . }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.listCache }}
+
+    [list_cache]
+    enabled = {{ .enabled }}
+    l2_enabled = {{ .l2Enabled }}
+    capacity = {{ .capacity | quote }}
+    time_to_live = {{ .timeToLive | quote }}
+    invalidate_on_update = {{ .invalidateOnUpdate }}
+    page_size_limit = {{ .pageSizeLimit | quote }}
+      {{- with .errors }}
+    errors = {{ toJson . }}
+      {{- end }}
+
+    {{- end }}
+
+    {{- with .Values.config.additionalHeaders }}
+
+    [additional_headers]
+    enabled = {{ .enabled }}
+      {{- with .cacheControl }}
+    cache_control = {{ quote . }}
+      {{- end }}
+      {{- with .cacheControlApi }}
+    cache_control_api = {{ quote . }}
+      {{- end }}
+      {{- with .tracingHeaderNames }}
+    tracing_header_names = {{ toJson . }}
+      {{- end }}
+    {{- end }}
+
+    {{- with .Values.config.ingressThrottle }}
+
+    [ingress_throttle]
+    enabled = {{ .enabled }}
+    max_concurrency = {{ .maxConcurrency }}
+    {{- end }}
+
+    {{- with .Values.config.ingressLoadShed }}
+
+    [ingress_load_shed]
+    enabled = {{ .enabled }}
+    {{- end }}
+
+    {{- with .Values.config.egressThrottle }}
+
+    [egress_throttle]
+    enabled = {{ .enabled }}
+    max_concurrency = {{ .maxConcurrency }}
+    {{- end }}
+
+    {{- with .Values.config.manifest }}
+
+    [manifest]
+    enabled = {{ .enabled }}
+    l2_enabled = {{ .l2Enabled }}
+    error_on_non_manifest_objects = {{ .errorOnNonManifestObjects }}
+    capacity = {{ quote .cacheCapacity }}
+    time_to_live = {{ quote .cacheTimeToLive }}
+    capacity_warn_pct = {{ .cacheCapacityWarnPct }}
+    page_size_limit = {{ quote .pageSizeLimit }}
+    {{- end }}

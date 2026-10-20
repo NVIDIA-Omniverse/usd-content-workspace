@@ -1,0 +1,183 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Mirrors a tagged release of this repository to the public
+# NVIDIA-Omniverse/usd-content-workspace repository as a pull request.
+#
+# On a pushed `v*` tag (for example `v0.1.0-rc.1` or `v0.1.0`), the job
+# exports the tagged tree, minus the private paths listed in
+# docs/plc/MAINTAINING.md, and opens a pull request in the public repository
+# whose tree is identical to that export. The pull request branch is
+# `release/<tag>` and holds exactly one commit on top of the public default
+# branch; no history from this repository is published.
+#
+# This job only pushes the branch, with a deploy key of the public
+# repository. The pull request is opened there by open-release-pr.yml with
+# that repository's own GITHUB_TOKEN, so no personal token is involved.
+#
+# The commit replaces the whole tree, so files removed since the last release
+# are removed in the public repository too. Merging it yields exactly the
+# tagged tree only while its parent is still the public default branch head:
+# release-tree.yml reports that on the pull request, and open-release-pr.yml
+# closes older release pull requests when a newer one opens.
+#
+# Re-running for the same tag force-pushes the branch, rebuilt on the current
+# default branch; the open pull request picks it up. When the public default
+# branch already matches the export, nothing is pushed.
+#
+# Required configuration:
+#   PUBLIC_REPO_DEPLOY_KEY  Secret in this repository: the private half of an
+#                           SSH deploy key with write access, registered on
+#                           NVIDIA-Omniverse/usd-content-workspace only.
+#   In the public repository, "Allow GitHub Actions to create and approve
+#   pull requests" must be on, for open-release-pr.yml.
+#
+# This file is published along with everything else; the repository guard
+# below keeps it from running in the public repository.
+
+name: Mirror release to public repository
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to mirror, for example v0.1.0-rc.1.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-to-public-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PUBLIC_REPO: NVIDIA-Omniverse/usd-content-workspace
+  # Paths that are never published (see docs/plc/MAINTAINING.md and the
+  # "Check Private Paths" workflow). Keep the two lists below in sync with
+  # them: EXPORT_EXCLUDES are git pathspecs for `git archive`, PRIVATE_PATHS_RE
+  # matches the same paths in `git ls-tree` output.
+  EXPORT_EXCLUDES: ":(exclude).ovplc :(exclude)docs/plc :(exclude,glob)**/evals/**"
+  PRIVATE_PATHS_RE: '^(\.ovplc/|docs/plc/)|(^|/)evals/'
+
+jobs:
+  mirror:
+    # Never run in the destination repository itself.
+    if: github.repository != 'NVIDIA-Omniverse/usd-content-workspace'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9A-Za-z._-]+$'; then
+            echo "::error::Unsupported tag name: $tag"
+            exit 1
+          fi
+          echo "name=$tag" >> "$GITHUB_OUTPUT"
+          echo "branch=release/$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check credentials
+        env:
+          PUBLIC_REPO_DEPLOY_KEY: ${{ secrets.PUBLIC_REPO_DEPLOY_KEY }}
+        run: |
+          if [ -z "$PUBLIC_REPO_DEPLOY_KEY" ]; then
+            echo "::error::Secret PUBLIC_REPO_DEPLOY_KEY is not configured; see the header of this workflow."
+            exit 1
+          fi
+
+      - name: Check out tagged commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.name }}
+          path: internal
+          persist-credentials: false
+
+      - name: Export publishable tree
+        id: export
+        run: |
+          set -euo pipefail
+          export_dir="$RUNNER_TEMP/export"
+          mkdir -p "$export_dir"
+          # shellcheck disable=SC2086 # EXPORT_EXCLUDES is a list of pathspecs.
+          git -C internal archive HEAD -- . $EXPORT_EXCLUDES | tar -x -C "$export_dir"
+          python3 internal/.github/scripts/check_private_paths.py --tree "$export_dir"
+          echo "dir=$export_dir" >> "$GITHUB_OUTPUT"
+          echo "date=$(git -C internal log -1 --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out public repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: ${{ env.PUBLIC_REPO }}
+          ssh-key: ${{ secrets.PUBLIC_REPO_DEPLOY_KEY }}
+          path: public
+          fetch-depth: 1
+
+      - name: Replace public tree with the export
+        id: commit
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+          BRANCH: ${{ steps.tag.outputs.branch }}
+          EXPORT_DIR: ${{ steps.export.outputs.dir }}
+          SOURCE_DATE: ${{ steps.export.outputs.date }}
+        run: |
+          set -euo pipefail
+          cd public
+          git checkout -B "$BRANCH"
+          # Remove everything but .git, then copy the export over, so deleted
+          # files are deleted in the public repository too.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          cp -a "$EXPORT_DIR/." .
+          # --force: some tracked files match a .gitignore pattern.
+          git add --all --force
+          if git diff --cached --quiet; then
+            echo "The public default branch already matches $TAG; nothing to publish."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Fixed identity and dates make the commit reproducible, so a re-run
+          # for the same tag and base pushes the same commit.
+          export GIT_AUTHOR_NAME="github-actions[bot]"
+          export GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          export GIT_AUTHOR_DATE="$SOURCE_DATE"
+          export GIT_COMMITTER_DATE="$SOURCE_DATE"
+          git commit -q -m "Release $TAG"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the public tree matches the tag
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          # Compare mode, type and blob hash of every file.
+          git -C internal ls-tree -r --full-tree HEAD \
+            | awk -F '\t' '$2 !~ ENVIRON["PRIVATE_PATHS_RE"]' > "$RUNNER_TEMP/expected.txt"
+          git -C public ls-tree -r --full-tree HEAD > "$RUNNER_TEMP/actual.txt"
+          if ! diff -u "$RUNNER_TEMP/expected.txt" "$RUNNER_TEMP/actual.txt"; then
+            echo "::error::The public tree differs from the tagged tree."
+            exit 1
+          fi
+
+      - name: Push branch
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          BRANCH: ${{ steps.tag.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # open-release-pr.yml in the public repository opens or updates the
+          # pull request when this branch is pushed.
+          git -C public push --force origin "HEAD:refs/heads/$BRANCH"
+          echo "Pushed $BRANCH to $PUBLIC_REPO"

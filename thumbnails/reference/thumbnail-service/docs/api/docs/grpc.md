@@ -1,0 +1,609 @@
+(thumbnail-api-grpc-grpc-specification)=
+# gRPC Specification
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this section are to be interpreted as described in [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
+
+(thumbnail-api-grpc-service-definition)=
+## Service definition
+
+| Method | Request | Response | Summary |
+|---|---|---|---|
+| `AssociateThumbnail` | `AssociateThumbnailRequest` | `AssociateThumbnailResponse` | Record that an existing thumbnail belongs to a target resource |
+| `DisassociateThumbnail` | `DisassociateThumbnailRequest` | `DisassociateThumbnailResponse` | Remove one thumbnail's association with a target resource |
+| `CreateThumbnails` | `CreateThumbnailsRequest` | `CreateThumbnailsResponse` | Trigger thumbnail generation for a source file |
+| `GetThumbnails` | `GetThumbnailsRequest` | `GetThumbnailsResponse` | Read the thumbnails associated with a target resource |
+
+The schema below is the Thumbnail API's gRPC definition. The reference implementation's `.proto` in the
+`thumbnail-service` repository follows it and may lag it.
+
+```protobuf
+syntax = "proto3";
+
+package nvidia.omniverse.thumbnail.v1alpha;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "pb.api.nvidia.com/omniverse/thumbnail/v1alpha";
+
+// The ThumbnailService provides core thumbnail operations for managing thumbnail associations.
+service ThumbnailService {
+  // Create an association between an existing thumbnail resource and an association target. This is used when you have pre-existing thumbnail files that you want to link to source resources, rather than generating new thumbnails. The association includes optional specification metadata describing the thumbnail properties.
+  // gRPC is at full parity with HTTP: the association target may be a FILE or a FOLDER, selected via target_type.
+  //
+  // Failures are reported in-band, as success=false with an error_message, with one exception: a missing token, or one the downstream storage service rejects (an expired token, for example), fails the RPC with UNAUTHENTICATED. Retrying an UNAUTHENTICATED call needs a new token; the same one will fail again.
+  //
+  // An in-band failure also carries failure_kind, saying whether retrying the same request could succeed. Callers that decide acknowledgements should key on it rather than on error_message, which is prose. An absent or UNSPECIFIED failure_kind means unclassified and should be treated as retryable.
+  rpc AssociateThumbnail(AssociateThumbnailRequest) returns (AssociateThumbnailResponse);
+
+  // Remove a single specific thumbnail from its association with a target resource. The caller supplies both the thumbnail resource and the association target; only the entry whose stored thumbnail.resource_address matches the supplied thumbnail is removed. If no matching entry is found (already removed or never associated), the call succeeds with empty arrays (idempotent). Matches the HTTP DELETE /v1alpha/associations endpoint, including FILE and FOLDER target types.
+  //
+  // Failure model (differs from HTTP by gRPC convention):
+  //   - Removal failure returns OK with an empty `succeeded` and a non-empty `failed`. (HTTP returns 502 with the same body.)
+  //   - If the association target cannot be enumerated at all, the RPC fails with UNAVAILABLE. This disambiguates it from a missing association (which returns OK with two empty arrays).
+  //   - A missing token, or one the downstream storage service rejects (an expired token, for example), fails with UNAUTHENTICATED before any work is done.
+  //   - Clients should retry on UNAVAILABLE; UNAUTHENTICATED needs a new token first; for an OK response with a non-empty `failed`, retry per the error_message.
+  rpc DisassociateThumbnail(DisassociateThumbnailRequest) returns (DisassociateThumbnailResponse);
+
+  // Generate thumbnails for a source resource. The implementation resolves the
+  // resource_identity from its storage backend; callers supply only resource_address.
+  //
+  // An implementation completes this call in one of two ways. Which one is a property of
+  // the deployment, not of the request, and callers MUST treat either as success:
+  //   - Asynchronous completion: the work is accepted and performed later. OK means every
+  //     specification not listed in `failed` was accepted; no thumbnail need exist yet.
+  //   - Synchronous completion: thumbnails are generated, written, and associated before
+  //     the call returns. OK means every specification not listed in `failed` exists and is
+  //     readable through GetThumbnails.
+  //
+  // Request:
+  //   - resource_address (required, non-empty): the source resource.
+  //   - specifications (optional, repeated): one entry per thumbnail to generate, of a kind
+  //     the implementation supports for generation. If empty, the implementation applies its
+  //     configured defaults — the same set its event-driven flow uses, when it has one.
+  //
+  // Response:
+  //   - failed (repeated): per-specification failures, each carrying the fully resolved
+  //     ThumbnailSpecification and an error message. Empty on full success. Under
+  //     asynchronous completion an entry means the specification could not be accepted;
+  //     under synchronous completion it means the thumbnail could not be produced.
+  //   - Do not compare failed.length with specifications.length: empty input fans out over
+  //     the configured defaults, so failures can describe specifications the caller never sent.
+  //
+  // Error codes. The request itself is refused before any backend call:
+  //   - INVALID_ARGUMENT: empty resource_address, a specification kind or encoding the
+  //     implementation does not support, more than 1000 specifications, dimensions outside
+  //     [1, 8192], or quality outside [1, 100] for a lossy encoding.
+  //   - NOT_FOUND: resource_address does not exist.
+  //   - UNAUTHENTICATED: missing, invalid, or expired token.
+  //   - PERMISSION_DENIED: the caller is not authorized to read the source.
+  // When no specification could be handled, the call fails instead of returning OK with a
+  // fully populated `failed`:
+  //   - Asynchronous completion — INTERNAL: the source lookup failed for another reason, or
+  //     nothing could be handed to the system that performs generation. A hand-off that timed
+  //     out MAY nevertheless have been received; read the associations before retrying.
+  //   - Synchronous completion — FAILED_PRECONDITION: the source cannot be processed
+  //     (undecodable, unsupported format, or over the implementation's decode bounds), with
+  //     the message naming the cause; UNAVAILABLE: a transient storage or association
+  //     failure, or load shedding at the implementation's in-flight bound — retry.
+  rpc CreateThumbnails(CreateThumbnailsRequest) returns (CreateThumbnailsResponse);
+
+  // Read the thumbnails associated with a target resource. The gRPC counterpart of
+  // GET /v1alpha/thumbnails, sharing its storage query path, its filter semantics and its
+  // result cap, with outcomes expressed as gRPC status codes.
+  //
+  // Request:
+  //   - association_target_resource_address (required, non-empty, at most 2048 characters): the
+  //     target whose thumbnails to read. Associations are keyed on the target's resource_address
+  //     for both FILE and FOLDER targets, so no identity is supplied or resolved.
+  //   - specification, width, height, encoding_format, transform_type, crop_strategy (optional):
+  //     filters. Every supplied filter must match exactly; an omitted one does not narrow.
+  //
+  // Response:
+  //   - thumbnails (repeated): one entry per matching association, ordered by
+  //     thumbnail.resource_address and capped at 1000 entries. There is no continuation token, so
+  //     a response of exactly 1000 entries may be incomplete. Stored entries too malformed to
+  //     return are skipped rather than failing the call, so a short list does not mean the
+  //     metadata is sound.
+  //   - specification carries the stored metadata verbatim as a Struct, because storage returns
+  //     arbitrary JSON that predates and outlives any typed shape declared here.
+  //
+  // Error codes:
+  //   - INVALID_ARGUMENT: missing or blank association_target_resource_address, an address past
+  //     2048 characters, or a width/height outside [1, 8192].
+  //   - UNAUTHENTICATED: missing token, or the storage service rejected it.
+  //   - PERMISSION_DENIED: the token was accepted and storage denied access to the target.
+  //   - UNAVAILABLE: the storage metadata query could not complete. Worth retrying.
+  //
+  // Stored metadata this service cannot read never fails the call. An entry with no usable
+  // thumbnail address is skipped, and an entry whose specification is not a JSON object is
+  // returned without one — so a malformed record costs its own field or its own entry, never the
+  // whole read.
+  //
+  // No matches is OK with an empty list, never NOT_FOUND: a target with no thumbnails is a
+  // successful read of nothing, and conflating it with a missing target sends callers looking for
+  // a resource that is there.
+  rpc GetThumbnails(GetThumbnailsRequest) returns (GetThumbnailsResponse);
+}
+
+// AssociateThumbnailRequest is the request to create an association between an existing thumbnail resource and an association target.
+// At full parity with HTTP: target_type selects FILE or FOLDER. For target_type FOLDER, association_target.resource_identity is omitted; for FILE it is required. The thumbnail is always a file and always carries resource_identity.
+message AssociateThumbnailRequest {
+  // The existing thumbnail resource to associate (always a file).
+  Resource thumbnail = 1;
+
+  // The resource to link the thumbnail to. A file carries resource_identity; a folder omits it.
+  Resource association_target = 2;
+
+  // Type of the association target. Defaults to FILE when omitted.
+  optional TargetType target_type = 3;
+
+  // Required image-to-image specification describing the thumbnail properties.
+  // Proto3 message presence is validated at runtime; omission is INVALID_ARGUMENT.
+  optional ThumbnailSpecification specification = 4;
+}
+
+// AssociateThumbnailResponse reports the outcome of an AssociateThumbnailRequest: success,
+// error_message, and failure_kind. The association itself is readable through GetThumbnails.
+message AssociateThumbnailResponse {
+  // Deprecated: never populated. Retained so existing clients keep parsing.
+  Resource thumbnail = 1 [deprecated = true];
+
+  // Deprecated: never populated. Retained so existing clients keep parsing.
+  Resource association_target = 2 [deprecated = true];
+
+  // Whether the association was successful.
+  bool success = 3;
+  // Optional error message if the association failed.
+  optional string error_message = 4;
+
+  // Whether retrying this exact request could succeed.
+  //
+  // error_message is free-form prose and cannot be classified by a caller
+  // without matching on its text, so an in-band failure was indistinguishable
+  // from a transient one. A caller that must decide whether to retry had only two
+  // options: retry everything, or acknowledge everything. Always retrying means a
+  // permanently rejected association is retried indefinitely until an operational
+  // limit intervenes; this field lets an implementation classify the failure so
+  // callers can stop retrying what cannot succeed.
+  //
+  // Unset means unclassified, and callers SHOULD treat it as retryable: that is
+  // the previous behavior, so an older service answering a newer client does not
+  // start acknowledging work that should have been retried.
+  optional AssociationFailureKind failure_kind = 5;
+}
+
+// Whether an in-band association failure is worth retrying.
+enum AssociationFailureKind {
+  // The service did not classify the failure. Treat as RETRYABLE: an
+  // unclassified failure from an older service must not become an acknowledgement.
+  ASSOCIATION_FAILURE_KIND_UNSPECIFIED = 0;
+  // Retrying the same request may succeed — storage was briefly unavailable, a
+  // metadata write lost a race, or an internal error that is not a property of
+  // the request.
+  ASSOCIATION_FAILURE_KIND_RETRYABLE = 1;
+  // Retrying the same request cannot succeed. The request or the state it refers
+  // to is the problem: a rejected specification, or an association target that no
+  // longer exists. A caller deciding acknowledgements should acknowledge.
+  ASSOCIATION_FAILURE_KIND_PERMANENT = 2;
+}
+
+// DisassociateThumbnailRequest removes a single specific thumbnail from its association with a target resource.
+message DisassociateThumbnailRequest {
+  // The association target from which to remove the thumbnail. Only resource_address is used;
+  // a resource_identity may be set but is ignored.
+  Resource association_target = 1;
+
+  // Type of the association target. Defaults to FILE when omitted.
+  optional TargetType target_type = 2;
+
+  // The specific thumbnail to remove. Only resource_address is used to match the stored
+  // association entry. Required; omitting it is INVALID_ARGUMENT.
+  Resource thumbnail = 3;
+}
+
+// DisassociateThumbnailResponse reports the result of a targeted removal. The thumbnail either
+// lands in `succeeded` (removed) or `failed` (with an error). Both arrays are empty when the
+// thumbnail was not associated with the target (already removed or never linked — idempotent
+// success). A source that could not be enumerated at all is reported as UNAVAILABLE instead
+// (see DisassociateThumbnail).
+message DisassociateThumbnailResponse {
+  // Thumbnails that were successfully removed (at most one entry).
+  repeated DisassociateResult succeeded = 1;
+  // Thumbnails whose removal failed, each with its error (at most one entry).
+  repeated DisassociateResult failed = 2;
+}
+
+// DisassociateResult describes the thumbnail targeted by a disassociate request.
+message DisassociateResult {
+  // The thumbnail resource that was (or would have been) removed.
+  Resource thumbnail = 1;
+  // Set only for entries in `failed`; describes why the removal failed.
+  optional string error_message = 2;
+}
+
+// A storage resource (file or folder) identified by its address.
+// resource_identity is omitted for folders, which have no identity.
+message Resource {
+  // Human-readable address (URL/path) of the resource. Always required, non-empty.
+  string resource_address = 1;
+  // Opaque encoded identity. Required for files, omitted for folders.
+  optional string resource_identity = 2;
+}
+
+// ImageToImageSpecification defines the parameters for generating an image-to-image thumbnail.
+message ImageToImageSpecification {
+  // Specifies the processor to use for generating the thumbnail. UNSPECIFIED is invalid.
+  ProcessorIdentity processor_identity = 1;
+
+  // Specifies the file format in which the thumbnail will be encoded (e.g., PNG, JPEG). UNSPECIFIED is invalid.
+  ImageEncodingFormat encoding_format = 2;
+
+  // Desired width of the output thumbnail in pixels. Must be in the inclusive range [1, 8192].
+  uint32 width = 3;
+
+  // Desired height of the output thumbnail in pixels. Must be in the inclusive range [1, 8192].
+  uint32 height = 4;
+
+  // Determines the type of transformation to apply to the image. UNSPECIFIED is invalid.
+  TransformType transform_type = 5;
+
+  // Indicates which part of the image to crop (e.g., center, top, bottom). UNSPECIFIED is invalid.
+  CropStrategy crop_strategy = 6;
+
+  // Optional unsigned encode-quality value. JPEG/WebP require [1, 100]; PNG/GIF do not apply
+  // that lossy-quality range. Omission is distinct from any explicit value. When omitted, the
+  // service applies its configured default.
+  optional uint32 quality = 7;
+
+  // Optional flag controlling whether the source aspect ratio is preserved. Additive,
+  // backward-compatible field: omission is distinct from an explicit `false`. When omitted, the
+  // service applies its configured default; legacy clients that never set it keep associating.
+  optional bool preserve_aspect_ratio = 8;
+}
+
+// ManualSpecification defines the parameters for registering a pre-generated thumbnail.
+// No conversion is performed; the caller has already produced the thumbnail bytes.
+// Only width, height, and encoding_format are required — conversion parameters
+// (transform, crop, quality) are absent because no conversion occurs.
+message ManualSpecification {
+  // Desired width of the pre-generated thumbnail in pixels. Must be in [1, 8192].
+  uint32 width = 1;
+
+  // Desired height of the pre-generated thumbnail in pixels. Must be in [1, 8192].
+  uint32 height = 2;
+
+  // File format of the pre-generated thumbnail. UNSPECIFIED is invalid.
+  ImageEncodingFormat encoding_format = 3;
+}
+
+// ThumbnailSpecification defines the configuration for a thumbnail operation.
+// IMAGE_TO_IMAGE is accepted by both AssociateThumbnail and CreateThumbnails.
+// MANUAL is accepted by AssociateThumbnail only; CreateThumbnails rejects it.
+message ThumbnailSpecification {
+  // Field numbers 2-5 are retired (previously used for the video and USD processor
+  // specifications: VideoToImage, VideoToVideo, UsdToImage, UsdToVideo). Do not reuse
+  // these field numbers.
+  reserved 2, 3, 4, 5;
+
+  // Specification for the thumbnail operation
+  oneof specification {
+    // Specification for image-to-image thumbnail generation
+    ImageToImageSpecification image_to_image = 1;
+
+    // Specification for registering a pre-generated thumbnail (AssociateThumbnail only).
+    ManualSpecification manual = 6;
+  }
+}
+
+// Target resource type for thumbnail association operations.
+enum TargetType {
+  // Default for older clients that do not send target_type.
+  TARGET_TYPE_UNSPECIFIED = 0;
+  // The association target is a file resource identity.
+  TARGET_TYPE_FILE = 1;
+  // The association target is a folder URI/resource.
+  TARGET_TYPE_FOLDER = 2;
+}
+
+// Type of Available processors
+enum ProcessorIdentity {
+  // placeholder for an unspecified processor identity
+  PROCESSOR_IDENTITY_UNSPECIFIED = 0;
+  // processor identity for image-to-image thumbnail generation
+  PROCESSOR_IDENTITY_IMAGE_TO_IMAGE = 1;
+  // processor identity for video-to-image thumbnail generation
+  PROCESSOR_IDENTITY_VIDEO_TO_IMAGE = 2;
+  // processor identity for video-to-video thumbnail generation
+  PROCESSOR_IDENTITY_VIDEO_TO_VIDEO = 3;
+  // processor identity for usd-to-image thumbnail generation
+  PROCESSOR_IDENTITY_USD_TO_IMAGE = 4;
+  // processor identity for usd-to-video thumbnail generation
+  PROCESSOR_IDENTITY_USD_TO_VIDEO = 5;
+}
+
+// FrameSelectStrategy defines the strategy for selecting a single frame from a video.
+enum FrameSelectStrategy {
+  // placeholder for an unspecified frame selection strategy
+  FRAME_SELECT_STRATEGY_UNSPECIFIED = 0;
+  // automatically select the best frame from the video
+  FRAME_SELECT_STRATEGY_AUTO = 1;
+  // select a specific frame based on a timecode
+  FRAME_SELECT_STRATEGY_TIMECODE = 2;
+}
+
+// TransformType defines the type of transformation applied to thumbnails.
+enum TransformType {
+  // placeholder for an unspecified transformation type
+  TRANSFORM_TYPE_UNSPECIFIED = 0;
+  // transform type for square thumbnails
+  TRANSFORM_TYPE_SQUARE = 1;
+  // transform type for scaling by width
+  TRANSFORM_TYPE_SCALE_BY_WIDTH = 2;
+  // transform type for scaling by height
+  TRANSFORM_TYPE_SCALE_BY_HEIGHT = 3;
+  // transform type for cropping
+  TRANSFORM_TYPE_CROP = 4;
+  // transform type for fitting
+  TRANSFORM_TYPE_FIT = 5;
+  // transform type for scaling and cropping
+  TRANSFORM_TYPE_SCALE_AND_CROP = 6;
+  // the aspect-preserving, no-upscale thumbnail operation
+  TRANSFORM_TYPE_THUMBNAIL = 7;
+  // the exact-dimension resize operation
+  TRANSFORM_TYPE_RESIZE = 8;
+}
+
+// If a crop is required as part of the transform type, this enum is used to specify the crop strategy
+enum CropStrategy {
+  // placeholder for an unspecified crop strategy
+  CROP_STRATEGY_UNSPECIFIED = 0;
+  // crop strategy for center cropping
+  CROP_STRATEGY_CENTER = 1;
+  // crop strategy for top cropping
+  CROP_STRATEGY_TOP = 2;
+  // crop strategy for bottom cropping
+  CROP_STRATEGY_BOTTOM = 3;
+  // crop strategy for left cropping
+  CROP_STRATEGY_LEFT = 4;
+  // crop strategy for right cropping
+  CROP_STRATEGY_RIGHT = 5;
+  // crop strategy for top left cropping
+  CROP_STRATEGY_TOP_LEFT = 6;
+  // crop strategy for top right cropping
+  CROP_STRATEGY_TOP_RIGHT = 7;
+  // crop strategy for bottom left cropping
+  CROP_STRATEGY_BOTTOM_LEFT = 8;
+  // crop strategy for bottom right cropping
+  CROP_STRATEGY_BOTTOM_RIGHT = 9;
+  // crop strategy for content-aware smart cropping (smartcrop2)
+  CROP_STRATEGY_SMART = 10;
+}
+
+// Available image encoding formats
+enum ImageEncodingFormat {
+  // placeholder for an unspecified image encoding format
+  IMAGE_ENCODING_FORMAT_UNSPECIFIED = 0;
+  // JPEG image encoding format
+  IMAGE_ENCODING_FORMAT_JPEG = 1;
+  // PNG image encoding format
+  IMAGE_ENCODING_FORMAT_PNG = 2;
+  // GIF image encoding format
+  IMAGE_ENCODING_FORMAT_GIF = 3;
+  // WebP image encoding format
+  IMAGE_ENCODING_FORMAT_WEBP = 4;
+}
+
+// Available video encoding formats
+enum VideoEncodingFormat {
+  // placeholder for an unspecified video encoding format
+  VIDEO_ENCODING_FORMAT_UNSPECIFIED = 0;
+  // MP4 video encoding format
+  VIDEO_ENCODING_FORMAT_MP4 = 1;
+  // animated GIF video encoding format
+  VIDEO_ENCODING_FORMAT_ANIMATED_GIF = 2;
+  // H264 video encoding format
+  VIDEO_ENCODING_FORMAT_H264 = 3;
+  // H265 video encoding format
+  VIDEO_ENCODING_FORMAT_H265 = 4;
+  // VP9 video encoding format
+  VIDEO_ENCODING_FORMAT_VP9 = 5;
+  // AV1 video encoding format
+  VIDEO_ENCODING_FORMAT_AV1 = 6;
+}
+
+// CreateThumbnailsRequest triggers asynchronous thumbnail generation for a source file.
+// The implementation resolves resource_identity itself; callers do not supply it.
+message CreateThumbnailsRequest {
+  // The resource_address of the source file to generate thumbnails for (required, non-empty).
+  string resource_address = 1;
+
+  // Optional thumbnail specifications. If empty, the service generates thumbnails using its
+  // configured default specifications (identical to the notification-driven path).
+  // Only ImageToImageSpecification is supported; other oneof arms return INVALID_ARGUMENT.
+  repeated ThumbnailSpecification specifications = 2;
+}
+
+// CreateThumbnailSuccess describes one specification that was handled, and the thumbnail it refers to.
+message CreateThumbnailSuccess {
+  // The fully resolved specification that was, or will be, produced.
+  ThumbnailSpecification specification = 1;
+
+  // Where the thumbnail is. resource_address is always set: under synchronous completion it is
+  // the address the thumbnail was written to; under asynchronous completion it is the address
+  // it will be written to. resource_identity is set only once the thumbnail exists, so it is
+  // present under synchronous completion and absent under asynchronous completion.
+  Resource thumbnail = 2;
+}
+
+// CreateThumbnailFailure describes one specification that was not handled.
+message CreateThumbnailFailure {
+  // The fully resolved specification that was attempted.
+  ThumbnailSpecification specification = 1;
+
+  // Human-readable description of why it failed. Under asynchronous completion: why the
+  // specification could not be accepted. Under synchronous completion: why the thumbnail
+  // could not be produced.
+  string error_message = 2;
+}
+
+// CreateThumbnailsResponse reports, per specification, what was handled and what was not.
+message CreateThumbnailsResponse {
+  // Specifications that were handled, with where each thumbnail is (see CreateThumbnailSuccess).
+  // Under synchronous completion every entry names an existing, associated thumbnail. Under
+  // asynchronous completion an implementation SHOULD populate this with the destination address
+  // of each accepted specification and MAY leave it empty.
+  repeated CreateThumbnailSuccess succeeded = 2;
+
+  // Specifications that were not handled, with the reason. Empty on full success.
+  // Do not compare this length to request specifications: absent or empty input fans out
+  // over the implementation's configured defaults, so failures can describe specifications
+  // the caller never sent. When nothing could be handled the call fails with a status
+  // instead of returning this message — see the CreateThumbnails RPC comment.
+  repeated CreateThumbnailFailure failed = 1;
+}
+
+// The specification variant a GetThumbnails query filters on.
+// Only the type discriminant, not the specification itself: the filter selects which kind of
+// stored specification to match, and the dimension and encoding filters narrow within it.
+enum ThumbnailSpecificationType {
+  // No specification-type filter; entries of every stored type match.
+  THUMBNAIL_SPECIFICATION_TYPE_UNSPECIFIED = 0;
+  // Match only image-to-image specifications. Currently the only supported value.
+  THUMBNAIL_SPECIFICATION_TYPE_IMAGE_TO_IMAGE = 1;
+}
+
+// GetThumbnailsRequest reads the thumbnails associated with a target resource.
+// Every optional field is a filter that must match exactly when supplied; omitting one does not
+// narrow the result.
+message GetThumbnailsRequest {
+  // The target whose thumbnails to read. Required, non-empty, at most 2048 characters.
+  // Associations are keyed on the target's address for both FILE and FOLDER targets, so no
+  // resource_identity is supplied or resolved.
+  string association_target_resource_address = 1;
+
+  // Optional specification-type filter. Currently only IMAGE_TO_IMAGE is supported.
+  optional ThumbnailSpecificationType specification = 2;
+
+  // Optional exact-width filter in pixels. Must be in the inclusive range [1, 8192].
+  optional uint32 width = 3;
+
+  // Optional exact-height filter in pixels. Must be in the inclusive range [1, 8192].
+  optional uint32 height = 4;
+
+  // Optional encoding-format filter. UNSPECIFIED is treated as no filter.
+  optional ImageEncodingFormat encoding_format = 5;
+
+  // Optional transform-type filter. UNSPECIFIED is treated as no filter.
+  optional TransformType transform_type = 6;
+
+  // Optional crop-strategy filter. UNSPECIFIED is treated as no filter.
+  optional CropStrategy crop_strategy = 7;
+}
+
+// GetThumbnailsThumbnailEntry is one stored association, as read back.
+// Addresses and identities are reported as stored in the association metadata rather than
+// re-derived from the request.
+message GetThumbnailsThumbnailEntry {
+  // The stored association target type. UNSPECIFIED when the metadata entry does not record one.
+  TargetType target_type = 1;
+
+  // The association target this thumbnail is linked to.
+  Resource association_target = 2;
+
+  // The thumbnail resource itself.
+  Resource thumbnail = 3;
+
+  // The stored specification metadata, verbatim.
+  //
+  // A Struct rather than a typed ThumbnailSpecification because this is whatever storage holds:
+  // entries can predate the current specification shape, and parsing them into a typed message
+  // would turn a readable association into a failed request.
+  //
+  // Absent when the entry records no specification, and also when it records one that is not a
+  // JSON object — a Struct can carry an object and nothing else, and a malformed record must not
+  // fail the read. Present therefore means "an object", which is what association metadata always
+  // writes; it does not mean the entry had no specification at all.
+  //
+  // Struct has a single numeric type, so every stored number arrives as a double: a width of
+  // 256 reads back as 256.0. This is the one place the two transports differ observably, and it
+  // is a property of the wire format rather than of the stored data — the HTTP route returns
+  // the same value as an integer.
+  optional google.protobuf.Struct specification = 4;
+
+  // When the association metadata entry was created, as stored.
+  //
+  // A string rather than a Timestamp because the service neither produces nor validates this
+  // value; parsing it here would add a failure mode to data it only passes through.
+  optional string create_time = 5;
+}
+
+// GetThumbnailsResponse carries the matching associations.
+// Ordered by thumbnail.resource_address and capped at 1000 entries, with no continuation token —
+// see GetThumbnails.
+message GetThumbnailsResponse {
+  // Matching thumbnail associations. Empty when the target has none, which is a successful read.
+  repeated GetThumbnailsThumbnailEntry thumbnails = 1;
+}
+
+```
+
+Clients MUST pass authentication via the `authorization` metadata key in the Bearer format.
+The access token passed in the `authorization` metadata MUST be a valid token received from the Identity Provider (either a user or service access token). An implementation MUST reject a request that carries no usable token before it validates the request. How it validates the token — itself, or by asking its storage backend — is not part of the API; a missing, invalid, or expired token is reported as `UNAUTHENTICATED`, and a valid token that is not authorized for the resource as `PERMISSION_DENIED`.
+
+Every enum field that a request requires MUST NOT be left at its `UNSPECIFIED` value; such a field is rejected with `INVALID_ARGUMENT` naming the field. On filter fields of `GetThumbnailsRequest`, `UNSPECIFIED` means "no filter" and is not an error.
+
+(thumbnail-api-grpc-error-conditions)=
+## Error conditions
+
+The following conditions are validation errors, are detected before the storage backend is contacted, and return `INVALID_ARGUMENT` with a message naming the offending field:
+* `resource_address` missing or blank on any `Resource`, or on `CreateThumbnailsRequest` / `GetThumbnailsRequest`
+* a `FILE` resource without `resource_identity`, or a `FOLDER` association target carrying one
+* `specification` omitted on `AssociateThumbnailRequest`, or a `oneof` arm left unset
+* a `MANUAL` specification on `CreateThumbnailsRequest`
+* more than `1000` entries in `CreateThumbnailsRequest.specifications`
+* `width` or `height` outside `[1, 8192]`, on a specification or on a `GetThumbnailsRequest` filter
+* `quality` outside `[1, 100]` when `encoding_format` is `JPEG` or `WEBP`
+* `association_target_resource_address` longer than 2048 characters
+* a required enum left `UNSPECIFIED`, or a processor, specification kind, or encoding the implementation does not support
+
+The following conditions return standard gRPC errors:
+
+| Condition                                                                                  | Error code                     |
+|--------------------------------------------------------------------------------------------|--------------------------------|
+| Missing `authorization` metadata, or the token was rejected (any `ThumbnailService` RPC)   | `GRPC_STATUS_UNAUTHENTICATED`  |
+| The token was accepted but the caller is not authorized for the source (`CreateThumbnails`, `GetThumbnails`) | `GRPC_STATUS_PERMISSION_DENIED` |
+| `CreateThumbnails`: `resource_address` does not exist                                       | `GRPC_STATUS_NOT_FOUND`        |
+| `CreateThumbnails`, asynchronous completion: the source could not be looked up for another reason, or nothing could be handed to the system that performs generation | `GRPC_STATUS_INTERNAL`         |
+| `CreateThumbnails`, synchronous completion: the source cannot be processed (undecodable, unsupported format, or over the implementation's decode bounds) | `GRPC_STATUS_FAILED_PRECONDITION` |
+| `CreateThumbnails`, synchronous completion: a transient storage or association failure, or load shedding at the in-flight bound — retry | `GRPC_STATUS_UNAVAILABLE`      |
+| `DisassociateThumbnail`: the association store could not be read                             | `GRPC_STATUS_UNAVAILABLE`      |
+| `GetThumbnails`: the association store could not be read                                    | `GRPC_STATUS_UNAVAILABLE`      |
+
+For `UNAUTHENTICATED` and `PERMISSION_DENIED` the status message MAY be empty or generic. An implementation
+SHOULD NOT include the reason the credential was rejected, the component that made the decision, or backend
+error text in the status message or in `grpc-status-details-bin`.
+
+The following conditions are reported **in-band**, with an `OK` status, because the response carries detail an error status cannot:
+
+| RPC                       | Condition                                          | Response                                                                                          |
+|---------------------------|----------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `AssociateThumbnail`      | Recording the association failed after validation  | `success = false`, `error_message`, and `failure_kind` — `RETRYABLE` when the same request may succeed later, `PERMANENT` when it cannot. An absent or `UNSPECIFIED` `failure_kind` MUST be treated as `RETRYABLE`. |
+| `CreateThumbnails`        | Some or all specifications handled                 | `succeeded` lists each handled specification with the thumbnail's address (and identity once it exists); `failed` lists the rest, each in its resolved form with the reason |
+| `DisassociateThumbnail`   | The entry was found but could not be removed       | one entry in `failed` with its `error_message`; `succeeded` empty                                 |
+| `DisassociateThumbnail`   | The thumbnail is not associated with the target    | `succeeded` and `failed` both empty                                                               |
+| `GetThumbnails`           | No association matches                             | `thumbnails` empty                                                                                |
+
+(thumbnail-api-grpc-service-discovery-capabilities-service)=
+## Service discovery — CapabilitiesService
+
+An implementation MAY expose the Omniverse discovery `CapabilitiesService`
+(`nvidia.omniverse.discovery.capabilities.v2alpha.CapabilitiesService`) so discovery clients scanning by the
+`thumbnail` service type can enumerate the public Thumbnail APIs at runtime. When this service is exposed,
+`ListServices` MUST be callable without caller authentication, matching discovery-scan expectations.
+
+| RPC | Request | Response | Description |
+|---|---|---|---|
+| `ListServices` | `ListServicesRequest` | `ListServicesResponse` | Returns a single `ServiceEntry` for the `thumbnail` service type, advertising the gRPC service `nvidia.omniverse.thumbnail.v1alpha.ThumbnailService` and the REST endpoint `thumbnail` (version `v1alpha`, path `/v1alpha/`). |
+
+Only `ListServices` is required when `CapabilitiesService` is implemented; other RPCs defined in the discovery
+schema are outside the Thumbnail API contract.

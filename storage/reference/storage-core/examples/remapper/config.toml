@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[log]
+prefix = "Remapper Layer"
+
+[remapper]
+remap_map = { "goodbye" = "hello" }

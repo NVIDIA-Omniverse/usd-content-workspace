@@ -1,0 +1,35 @@
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+# usd-content-workspace
+
+usd-content-workspace is the service foundation of Omniverse Content Services: APIs, reference services, conformance suites, and client examples for storage, permissions, user identity, metadata, notifications, endpoint discovery, and thumbnails on existing storage.
+
+## Primary Docs
+
+- README.md: product overview, component map, system requirements, licensing
+- AGENTS.md: coding-agent guide, expert role, ground rules, repo layout, skill routing
+- skills/usd-content-workspace-expert/SKILL.md: expert skill for choosing, connecting to, deploying, and implementing services
+- skills/usd-content-workspace-expert/references/README.md: expert reference index (versions, stack, APIs, deployment, operations, development, testing)
+- docs/README.md: documentation index
+
+## Core Workflows
+
+- Component map: docs/overview/components.md
+- Choosing components: docs/getting_started/choosing_components.md
+- Connecting to a deployment: docs/getting_started/connect.md
+- Deploying a service: docs/getting_started/deploy.md
+- Implementing a compatible service: docs/getting_started/implement.md
+- Running Discovery, Storage, and Metadata as local processes: skills/local-process-stack/SKILL.md
+- Storage API contract map: storage/api/skills/storage-api-contract-map/SKILL.md
+- Storage Service docs map: storage/reference/storage-service/skills/storage-service/SKILL.md
+- User Info Service docs map: user-identity/reference/microsoft-graph-userinfo-service/skills/userinfo-service-docs-map/SKILL.md
+
+## Constraints
+
+- Agents explain and recommend by default; build, install, or deploy only when asked.
+- Component directories are released snapshots; change components in their source projects.
+- Each component keeps its own version, toolchain, and deployment requirements.
+- Naming: this stack is usd-content-workspace (the earlier name "Omniverse Storage APIs" is retired); "ovstorage" means only the client-side library.
+- Prebuilt containers and Helm charts: https://catalog.ngc.nvidia.com/orgs/nvidia/teams/omniverse/collections/storage_apis (catalog name and URL will change)
+- Services are reference implementations; deployments are modular and any service can be replaced by one that implements the same contract.

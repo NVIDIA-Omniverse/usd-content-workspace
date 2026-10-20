@@ -1,0 +1,254 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for envoy-auth-extension-service.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: "nvcr.io/nvidia/omniverse/envoy-auth-ext"
+  pullPolicy: IfNotPresent
+  tag: "0.0.0"
+  pullSecrets: []
+
+
+# Deprecated, use .Values.image.pullSecrets instead
+imagePullSecrets: []
+
+## OpenID IdP and related authentication settings.
+## Only OpenID integration is supported at this point.
+##
+## This section is commonly shared across multiple services on the platform
+## and should only contain values that are applicable platform-wide (e.g. the
+## IdP discovery URI, accepted audiences/issuers, principal claim).
+## Service-specific tuning (timeouts, cache sizes, leeway, thread counts, etc.)
+## belongs under `config` instead so it can be tuned per service without
+## diverging the shared OpenID configuration.
+##
+## This service is the Envoy external authorization extension: it verifies and
+## introspects user tokens on behalf of every upstream service behind the proxy,
+## so it consumes the token verification and principal claim values below itself.
+## `openId.enabled` is intentionally not supported: with authentication disabled
+## the service skips loading the IdP metadata and rejects every request.
+openId:
+  ## @param openId.openIdConfigurationUri
+  ## The endpoint from the identity provider to retrieve OpenID Connect Metadata
+  ## (/.well-known/openid-configuration). The metadata includes other IdP
+  ## endpoints such as jwks_uri, token_endpoint and userinfo_endpoint.
+  openIdConfigurationUri: ""
+
+  ## @param openId.tokenVerificationType
+  ## Defines how auth tokens are validated by the service:
+  ## - `jwt` - validates incoming tokens as JWT using public keys pulled from the identity provider
+  ## - `opaque` - validates incoming tokens using /userinfo endpoint from the identity provider
+  ## - `jwtuserinfo` - validates incoming tokens as JWT using public keys and also calls /userinfo
+  tokenVerificationType: "jwt"
+
+  ## @param openId.allowedJwtAudience
+  ## List of accepted values for the `aud` claim in JWTs passed in the Authorization header.
+  ## The `aud` claim is always required and validated for the `jwt` and `jwtuserinfo` verification
+  ## types: tokens without an `aud` claim, with an `aud` that is not a string or a list of strings,
+  ## or with no listed audience are rejected. When empty, every token is rejected.
+  allowedJwtAudience:
+    - "some_client_id"
+
+  ## @param openId.allowedJwtIssuers
+  ## List of accepted values for the `iss` claim in JWTs passed in the Authorization header.
+  ## When set, tokens without an `iss` claim, with a non-string `iss`, or with an unlisted `iss`
+  ## are rejected. When empty, the `iss` claim is not validated. The discovery-document issuer
+  ## is NOT added implicitly: every trusted issuer must be listed here.
+  allowedJwtIssuers: []
+    # - "https://idp.example.com/"
+    # - "https://idp.example.com/v2.0"
+
+  ## @param openId.requiredJwtClaims
+  ## Rules that claims of every verified token must satisfy in addition to the `aud` and `iss`
+  ## checks. All rules must pass; a token failing any rule is rejected with 401 Unauthorized.
+  ## Each rule names a top-level `claim` and an `operator`:
+  ## - `equals` / `notEquals` (`value`): the claim is a single value equal / not equal to `value`
+  ## - `in` / `notIn` (`values`): the claim is a single value that is / is not one of `values`
+  ## - `contains` (`value`): the claim array (or a single value) includes `value`
+  ## - `containsAny` / `containsAll` (`values`): the claim array (or a single value) includes
+  ##   at least one / every item of `values`
+  ## - `exists`: the claim is present and not null
+  ## Values are strings, integers, or booleans and must match the claim type exactly ("1" is not 1).
+  ## A missing or null claim fails every rule. Invalid rules prevent the service from starting.
+  requiredJwtClaims: []
+    # - claim: "appid"
+    #   operator: "in"
+    #   values: ["web-client", "cli-client"]
+    # - claim: "groups"
+    #   operator: "contains"
+    #   value: "admins"
+
+  ## @param openId.principalIdClaim
+  ## The JWT claim used as the principal identifier, forwarded upstream in the
+  ## `config.server.userIdHeader` header. Defaults to "sub".
+  principalIdClaim: "sub"
+
+  ## @param openId.maxTokenLength
+  ## Maximum accepted size, in bytes, of a bearer token presented in the
+  ## `Authorization` header. Tokens exceeding this cap are rejected before any
+  ## caching, header parsing, or outbound forwarding to the identity provider.
+  maxTokenLength: 8192
+
+config:
+  server:
+    # The claims in the token payload tried in order; first present wins
+    usernameClaims:
+      - "preferred_username"
+    # The header forwarded upstream carrying the user identifier
+    userIdHeader: "user-id"
+    # The header forwarded upstream carrying the username
+    usernameHeader: "username"
+    # The header forwarded upstream carrying the name of the claim that supplied the username
+    usernameSourceClaimHeader: "username-source-claim"
+
+  tokenTtl: 1200
+  tokenCacheSize: 2048
+  # Capacity of the negative cache for recently rejected tokens
+  invalidTokenCacheSize: 256
+  # How long, in seconds, a rejected token stays in the negative cache
+  # (clamped to tokenTtl at startup)
+  invalidTokenCacheTtl: 60
+  jwksTtl:  10800
+  # Backoff window, in seconds, applied after a failed JWKS fetch
+  jwksFailureBackoff: 10
+  # Clock skew, in seconds, tolerated when validating JWT `exp` and `nbf` claims (0-300)
+  jwtLeeway: 60
+  # Timeout, in seconds, for establishing a connection to the identity provider
+  idpConnectTimeout: 5
+  # Timeout, in seconds, for a whole identity provider request (discovery, JWKS, userinfo),
+  # from connecting until the response body is read
+  idpRequestTimeout: 15
+  # How long, in seconds, an idle connection to the identity provider is kept open for reuse
+  idpPoolIdleTimeout: 90
+
+## Logs, metrics and traces configuration
+observability:
+  ## Logging configuration
+  logging:
+    ## @param observability.logging.level
+    ## Defines the log level for the service.
+    ## Supports tracing directives syntax, e.g. "info", "envoy_auth_ext=debug,hyper=warn".
+    ## Debug and trace levels are intended for temporary troubleshooting only.
+    level: "info"
+
+    ## Structured logging configuration
+    structured:
+      ## @param observability.logging.structured.enabled
+      ## Enables JSON-structured logging of trace spans.
+      ## When disabled, the service uses human-readable pretty-printed logs.
+      enabled: false
+
+  ## @param observability.serviceName The service name defined in metrics and traces ("envoy-auth-ext-service" by default).
+  serviceName: "envoy-auth-ext-service"
+
+  ## @param observability.serviceScope The service scope defined in metrics and traces ("envoy_auth_ext" by default).
+  serviceScope: "envoy_auth_ext"
+
+  ## @param observability.tracing.enabled
+  ## Enables exporting trace spans to an OpenTelemetry collector.
+  ## When disabled, trace export is explicitly disabled.
+  ## @param observability.tracing.endpoint.grpc GRPC exporter for trace spans. Only used when `observability.tracing.enabled` is true.
+  ## @param observability.tracing.endpoint.rest HTTP/OTLP exporter for trace spans, including the `/v1/traces` path. Only used when `observability.tracing.enabled` is true.
+  ## Configure exactly one endpoint when tracing is enabled.
+  ## @param observability.tracing.samplingRatio
+  ## Defines the sampling ratio for traces sent to the collector.
+  ## Must be between 0 and 1. Only used when `observability.tracing.enabled` is true.
+  tracing:
+    enabled: false
+    endpoint:
+      grpc: ""
+      rest: ""
+    samplingRatio: "1.0"
+
+  ## @param observability.metrics.enabled
+  ## Enables exporting metrics to an OpenTelemetry collector.
+  ## When disabled, metric export is explicitly disabled.
+  ## @param observability.metrics.endpoint.grpc GRPC exporter for OpenTelemetry metrics. Only used when `observability.metrics.enabled` is true.
+  ## @param observability.metrics.endpoint.rest HTTP/OTLP exporter for OpenTelemetry metrics, including the `/v1/metrics` path. Only used when `observability.metrics.enabled` is true.
+  ## Configure exactly one endpoint when metrics are enabled.
+  metrics:
+    enabled: false
+    endpoint:
+      grpc: ""
+      rest: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  tls: false
+  annotations: {}
+  ports:
+    proxy: 8080  # 443
+    envoyAuthExt: 50051
+
+  nameOverride:
+
+# This value provides a name (identifier) for the Contour ExtensionService entity
+extensionService:
+  name: "auth-extension"
+
+livenessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

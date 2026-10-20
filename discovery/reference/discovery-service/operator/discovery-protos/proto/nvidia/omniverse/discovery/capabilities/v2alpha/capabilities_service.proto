@@ -1,0 +1,65 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file defines the CapabilitiesService and its request and response
+// messages for the NVIDIA Omniverse API discovery capabilities API.
+//
+// Deprecated: v2alpha is superseded by
+// nvidia.omniverse.discovery.capabilities.v2beta and will be removed in a
+// future release. Use v2beta instead.
+
+syntax = "proto3";
+
+package nvidia.omniverse.discovery.capabilities.v2alpha;
+
+import "nvidia/omniverse/discovery/capabilities/v2alpha/capabilities.proto";
+
+option deprecated = true;
+option go_package = "pb.api.nvidia.com/omniverse/discovery/capabilities/v2alpha;discovery";
+option java_multiple_files = true;
+option java_outer_classname = "CapabilitiesServiceProto";
+option java_package = "com.nvidia.omniverse.discovery.capabilities.v2alpha";
+
+// CapabilitiesService reflects on which services are implemented by this server.
+// Each service exposes a service-specific capabilities query for discovering
+// available gRPC and REST transport endpoints.
+//
+// Deprecated: use nvidia.omniverse.discovery.capabilities.v2beta.CapabilitiesService.
+service CapabilitiesService {
+  option deprecated = true;
+
+  // Returns the list of service APIs implemented by this server.
+  //
+  // Deprecated: use nvidia.omniverse.discovery.capabilities.v2beta.CapabilitiesService.ListServices.
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse) {
+    option deprecated = true;
+  }
+}
+
+// Request message for ListServices.
+message ListServicesRequest {
+  // Maximum number of services to return. The server may return fewer.
+  int32 page_size = 1;
+  // Page token from a prior ListServices call to retrieve the next page.
+  string page_token = 2;
+}
+
+// Response message for ListServices.
+message ListServicesResponse {
+  // List of services with details implemented by this server.
+  repeated ServiceEntry services = 1;
+  // Token to retrieve the next page of services, or empty if there are no more.
+  string next_page_token = 2;
+}

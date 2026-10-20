@@ -1,0 +1,63 @@
+{
+  "name": "@omniverse/storage-permission-ui",
+  "version": "0.0.24",
+  "author": "NVIDIA",
+  "license": "Apache-2.0",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "files": [
+    "dist",
+    "index.html",
+    "package.json"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build:example": "tsc -b && vite build",
+    "build:lib": "tsc -p tsconfig.lib.json",
+    "lint": "eslint .",
+    "prettier": "prettier --check \"**/*.{ts,tsx}\"",
+    "prettier:write": "prettier --write \"**/*.{ts,tsx}\"",
+    "test": "npm run typecheck && npm run prettier && npm run lint && npm run vitest",
+    "typecheck": "tsc --noEmit",
+    "vitest": "vitest run",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "jwt-decode": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@mantine/core": "^9.4.1",
+    "@mantine/form": "^9.4.1",
+    "@mantine/hooks": "^9.4.1",
+    "@mantine/notifications": "^9.4.1",
+    "@tabler/icons-react": "^3.x",
+    "@tanstack/react-query": "^5.x",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zod": "^3.x"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.29.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.0.10",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.5.2",
+    "eslint": "^9.29.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.2.0",
+    "jsdom": "^26.1.0",
+    "msw": "^2.10.2",
+    "prettier": "^3.6.2",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.34.1",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}

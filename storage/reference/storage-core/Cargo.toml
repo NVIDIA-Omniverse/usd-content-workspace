@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[workspace]
+members = [
+  "examples/*",
+  "storage-core",
+  "storage-core-builder",
+  "storage-core-integration-tests",
+  "storage-core-protos",
+  "storage-core-test",
+  "storage-core-types",
+  "storage-core-util",
+]
+resolver = "3"
+
+[workspace.package]
+description = "NVIDIA Omniverse Storage Core"
+edition = "2021"
+homepage = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/storage/reference/storage-core"
+keywords = ["nvidia", "omniverse", "storage", "storage-api", "storage-core"]
+license = "Apache-2.0"
+repository = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/storage/reference/storage-core"
+rust-version = "1.91.1"
+
+[profile.dev]
+debug = "line-tables-only"
+incremental = true
+opt-level = 1
+strip = "none"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+debug = "full"
+inherits = "dev"
+
+[profile.debugging.package."*"]
+debug = true
+
+[profile.release]
+codegen-units = 1
+incremental = false
+lto = "thin"
+strip = "debuginfo"
+
+[profile.release.package."*"]
+debug = false
+
+# The Azure SDK for Rust is no longer developed upstream and this workspace
+# depends on an NVIDIA fork carrying fixes that were never released to
+# crates.io. The fork is vendored beside this component in the consolidated
+# repository; these entries point the published tree at it.
+[patch.crates-io]
+azure_core = { path = "../externals/azure-sdk/sdk/core" }
+azure_identity = { path = "../externals/azure-sdk/sdk/identity" }
+azure_storage = { path = "../externals/azure-sdk/sdk/storage" }
+azure_storage_blobs = { path = "../externals/azure-sdk/sdk/storage_blobs" }

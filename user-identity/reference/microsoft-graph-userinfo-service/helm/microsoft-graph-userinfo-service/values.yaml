@@ -1,0 +1,733 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+## -- Writer deployment.
+## Continuously synchronizes the directory from the upstream provider into the
+## PostgreSQL snapshot store. Exposes only health endpoints and is not part of
+## the Service. Requires `providers.cache.enabled` and
+## `providers.cache.postgres.enabled`.
+##
+## The writer always runs as a single replica and its replica count is not
+## configurable: the sync is sequential and serialized by a database advisory
+## lock, so it cannot be parallelized, and additional writers would only
+## duplicate Graph API and database load.
+writer:
+  ## @param writer.enabled Deploy the writer. Disable to run readers only, for
+  ## example when another installation owns the snapshot store.
+  enabled: true
+
+  ## @param writer.resources Resource requests / limits for the writer container.
+  ## Memory requirements depend on directory size and whether membership caching
+  ## is enabled.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+## -- Reader deployment.
+## Serves the REST and gRPC read APIs. With caching enabled it loads the
+## snapshot from PostgreSQL into memory and reloads it every `reader.reloadInterval`;
+## with caching disabled it serves live from the upstream provider. The Service
+## routes traffic to reader pods only.
+reader:
+  ## @param reader.enabled Deploy the reader. Disable to run a writer-only
+  ## installation that just keeps the snapshot store in sync.
+  enabled: true
+
+  ## @param reader.replicaCount Number of reader replicas (used when autoscaling.enabled is false).
+  replicaCount: 1
+
+  ## @param reader.reloadInterval How often a reader reloads the snapshot from PostgreSQL (e.g. "60s", "5m").
+  ## Bounds how stale a reader's in-memory data can be relative to the writer.
+  reloadInterval: "60s"
+
+  ## @param reader.resources Resource requests / limits for the reader container.
+  ## Memory requirements depend on directory size and whether membership caching
+  ## is enabled.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+image:
+  repository: nvcr.io/nvidia/omniverse/microsoft-graph-userinfo-service
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+  pullSecrets: []
+
+imagePullSecrets: []
+nameOverride: "userinfo-service"
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: false
+  ## @param serviceAccount.annotations Annotations to add to the ServiceAccount.
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+## Shared pod metadata applied to every pod the chart deploys.
+## @param podAnnotations Annotations added to all pods.
+podAnnotations: {}
+## @param podLabels Extra labels added to all pods.
+## Merged on top of the chart's common labels; must not collide with selector labels.
+podLabels: {}
+
+## Pod-level security context.
+## Defaults enforce non-root execution and the runtime-default seccomp profile.
+## The service runtime image (distroless, `USER nvs:nvs`) is built to run as a
+## non-root numeric UID, so `runAsNonRoot` does not require an override here.
+podSecurityContext:
+  ## @param podSecurityContext.runAsNonRoot Reject the pod if the image runs as UID 0.
+  runAsNonRoot: true
+  ## @param podSecurityContext.seccompProfile.type Seccomp profile applied to all containers.
+  seccompProfile:
+    type: RuntimeDefault
+
+## Container-level security context.
+## Applies to both the writer and reader containers.
+## The service binary does not require a writable root filesystem, raised
+## privileges, or any Linux capabilities beyond the empty set.
+securityContext:
+  ## @param securityContext.runAsNonRoot Reject the container if the image runs as UID 0.
+  runAsNonRoot: true
+  ## @param securityContext.readOnlyRootFilesystem Mount the root filesystem read-only.
+  readOnlyRootFilesystem: true
+  ## @param securityContext.allowPrivilegeEscalation Forbid setuid / file-capability elevation.
+  allowPrivilegeEscalation: false
+  ## @param securityContext.capabilities.drop Drop all Linux capabilities.
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  ## @param service.annotations Annotations to add to the Service.
+  annotations: {}
+
+  ## Port mapping for the service
+  ports:
+    ## @param service.ports.rest Port number for the REST (HTTP) server
+    rest: 8080
+
+    ## @param service.ports.grpc Port number for the gRPC server
+    grpc: 50051
+
+  # @param service.nameOverride Name override for the Service object. If not set, uses the Chart name as the service name.
+  nameOverride: "userinfo-service"
+
+## Identity provider configuration
+providers:
+
+  ## -- Microsoft Entra ID (Azure AD) provider.
+  ## Connects to Microsoft Graph API to resolve users and groups.
+  entra:
+    ## @param providers.entra.tenantId Entra ID (Azure AD) tenant ID
+    tenantId: ""
+
+    ## @param providers.entra.clientId App registration client ID used for client-credentials OAuth2 flow
+    clientId: ""
+
+    ## @param providers.entra.authMode Authentication mode for obtaining tokens.
+    ## "client-secret"       — traditional client_id + client_secret grant.
+    ## "workload-identity"   — Azure Workload Identity federation using a projected
+    ##                         Kubernetes service-account token (no secret needed).
+    authMode: "client-secret"
+
+    ## @param providers.entra.clientSecret Reference to a pre-existing Kubernetes Secret
+    ## containing the client secret. Only used when authMode is "client-secret".
+    clientSecret:
+      secretRef:
+        name: "microsoft-graph-userinfo-service-az-credentials"
+        key: "client-secret"
+
+    ## @param providers.entra.maxRetries Maximum retry attempts for transient Graph API errors (429, 503, 504)
+    maxRetries: 3
+
+  ## -- Local directory cache.
+  ## Periodically syncs the full directory from the upstream provider into memory
+  ## and serves read requests locally, reducing Graph API calls and latency.
+  cache:
+    ## @param providers.cache.enabled Enable local directory cache with background sync.
+    ## When false the upstream provider is called directly for every request.
+    enabled: true
+
+    ## @param providers.cache.users.enabled Enable caching and synchronization of users.
+    ## When false, user queries go directly to Graph API and users are not synchronized.
+    users:
+      enabled: true
+
+    ## @param providers.cache.groups.enabled Enable caching and synchronization of groups.
+    ## When false, group queries go directly to Graph API and groups are not synchronized.
+    groups:
+      enabled: true
+
+    ## @param providers.cache.memberships.enabled Enable caching and synchronization of group memberships.
+    ## When false, membership queries go directly to Graph API and memberships are not synchronized.
+    ##
+    ## WARNING: Enabling membership caching can drastically increase both the initial synchronization
+    ## time and memory usage. For a large Active Directory (e.g. ~100,000 users and ~170,000 groups),
+    ## a full sync can take several hours, delta syncs can take tens of minutes, and the in-memory
+    ## membership index can consume up to 2.5 GB of RAM. Ensure the readiness probe's
+    ## failureThreshold and container memory limits are sized accordingly. Example for a large directory:
+    ##   readinessProbe:
+    ##     initialDelaySeconds: 5
+    ##     periodSeconds: 60
+    ##     failureThreshold: 300   # 5 + 300×60 ≈ 5 hours
+    memberships:
+      enabled: false
+
+    ## @param providers.cache.syncInterval Time between directory sync cycles run by the writer (e.g. "10m", "1h")
+    syncInterval: "5m"
+
+    ## @param providers.cache.syncJitterMax Max random startup delay before the writer's first sync (e.g. "30s", "1m").
+    ## Prevents thundering-herd when multiple writer replicas start simultaneously.
+    ## Set to a non-zero value (e.g. "30s") in multi-replica writer deployments.
+    syncJitterMax: "0s"
+
+    ## -- PostgreSQL snapshot store.
+    ## The shared store decouples writers from readers: the writer syncs the
+    ## directory into PostgreSQL and readers load it on startup and reload it
+    ## periodically. Required for the writer, and for the reader whenever caching
+    ## is enabled.
+    postgres:
+      ## @param providers.cache.postgres.enabled Enable the PostgreSQL snapshot store.
+      enabled: true
+
+      ## @param providers.cache.postgres.host PostgreSQL server hostname.
+      host: ""
+
+      ## @param providers.cache.postgres.port PostgreSQL server port
+      port: 5432
+
+      ## @param providers.cache.postgres.dbname Database name for snapshot storage
+      dbname: "graph-userinfo"
+
+      ## @param providers.cache.postgres.user PostgreSQL user
+      user: "microsoft_graph_userinfo_service"
+
+      ## @param providers.cache.postgres.password Reference to a pre-existing Kubernetes Secret containing the PostgreSQL password
+      password:
+        secretRef:
+          name: "microsoft-graph-userinfo-service-pg-credentials"
+          key: "password"
+
+      ## Short-lived token authentication. When enabled, the PostgreSQL password
+      ## is read from a JSON token file (same format as
+      ## serviceIdentity.accessTokenFile) and the connection pool is rebuilt
+      ## whenever the token rotates. This replaces the static password secret
+      ## mount.
+      tokenFile:
+        ## @param providers.cache.postgres.tokenFile.enabled Read the PostgreSQL password from a rotating token file instead of a static secret.
+        ## @param providers.cache.postgres.tokenFile.path Path to the token file inside the container.
+        ## @param providers.cache.postgres.tokenFile.pollInterval How often to check the token file for changes (e.g. "15s", "1m").
+        ## @param providers.cache.postgres.tokenFile.waitTimeout How long to wait at startup for the token file to appear before failing (e.g. "30s", "1m").
+        ## @param providers.cache.postgres.tokenFile.waitInterval How often to re-check for the token file while waiting at startup (e.g. "1s").
+
+        enabled: false
+        path: "/etc/secrets/postgres-token/token"
+        pollInterval: "15s"
+        waitTimeout: "30s"
+        waitInterval: "1s"
+
+        ## Optional sidecar that provisions the token file. When set, the chart
+        ## mounts a shared in-memory volume at the token file's directory and
+        ## runs this container. When unset, the token file at `path` must be
+        ## supplied by other means (e.g. a projected/secret volume via
+        ## `volumes`/`volumeMounts`, or another sidecar).
+        provisionerSidecar:
+          # Full container spec; will be replicated verbatim, with one exception:
+          # volume mounts will get an ADDITIONAL volume called `postgres-token`
+          # to be able to communicate the token to the service.
+          container:
+
+      ## @param providers.cache.postgres.connections Maximum number of connections in the pool
+      connections: 4
+
+      ## @param providers.cache.postgres.sslMode TLS requirement for the PostgreSQL connection.
+      ## "disable" — never negotiate TLS (plaintext connection).
+      ## "prefer"  — try TLS first; fall back to plaintext if the server rejects it.
+      ## "require" — require a TLS connection; abort if the server does not support it.
+      ## When TLS is negotiated, the server certificate is verified against the container's
+      ## native root store.
+      sslMode: "disable"
+
+## -- Enterprise-application app-role assignments.
+## When enabled, the writer reads this application's OWN appRoleAssignedTo (no
+## Application.Read.All required; uses the app's own token) and restricts the
+## service to the assigned groups, and surfaces assigned service principals as
+## users. Requires providers.cache.enabled, providers.cache.groups.enabled, and
+## providers.cache.memberships.enabled (all validated at install time; not forced
+## on) and authenticating AS the enterprise app (providers.entra.clientId).
+## The assigned set is re-fetched every sync cycle, so group additions,
+## removals, and renames reconcile automatically.
+appRoleAssignments:
+  ## @param appRoleAssignments.enabled Restrict the service to the enterprise app's assignments.
+  enabled: false
+
+  ## @param appRoleAssignments.servicePrincipalObjectId Object id of the enterprise
+  ## app's service principal to query. Leave empty to use the authenticating app's
+  ## own service principal (recommended; works without Application.Read.All).
+  ## Setting a DIFFERENT app's service principal is allowed but then requires the
+  ## Application.Read.All application permission on providers.entra.clientId;
+  ## otherwise the writer's startup probe fails with a Graph privileges error.
+  servicePrincipalObjectId: null
+
+  ## @param appRoleAssignments.includeServicePrincipals Surface assigned service principals as users.
+  includeServicePrincipals: true
+
+## -- Omniverse Permission API integration.
+## When enabled, every API call is authorized against the Permission Service
+## before the request handler executes. Requires a running Permission Service
+## instance reachable at the configured URL.
+permission:
+  ## @param permission.enabled Enable permission checking for all API endpoints.
+  ## When false (default), no authorization calls are made and all requests are allowed.
+  enabled: false
+
+  ## @param permission.url Base URL of the Permission Service (e.g. "http://permission-service:8080")
+  url: "http://permission-service:3000/"
+
+  ## @param permission.serviceName Service name sent in the action payload to the Permission Service.
+  ## This identifies the calling service in permission policies.
+  serviceName: "userinfo"
+
+  ## @param permission.cacheTtl TTL for in-memory permission decision cache entries (e.g. "5m", "30s").
+  ## Cached decisions avoid repeated calls to the Permission Service for the same principal and action.
+  cacheTtl: "5m"
+
+  ## @param permission.cacheMaxCapacity Maximum number of entries in the permission decision cache.
+  cacheMaxCapacity: 10000
+
+## -- Static directory overlay.
+## Extra users, groups, and memberships served in addition to those synced from
+## Microsoft Graph. Authored here as structured YAML, rendered into a ConfigMap
+## as JSON, and mounted read-only into the reader, which overlays them on top of
+## the provider serving the read APIs.
+##
+## Static entries are returned for every read regardless of caching configuration
+## (`providers.cache.enabled` and the per-kind caching switches). They override
+## records with the same id (static-wins) and are never written to PostgreSQL, so
+## a writer full sync cannot erase them.
+staticDirectory:
+  ## @param staticDirectory.enabled Render the ConfigMap and mount it into the reader.
+  enabled: false
+
+  ## @param staticDirectory.users Additional users. Each requires `id`, `display_name`,
+  ## and `username`; `given_name`, `family_name`, `email`, `active`, and `job_title`
+  ## are optional.
+  users: []
+
+  ## @param staticDirectory.groups Additional groups. Each requires `id` and
+  ## `display_name`; `description` is optional.
+  groups: []
+
+  ## @param staticDirectory.memberships Direct group memberships. Each entry has a
+  ## `group_id` and a list of `user_ids`; ids may reference either static or synced
+  ## entities.
+  memberships: []
+
+  ## Example (set staticDirectory.enabled: true and replace the lists above):
+  # users:
+  #   - id: "svc-ci-bot"                  # required, unique
+  #     display_name: "CI Bot"            # required
+  #     username: "svc-ci-bot"            # required
+  #     email: "ci-bot@example.com"       # optional
+  #     given_name: "CI"                  # optional
+  #     family_name: "Bot"               # optional
+  #     active: true                      # optional
+  #     job_title: "Automation"           # optional
+  #   - id: "svc-release-bot"
+  #     display_name: "Release Bot"
+  #     username: "svc-release-bot"
+  # groups:
+  #   - id: "local-admins"                # required, unique
+  #     display_name: "Local Admins"      # required
+  #     description: "Statically managed" # optional
+  # memberships:
+  #   - group_id: "local-admins"          # may be a static OR a Graph group id
+  #     user_ids:                         # may mix static and Graph user ids
+  #       - "svc-ci-bot"
+  #       - "svc-release-bot"
+
+## Observability configuration
+observability:
+  logging:
+    ## @param observability.logging.level
+    ## Defines the log level for the service.
+    ## Supports tracing directives syntax, e.g. "info", "microsoft_graph_userinfo_service=debug,hyper=warn".
+    level: "info"
+
+    ## -- Structured (JSON) log output.
+    ## When enabled, log records are emitted as one JSON object per line, suitable
+    ## for ingestion by log aggregators (Loki, Elasticsearch, etc.). When disabled
+    ## (default), the human-readable text formatter is used.
+    structured:
+      ## @param observability.logging.structured.enabled Emit log records as JSON instead of human-readable text.
+      enabled: false
+
+    ## -- API access logs.
+    ## One structured record per business REST/gRPC call (who called which
+    ## operation, its identifying parameters, and the response status/outcome),
+    ## separate from the operational logs above. Disabled by default.
+    access:
+      ## @param observability.logging.access.enabled Emit an access-log record for each business REST/gRPC call.
+      ## When false (default), no access records are produced.
+      enabled: false
+
+      ## @param observability.logging.access.headers Map of access-record field name to request header name.
+      ## Each present header is copied as a top-level field on the record (e.g. `ip: "x-forwarded-for"`).
+      ## Credential headers (`Authorization`, `Cookie`) are never copied, and the reserved field names
+      ## `transport`, `operation`, `request`, and `response` are ignored. Header names match case-insensitively.
+      headers: {}
+
+  ## -- OpenTelemetry distributed tracing.
+  ## When enabled, traces are exported via OTLP/gRPC to the configured endpoint.
+  tracing:
+    ## @param observability.tracing.enabled Enable OpenTelemetry trace export via OTLP.
+    enabled: false
+
+    endpoint:
+      ## @param observability.tracing.endpoint.grpc OTLP/gRPC endpoint for trace export.
+      ## A `host:port` collector address (e.g. `http://collector:4317`); used verbatim,
+      ## with no URL path appended (gRPC routes by service method, not path).
+      grpc: ""
+
+  ## -- OpenTelemetry metrics.
+  ## When enabled, metrics are exported via OTLP/gRPC to the configured endpoint.
+  metrics:
+    ## @param observability.metrics.enabled Enable OpenTelemetry metric export via OTLP.
+    enabled: false
+
+    endpoint:
+      ## @param observability.metrics.endpoint.grpc OTLP/gRPC endpoint for metric export.
+      ## A `host:port` collector address (e.g. `http://collector:4317`); used verbatim,
+      ## with no URL path appended (gRPC routes by service method, not path).
+      grpc: ""
+
+  ## @param observability.serviceName Service name reported in traces and metrics.
+  serviceName: "microsoft-graph-userinfo-service"
+
+  ## -- Request header forwarding.
+  ## When the service handles a REST or gRPC request and, while serving it, calls
+  ## another Omniverse service (currently the Permission Service), the incoming
+  ## request headers listed here are forwarded verbatim to that call.
+  headers:
+    ## @param observability.headers.forward Names of incoming request headers to forward to other Omniverse services.
+    ## Matched case-insensitively. Example: ["x-request-id", "x-forwarded-for"].
+    forward: []
+
+## @param extraVars Pass additional environment variables to the deployment.
+extraVars: {}
+
+## External ingress via Contour's httpproxy objects
+httpProxy:
+  ## @param httpProxy.enabled Enable the ingress HTTP proxy
+  enabled: false
+
+  ## FQDN configuration for the ingress
+  ## Final ingress hostname will be composed as "<host>.<domain>"
+  fqdn:
+    ## @param httpProxy.fqdn.host Host component of the FQDN
+    ##   Defaults to "userinfo" to match the chart's `userinfo-service` name override rather than the chart name.
+    host: "userinfo"
+
+    ## @param httpProxy.fqdn.domain Domain component of the FQDN
+    domain: "nodomain.none"
+
+  ## @param httpProxy.path The prefix for all routes of this service
+  path: "/"
+
+  ## TLS configuration for the ingress
+  tls:
+    ## @param httpProxy.tls.enabled Enable TLS for the HTTP proxy
+    enabled: false
+
+    ## @param httpProxy.tls.secretName Name of the secret containing the TLS cert
+    secretName: ""
+
+    ## CertManager integration for automatic certificate provisioning
+    ## If enabled, will create a Certificate resource for CertManager, using
+    ## either the default TLS secret name or httpProxy.tls.secretName if
+    ## specified. This secret will be added as tls.secretName of the httpProxy
+    ## CR for Contour.
+    certManager:
+      ## @param httpProxy.tls.certManager.enabled Enable CertManager integration
+      enabled: false
+
+      ## Issuer reference for CertManager
+      issuerRef:
+        ## @param httpProxy.tls.certManager.issuerRef.name Name of the issuer
+        ## Required if certManager.enabled is true.
+        name: my-issuer
+
+        ## @param httpProxy.tls.certManager.issuerRef.kind Kind of the issuer
+        ## Required if certManager.enabled is true.
+        kind: my-issuer-kind
+
+  ## CORS policy configuration
+  ## Verbatim CORSPolicy setting of Envoy's HTTPProxy object
+  corsPolicy:
+    ## @param httpProxy.corsPolicy.allowCredentials Allow credentials in CORS
+    ## If true, allowOrigin cannot use wildcard.
+    allowCredentials: false
+
+    ## @param httpProxy.corsPolicy.allowOrigin Allowed origins for CORS requests
+    allowOrigin:
+      - "*"
+    ## @param httpProxy.corsPolicy.allowHeaders Allowed headers for CORS requests
+    allowHeaders:
+      - "*"
+
+    ## @param httpProxy.corsPolicy.allowMethods Allowed HTTP methods for CORS
+    allowMethods:
+      - 'GET'
+
+    ## @param httpProxy.corsPolicy.exposeHeaders Exposed headers for CORS requests that clients are allowed to read
+    exposeHeaders:
+      - "*"
+
+  ## @param httpProxy.authExtension
+  ## If used, specifies the Envoy extension service name used to authenticate calls to this service
+  authExtension:
+    enabled: false
+
+    ## @param httpProxy.authExtension.responseTimeout Configures maximum time to wait for a check response from the auth extension.
+    responseTimeout: 2s
+
+    ## @param httpProxy.authExtension.extensionRef Specifies the extension resource that will authorize client requests.
+    extensionRef:
+      name: "auth-extension"
+      namespace: ""
+
+  ## @param httpProxy.annotations
+  ## Annotations added to the HTTPProxy CRD
+  annotations: {}
+
+  timeoutPolicy:
+    ## @param httpProxy.timeoutPolicy.response
+    ## Timeout for receiving a response from the server after processing a request.
+    response: "10s"
+
+    ## @param httpProxy.timeoutPolicy.idle Timeout for idle connections
+    idle: "10s"
+
+  ## Per-protocol overrides for the HTTPProxy objects. Any values
+  ## set here are deep-merged on top of the shared httpProxy
+  ## settings above (timeoutPolicy, corsPolicy, annotations,
+  ## etc.), allowing you to customize each protocol's proxy
+  ## without duplicating the common configuration.
+  ## Example — give gRPC a longer response timeout:
+  ##   grpc:
+  ##     timeoutPolicy:
+  ##       response: "30s"
+  grpc: {}
+  rest: {}
+
+## -- Identity used by the smoke test pod (Helm test hook) to acquire a
+## user-service bearer when calling the deployed service.
+##
+## A Microsoft Graph-scoped Entra token is rejected by auth gateways configured
+## for the user-service audience because its `aud` does not match.
+serviceIdentity:
+  clientCredentials:
+    ## @param serviceIdentity.clientCredentials.enabled Run the OAuth2 client-credentials flow to acquire a service-scoped bearer.
+    ## @param serviceIdentity.clientCredentials.openIdConfigurationUri OpenID Connect Discovery URI used to resolve the token endpoint.
+    ##   Consumers fetch this URL, read `token_endpoint` from the returned metadata, and use it as the OAuth2 token endpoint.
+    ##   See https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata.
+    ## @param serviceIdentity.clientCredentials.clientId Client ID used for the client-credentials flow.
+    ## @param serviceIdentity.clientCredentials.clientScope Value passed as the `scope` field; must yield a token whose `aud` matches the auth extension's expected audience (typically `<service-app-id>/.default`).
+    ## @param serviceIdentity.clientCredentials.clientSecretRef Reference to an existing Kubernetes Secret containing the client secret; the Secret is mounted into the consuming pod when this block is enabled.
+    ## @param serviceIdentity.clientCredentials.extraHeaders Additional HTTP headers to include in the token-exchange request.
+    ## @param serviceIdentity.clientCredentials.extraBodyParams Additional body parameters to merge into the token-exchange request (e.g. `{"audience": "https://api.example.com"}`).
+
+    enabled: false
+    openIdConfigurationUri: ""
+    clientId: ""
+    clientScope: ""
+    clientSecretRef:
+      name: ""
+      key: ""
+    extraHeaders: {}
+    extraBodyParams: {}
+
+  accessTokenFile:
+    ## @param serviceIdentity.accessTokenFile.enabled Read a pre-provisioned access token from a file instead of using the client credentials flow.
+    ## The smoke-test hook reads the token from `path`. The reader and writer do not read `path` themselves:
+    ## when a provisionerSidecar.container is set, the chart also runs that container as a sidecar in the
+    ## reader and writer deployments and mounts the shared in-memory `token-exchange` volume, so the sidecar
+    ## can provide tokens that the service consumes through other settings.
+    ## Only one of clientCredentials.enabled and accessTokenFile.enabled should be true.
+
+    enabled: false
+    path: "/etc/secrets/access-token/token"
+
+    ## @param serviceIdentity.accessTokenFile.pollInterval How often to check the token file for changes (e.g. "15s", "1m").
+    ##   Kept for structural parity with the common serviceIdentity section; the smoke-test hook is a one-shot Job and reads the file once at startup.
+    pollInterval: "15s"
+
+    provisionerSidecar:
+      # Full container spec; will be replicated verbatim, with one exception:
+      # volume mounts will get an ADDITIONAL volume called `token-exchange` to
+      # communicate the token to the service. In the reader and writer
+      # deployments it runs as a sidecar container alongside the service so it
+      # can keep the token refreshed.
+      container:
+
+## -- Smoke test hook.
+## A Helm test (`helm test <release>`) Job that verifies the deployed
+## service end-to-end: when `serviceIdentity.clientCredentials.enabled` is
+## true the smoke test acquires a user-service bearer through the OAuth2
+## client-credentials flow; when `serviceIdentity.accessTokenFile.enabled` is
+## true it reads the sidecar-provisioned bearer file. Otherwise it runs
+## unauthenticated. It reaches the public REST and gRPC APIs through the same
+## ingress production traffic uses, and optionally acquires a separate
+## Microsoft Graph-scoped Entra ID token to verify the smoke test pod's Entra
+## credentials are accepted by Graph. Tests stop at the first failure and
+## print a detailed hint describing the likely cause and which Helm values /
+## Kubernetes objects to inspect.
+smokeTest:
+  ## @param smokeTest.enabled Enable or disable the smoke test hook.
+  enabled: false
+
+  image:
+    ## @param smokeTest.image.repository Smoke test container image.
+    repository: nvcr.io/nvidia/omniverse/microsoft-graph-userinfo-smoke-test
+
+    ## @param smokeTest.image.pullPolicy Image pull policy for the smoke test image.
+    pullPolicy: IfNotPresent
+
+    ## @param smokeTest.image.tag Image tag. Defaults to the chart appVersion.
+    tag: ""
+
+    ## @param smokeTest.image.pullSecrets Per-image pull secrets (merged with image.pullSecrets / imagePullSecrets).
+    pullSecrets: []
+
+  ## -- REST transport configuration for the smoke test.
+  rest:
+    ## @param smokeTest.rest.url Base URL the smoke test uses to reach the REST API.
+    ## When empty: defaults to the ingress URL when httpProxy.enabled is true, otherwise
+    ## the in-cluster Service DNS name (http://<service>.<namespace>.svc.cluster.local:<port>).
+    url: ""
+
+  ## -- gRPC transport configuration for the smoke test.
+  ## Exercises the same UserInfoService methods as the REST tests
+  ## (ListUsers, GetUser, ListGroups, GetGroup, ListUserGroups) over the
+  ## service's gRPC port, plus a grpc.health.v1.Health/Check probe.
+  grpc:
+    ## @param smokeTest.grpc.enabled Enable the gRPC test suite.
+    enabled: true
+
+    ## @param smokeTest.grpc.endpoint gRPC endpoint (host:port or scheme://host:port).
+    ## When empty: defaults to the in-cluster Service DNS name on `service.ports.grpc`.
+    ## When testing through Contour, set this to the gRPC HTTPProxy FQDN
+    ## (`grpc.<httpProxy.fqdn.host>.<httpProxy.fqdn.domain>`) and enable
+    ## `smokeTest.grpc.tls` when the proxy terminates TLS.
+    endpoint: ""
+
+    ## -- TLS configuration for the gRPC client.
+    tls:
+      ## @param smokeTest.grpc.tls.enabled Use TLS when connecting to the gRPC endpoint.
+      ## When true the endpoint scheme is forced to `https` and the OS trust store is used
+      ## to verify the server certificate.
+      enabled: false
+
+  ## @param smokeTest.graphBaseUrl Microsoft Graph base URL used by the smoke test.
+  graphBaseUrl: "https://graph.microsoft.com/v1.0"
+
+  ## @param smokeTest.graphScope OAuth2 scope requested from Entra ID when acquiring the token used
+  ## to call Microsoft Graph. Matches the value used by the user service.
+  graphScope: "https://graph.microsoft.com/.default"
+
+  ## @param smokeTest.waitRetries Number of readiness retries before the test gives up.
+  ## Total wait budget = waitRetries x waitInterval. Increase when the directory is
+  ## large and the service needs time to complete the initial sync.
+  waitRetries: 10
+
+  ## @param smokeTest.waitInterval Seconds between readiness retries.
+  waitInterval: 5
+
+  ## @param smokeTest.pageLimit `limit` query parameter used for list endpoints.
+  pageLimit: 10
+
+  ## @param smokeTest.httpTimeout HTTP request timeout in seconds.
+  httpTimeout: 30
+
+  ## @param smokeTest.ttlSecondsAfterFinished When > 0, adds `ttlSecondsAfterFinished` to the test Job
+  ## so Kubernetes auto-deletes it. When 0 (default), Helm's hook-delete-policy controls cleanup.
+  ttlSecondsAfterFinished: 0
+
+  ## @param smokeTest.podAnnotations Additional annotations for the smoke test Pod;
+  ## merged with the shared podAnnotations; smoke-test keys override on conflict.
+  podAnnotations: {}
+
+  ## @param smokeTest.podLabels Additional labels for the smoke test Pod;
+  ## merged with the shared podLabels; smoke-test keys override on conflict.
+  podLabels: {}
+
+  ## @param smokeTest.extraVars Additional environment variables passed to the smoke test container.
+  extraVars: {}
+
+  ## @param smokeTest.resources Resource requests / limits for the smoke test container.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 180
+
+## -- Reader replica management.
+## The chart does NOT create a HorizontalPodAutoscaler. Enabling this only omits
+## the `replicas` field from the reader Deployment so an externally managed
+## HorizontalPodAutoscaler (or other controller) can own the reader replica
+## count without the chart resetting it on every upgrade. Configure the replica
+## bounds and target metric on that HorizontalPodAutoscaler directly.
+autoscaling:
+  ## @param autoscaling.enabled Let an external autoscaler own the reader replica count (omits `replicas` from the reader Deployment).
+  enabled: false
+
+volumes: []
+
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "event-consumer-service.fullname" . }}-smoke-tests
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded,hook-failed,before-hook-creation
+data:
+  # Empty __init__.py for package structure (mounted multiple times)
+  __init__.py: ""
+  # Test configuration
+  pytest.ini: |
+{{ .Files.Get "files/tests/pytest.ini" | indent 4 }}
+  # Test files
+  conftest.py: |
+{{ .Files.Get "files/tests/conftest.py" | indent 4 }}
+  utils.py: |
+{{ .Files.Get "files/tests/utils.py" | indent 4 }}
+  consumer_grpc_helpers.py: |
+{{ .Files.Get "files/tests/consumer_grpc_helpers.py" | indent 4 }}
+  consumer_rest_helpers.py: |
+{{ .Files.Get "files/tests/consumer_rest_helpers.py" | indent 4 }}
+  test_consumer_grpc.py: |
+{{ .Files.Get "files/tests/smoke-tests/test_consumer_grpc.py" | indent 4 }}
+  test_consumer_rest.py: |
+{{ .Files.Get "files/tests/smoke-tests/test_consumer_rest.py" | indent 4 }}
+  # Consumer gRPC stubs
+  event_consumer_pb2.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/notifications/consumer/v1beta/event_consumer_pb2.py" | indent 4 }}
+  event_consumer_pb2_grpc.py: |
+{{ .Files.Get "files/generated/nvidia/omniverse/notifications/consumer/v1beta/event_consumer_pb2_grpc.py" | indent 4 }}
+{{- end }}

@@ -1,0 +1,208 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+description = "NVIDIA Omniverse Storage Core"
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+name = "storage-core"
+repository.workspace = true
+rust-version.workspace = true
+version = "0.11.0-alpha.3"
+
+[features]
+# =============================================================================
+# FEATURE FLAG SYSTEM
+# =============================================================================
+# This crate uses a comprehensive feature flag system to allow conditional
+# compilation of modules and dependencies. This enables:
+# - Minimal builds with only core functionality
+# - Backend-specific builds (Azure-only, S3-only, etc.)
+# - Middleware-specific builds (metrics-only, caching-only, etc.)
+# - Full builds with all features enabled
+# =============================================================================
+
+# Core functionality (always enabled)
+default = []
+
+# Backend storage providers
+azure = [
+  "azure_core",
+  "azure_identity",
+  "azure_storage",
+  "azure_storage_blobs",
+  "base64",
+  "hex",
+  "moka",
+  "sha2",
+  "strum",
+  "time",
+  "uuid",
+]
+
+s3 = [
+  "aws-config",
+  "aws-credential-types",
+  "aws-sdk-s3",
+  "aws-smithy-runtime",
+  "aws-smithy-runtime-api",
+  "aws-smithy-types",
+  "base64",
+  "hex",
+  "hyper-proxy",
+  "hyper-rustls024",
+  "hyper014",
+  "openssl",
+  "rustls",
+  "sha2",
+  "strum",
+]
+
+# Middleware layers
+additional_headers = []
+
+egress_throttle = []
+
+list_cache = ["either", "indexmap"]
+
+metadata_cache = []
+
+metadata_key_remapper = []
+
+metadata_key_router = []
+
+metrics = []
+
+small_object_cache = []
+
+stat_cache = []
+
+manifest = ["time"]
+
+# Convenience feature sets
+full = ["backends", "layers"]
+
+# Backend-only features (for backend-specific builds)
+backends = ["azure", "s3"]
+
+# Layer-only features (for layer-specific builds)
+layers = [
+  "additional_headers",
+  "egress_throttle",
+  "list_cache",
+  "manifest",
+  "metadata_cache",
+  "metadata_key_remapper",
+  "metadata_key_router",
+  "metrics",
+  "small_object_cache",
+  "stat_cache",
+]
+
+# Test features
+test = []
+
+[dependencies]
+# =============================================================================
+# Core dependencies (always included)
+# =============================================================================
+ahash = "0.8.12"
+async-stream = "0.3.6"
+async-trait = "0.1.92"
+axum = { version = "0.8.9", features = ["macros"] }
+bytes = { version = "1.12.1", features = ["serde"] }
+bytesize = { version = "2.7.0", features = ["serde"] }
+figment = "0.10.19"
+fred = { version = "10.1.0", features = ["i-scripts", "sha-1", "subscriber-client"] }
+futures = "0.3.34"
+get-size2 = { version = "0.8.0", features = ["derive", "indexmap"] }
+http = "1.5.0"
+http-body = "1.1.0"
+humantime = "2.4.0"
+humantime-serde = "1.1.1"
+linkme = "0.3.37"
+moka = { version = "0.12.16", features = ["future"], optional = true }
+opentelemetry = "=0.31.0"
+percent-encoding = "2.3.2"
+# reqwest is stuck on 0.12 with azure-core
+reqwest = { version = "=0.12.28", features = ["hickory-dns", "http2", "json"] }
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = "1.0.151"
+snafu = { version = "0.9.2", features = ["futures", "rust_1_81"] }
+storage-core-builder = { version = "0.8.0-alpha.2", path = "../storage-core-builder" }
+storage-core-protos = { version = "0.29.0-alpha.1", path = "../storage-core-protos" }
+storage-core-util = { version = "0.11.0-alpha.1", path = "../storage-core-util" }
+tokio = { version = "1.53.1", features = ["full"] }
+tokio-stream = "0.1.19"
+tonic = "0.14.6"
+tower = "0.5.3"
+tracing = "0.1.44"
+unicode-normalization = "0.1.25"
+url = { version = "2.5.8", features = ["serde"] }
+
+# =============================================================================
+# Backend shared dependencies (feature-gated: azure, s3)
+# =============================================================================
+base64 = { version = "0.22.1", optional = true }
+hex = { version = "0.4.3", optional = true }
+openssl = { version = "0.10.81", optional = true }
+sha2 = { version = "0.11.0", optional = true }
+strum = { version = "0.28.0", features = ["derive"], optional = true }
+
+# =============================================================================
+# S3 backend dependencies (feature-gated: s3)
+# =============================================================================
+aws-config = { version = "1.8.18", features = ["behavior-version-latest"], optional = true }
+aws-credential-types = { version = "1.2.14", optional = true }
+aws-sdk-s3 = { version = "1.137.0", features = ["behavior-version-latest"], optional = true }
+aws-smithy-runtime = { version = "1.11.3", features = ["client", "connector-hyper-0-14-x"], optional = true }
+aws-smithy-runtime-api = { version = "1.12.3", features = ["client"], optional = true }
+aws-smithy-types = { version = "1.5.0", optional = true }
+# using hyper 0.14.32 because 1.x is not compatible with aws sdk and using http proxy
+# https://github.com/awslabs/aws-sdk-rust/issues/169
+hyper-proxy = { version = "0.9.1", optional = true }
+hyper-rustls024 = { package = "hyper-rustls", version = "=0.24.2", features = [
+  "http2",
+  "rustls-native-certs",
+], optional = true }
+hyper014 = { package = "hyper", version = "=0.14.32", features = ["http2"], optional = true }
+rustls = { version = "=0.21.12", features = ["dangerous_configuration"], optional = true }
+
+# =============================================================================
+# Azure backend dependencies (feature-gated: azure)
+# =============================================================================
+# We have to use our own fork of the sdk to fix this bug (https://github.com/Azure/azure-sdk-for-rust/issues/2007), and
+# the Azure SDK is no longer being developed (https://github.com/Azure/azure-sdk-for-rust/tree/legacy?tab=readme-ov-file#status)
+azure_core = { version = "=0.21.0", optional = true }
+azure_identity = { version = "=0.21.0", optional = true }
+azure_storage = { version = "=0.21.0", optional = true }
+azure_storage_blobs = { version = "0.21", optional = true }
+uuid = { version = "1.24.0", optional = true }
+
+# =============================================================================
+# Shared dependencies (feature-gated: azure, manifest)
+# =============================================================================
+time = { version = "0.3.55", optional = true }
+
+# =============================================================================
+# List cache dependencies (feature-gated: list_cache)
+# =============================================================================
+either = { version = "1.17.0", optional = true }
+indexmap = { version = "2.14.0", features = ["serde"], optional = true }
+
+# =============================================================================
+# Small object cache dependencies (feature-gated: small_object_cache)
+# =============================================================================
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
+rstest = "0.26.1"
+serial_test = "3.5.0"
+syn = { version = "2.0.119", features = ["full", "visit"] }
+test-log = { version = "0.2.21", features = ["trace"] }
+
+[package.metadata.cargo-machete]
+ignored = ["linkme"]

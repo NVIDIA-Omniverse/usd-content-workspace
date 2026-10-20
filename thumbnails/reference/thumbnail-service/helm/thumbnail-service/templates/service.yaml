@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- /*
+Discovery is opt-in per Service, and the opt-in is this annotation: the v2 discovery
+operator lists Services, keeps only those carrying it, and dials the port named `grpc`
+below to call CapabilitiesService.ListServices. Serving that RPC without the annotation
+leaves the service undiscovered, so it defaults on rather than being deferred to
+per-environment values. `service.annotations` is merged over these defaults, so an
+environment can add keys or override one — including
+`discovery.omniverse.nvidia.com/visibility`, which the operator reads as `both` when
+absent.
+*/ -}}
+{{- /*
+Closing `}}` rather than `-}}`: the SPDX header above is YAML comments, and the `{{-` that
+opens the comment block already swallowed the newline ending the last one. Trimming here too
+appends `apiVersion` to that comment line, which renders a Service with no apiVersion — Helm
+templates it happily and the API server rejects it with "apiVersion not set".
+*/ -}}
+{{- $discoveryAnnotations := dict "discovery.omniverse.nvidia.com/enabled" "true" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "service.servicename" . }}
+  annotations:
+    {{- toYaml (mergeOverwrite $discoveryAnnotations (deepCopy (.Values.service.annotations | default dict))) | nindent 4 }}
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: rest
+      port: {{ .Values.service.restPort }}
+      targetPort: {{ .Values.service.restPort }}
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.restNodePort }}
+      nodePort: {{ .Values.service.restNodePort }}
+      {{- end }}
+    - name: grpc
+      port: {{ .Values.service.grpcPort }}
+      targetPort: {{ .Values.service.grpcPort }}
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.grpcNodePort }}
+      nodePort: {{ .Values.service.grpcNodePort }}
+      {{- end }}
+  selector:
+    {{- include "service.selectorLabels" . | nindent 4 }}

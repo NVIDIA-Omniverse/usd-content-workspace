@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "thumbnail-conformance-test"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "thumbnail-conformance-test"
+path = "src/main.rs"
+
+[dependencies]
+# thumbnail-proto already generates a gRPC client for ThumbnailService (the same
+# one task-worker uses to call AssociateThumbnail) — reusing it here keeps the
+# wire contract this crate tests against generated from the same proto source
+# rather than hand-recompiled, matching how every other internal caller in this
+# workspace consumes it.
+thumbnail-proto = { path = "../proto/thumbnail" }
+
+clap = { workspace = true, features = ["derive", "env"] }
+humantime.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+# tls-ring: this is the only crate in the workspace that dials an
+# operator-supplied, potentially external endpoint (GRPC_URL), so it is also
+# the only one that needs a TLS-capable channel; every internal caller talks
+# to in-cluster services over plaintext.
+tonic = { workspace = true, features = ["tls-ring"] }
+tonic-prost.workspace = true
+tonic-health.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+wiremock.workspace = true
+tokio-stream = { workspace = true, features = ["net"] }

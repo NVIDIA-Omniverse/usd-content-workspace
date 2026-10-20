@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+edition = "2021"
+license = "Apache-2.0"
+name = "manifest-service"
+publish = false
+version = "0.1.0"
+
+[features]
+azure = ["storage-core/azure"]
+default = ["azure", "s3"]
+s3 = ["storage-core/s3"]
+
+[[bin]]
+name = "manifest-azure"
+path = "src/bin/manifest-azure.rs"
+required-features = ["azure"]
+
+[[bin]]
+name = "manifest-s3"
+path = "src/bin/manifest-s3.rs"
+required-features = ["s3"]
+
+[dependencies]
+clap = { version = "4.6.6", features = ["derive"] }
+figment = "0.10.19"
+storage-core = { path = "../../storage-core", features = ["layers"] }
+storage-core-util = { path = "../../storage-core-util" }
+tokio = { version = "1.53.1", features = ["full"] }
+tracing = "0.1.44"
+
+[package.metadata.cargo-machete]
+ignored = ["tracing"] # required by _limited macros from storage-core-util

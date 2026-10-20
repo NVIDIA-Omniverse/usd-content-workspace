@@ -1,0 +1,71 @@
+# Reusable: type-check one Rust component of this repository.
+#
+# This is the most basic signal we can have — that a component's published
+# source resolves its dependencies and compiles. Tests come later.
+#
+# Runs on GitHub-hosted runners. No self-hosted infrastructure exists, and none
+# should be built unless a component demonstrably cannot run here; see the
+# migration plan's runner section for the triggers that would justify it.
+
+name: rust-check
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: Path to the component's workspace root, relative to the repository root.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: cargo check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Several components vendor protos and build them with tonic-build, which
+      # shells out to protoc.
+      #
+      # libprotobuf-dev is required as well as the compiler: on Debian the
+      # well-known types (google/protobuf/any.proto and friends) ship in the
+      # -dev package, and build scripts that import them fail with
+      # "google/protobuf/any.proto: File not found" without it.
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
+          protoc --version
+          test -f /usr/include/google/protobuf/any.proto
+
+      # Deliberately no toolchain pin here: each component carries its own
+      # rust-toolchain.toml (they range from 1.91 to 1.97 today) and rustup
+      # honours it on first invocation. Pinning centrally would silently
+      # override what the component asked for.
+      - name: Show toolchain
+        working-directory: ${{ inputs.component }}
+        run: |
+          rustup show active-toolchain || true
+          cargo --version
+
+      # Cargo.lock is excluded from publication for some components, so key on
+      # the manifests and accept a lower hit rate rather than missing entirely.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ${{ inputs.component }}/target
+          key: cargo-${{ runner.os }}-${{ inputs.component }}-${{ hashFiles(format('{0}/**/Cargo.toml', inputs.component), format('{0}/Cargo.lock', inputs.component)) }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ inputs.component }}-
+
+      - name: cargo check
+        working-directory: ${{ inputs.component }}
+        run: cargo check --workspace --all-targets

@@ -1,0 +1,43 @@
+# Type-check storage-core.
+#
+# Depends on storage/reference/externals/azure-sdk being published into this repository, so the
+# path filter below also fires when those change.
+
+name: storage-core
+
+on:
+  pull_request:
+    paths:
+      - 'storage/reference/storage-core/**'
+      - 'storage/reference/externals/azure-sdk/**'
+      - '.github/workflows/storage-core.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+  push:
+    # release/v*: the mirrored release branch in the public repository, whose
+    # pull request is opened with GITHUB_TOKEN and so gets no pull_request run.
+    branches: [main, 'release/v*']
+    paths:
+      - 'storage/reference/storage-core/**'
+      - 'storage/reference/externals/azure-sdk/**'
+      - '.github/workflows/storage-core.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: storage/reference/storage-core
+
+  test:
+    # storage-core-integration-tests drives live S3, Azure and GCS backends, and presigned_urls needs a real Azure storage key. Credential-bearing suites stay in GitLab.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: storage/reference/storage-core
+      test-args: '--workspace --exclude storage-core-integration-tests -- --skip azure::service::tests::presigned_urls'

@@ -1,0 +1,58 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.tile {
+    position: relative;
+    border-radius: var(--mantine-radius-sm);
+    cursor: pointer;
+    user-select: none;
+}
+
+.tile:hover {
+    background-color: var(--mantine-color-default-hover);
+}
+
+.tile[aria-selected="true"],
+.tile[aria-selected="true"]:hover {
+    background-color: var(--mantine-color-blue-light);
+}
+
+.tileText {
+    word-break: break-word;
+    text-align: center;
+}
+
+.tileCheckbox {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    /* Ensure the checkbox appears above the thumbnail image */
+    z-index: 10;
+    opacity: 0;
+}
+
+.tile:hover .tileCheckbox,
+.tile[aria-selected="true"] .tileCheckbox {
+    opacity: 1;
+}
+
+.thumbnailWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

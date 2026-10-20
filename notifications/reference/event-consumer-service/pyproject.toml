@@ -1,0 +1,114 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "event-consumer-service"
+version = "1.12.0"
+description = ""
+authors = [{ name = "NVIDIA" }]
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.14"
+dependencies = [
+    "notification-common==7.0.0",
+    "urllib3>=2.8.0,<3",  # BDSA-2026-35864, BDSA-2026-35861
+    "grpcio>=1.80.0,<2",
+    # Pin the codegen tool (NOT the runtime) to 1.76.0 so regenerated stubs stamp
+    # GRPC_GENERATED_VERSION='1.76.0', matching the grpcio shipped in the
+    # smoke-test-base image. A newer grpcio-tools stamps a floor above the smoke
+    # image's grpcio and breaks the post-upgrade smoke tests at import. The CVE
+    # (CVE-2026-33186) is in grpcio the runtime, which stays >=1.80. See a4522a6.
+    "grpcio-tools==1.76.0",
+    "python-dotenv>=1.1.0,<2",
+    "sse-starlette>=3.0.0,<4",
+    "cryptography>=50.0.1",
+    "pygments>=2.20.0",
+    "tenacity>=9,<10",
+    # Imported directly by public_scripts/apply_queue_policy.py (the fail-closed Helm hook
+    # Job). It would otherwise only reach the runtime image transitively via
+    # httpx/requests/sentry-sdk, and the image installs `uv export --no-dev
+    # --locked`, so a transitive drop would break the hook at import.
+    "certifi>=2026.2.25",
+]
+
+[tool.app]
+api_version = "v1beta"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=0.25.0",
+    "pytest-mock>=3.14.0,<4",
+    "black>=25.1.0",
+    "flake8>=7.1.1,<8",
+    "pytest-cov>=6.0.0",
+    "pytest-random-order>=1.1.1,<2",
+    "pytest-freezer>=0.4.8,<0.5",
+    "pip-licenses>=5.0.0,<6",
+    "pre-commit>=4.0.1,<5",
+    "mypy-protobuf>=3.6.0,<4",
+    "pytest-xdist>=3.5.0,<4",
+]
+
+[project.scripts]
+start = "notification_common.scripts.app_scripts:start"
+lint = "notification_common.scripts.app_scripts:lint"
+test = "notification_common.scripts.app_scripts:test"
+generate_openapi_yaml = "notification_common.scripts.app_scripts:generate_openapi_yaml"
+generate_attributions = "notification_common.scripts.generate_attributions:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# `public_scripts` holds the modules that must ship OUTSIDE the internal-only
+# `scripts/` tree -- today just the chart's queue-policy hook module, which both
+# the runtime image and the public source mirror have to carry.
+packages = ["app", "public_scripts"]
+
+[tool.uv]
+default-groups = ["dev"]
+# notification-common declares grpcio-tools>=1.78.0 to match the grpcio floor its
+# generated stubs stamp, but grpcio-tools is a codegen-only build tool that
+# notification-common never imports at runtime. This service deliberately pins the
+# codegen tool at 1.76.0 (see the dependencies comment above) so regenerated stubs
+# stay smoke-test compatible. Override the transitive floor to keep that pin; the
+# runtime grpcio stays >=1.80.0, so the discovery stubs' import-time version check
+# is still satisfied.
+override-dependencies = ["grpcio-tools==1.76.0"]
+
+[tool.uv.sources]
+notification-common = { path = "../common" }
+
+[tool.black]
+target-version = ["py314"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | \.tools
+  | \.idea
+  | _deps
+  | _build
+  | buck-out
+  | build
+  | dist
+  | \.migrations
+  | nvidia
+  | proto
+  | notification_protos
+  | blib2to3
+  | tests/data
+)/
+|
+scripts/manual_.*\.py$
+|
+\.flake8$
+|
+pytest_report/pytest_report\.xml$
+'''

@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Code owners need write access to this repository.
+
+# Repository metadata, documentation, CI and governance files.
+/.ovplc/ @dmitryduka
+/docs/ @dmitryduka
+/evals/ @dmitryduka
+/.github/ @dmitryduka
+/*.md @dmitryduka
+
+# Storage API, previously owned in the upstream storage/api/CODEOWNERS.
+/storage/api/ @dmitryduka

@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[build-system]
+requires = ["setuptools>=77,<85"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discovery-conformance"
+version = "0.1.0"
+description = "Read-only deployment checks for Omniverse Discovery contracts"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.32,<3",
+  "openapi-core>=0.19.5,<0.20",
+  "PyYAML>=6,<7",
+  "grpcio>=1.84,<2",
+  "protobuf>=7.35.1,<8",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+generate = ["grpcio-tools==1.84.0"]
+
+[project.scripts]
+discovery-conformance = "discovery_conformance.cli:main"
+
+[tool.setuptools]
+packages = [
+  "discovery_conformance",
+  "discovery_conformance.specs",
+  "discovery_conformance.generated",
+  "discovery_conformance.generated.nvidia",
+  "discovery_conformance.generated.nvidia.omniverse",
+  "discovery_conformance.generated.nvidia.omniverse.discovery",
+  "discovery_conformance.generated.nvidia.omniverse.discovery.capabilities",
+  "discovery_conformance.generated.nvidia.omniverse.discovery.capabilities.v2beta",
+]
+package-dir = {"discovery_conformance.specs" = "specs"}
+
+[tool.setuptools.package-data]
+"discovery_conformance.specs" = ["*.yaml", "*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

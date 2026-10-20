@@ -1,0 +1,261 @@
+Component,Origin,License,Copyright,Location
+adler2,https://github.com/oyvindln/adler2,0BSD OR MIT OR Apache-2.0,"Jonas Schievink <jonasschievink@gmail.com>, oyvindln <oyvindln@users.noreply.github.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/adler2-2.0.1
+anstream,https://github.com/rust-cli/anstyle,MIT OR Apache-2.0,The anstream Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/anstream-0.6.21
+anstyle,https://github.com/rust-cli/anstyle,MIT OR Apache-2.0,The anstyle Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-1.0.13
+anstyle-parse,https://github.com/rust-cli/anstyle,MIT OR Apache-2.0,The anstyle-parse Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-parse-0.2.7
+anstyle-query,https://github.com/rust-cli/anstyle,MIT OR Apache-2.0,The anstyle-query Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-query-1.1.5
+anyhow,https://github.com/dtolnay/anyhow,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/anyhow-1.0.102
+arc-swap,https://github.com/vorner/arc-swap,MIT OR Apache-2.0,Michal 'vorner' Vaner <vorner@vorner.cz>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/arc-swap-1.9.1
+async-lock,https://github.com/smol-rs/async-lock,Apache-2.0 OR MIT,Stjepan Glavina <stjepang@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2
+async-trait,https://github.com/dtolnay/async-trait,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.89
+atomic-waker,https://github.com/smol-rs/atomic-waker,Apache-2.0 OR MIT,"Stjepan Glavina <stjepang@gmail.com>, Contributors to futures-rs",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/atomic-waker-1.1.2
+autocfg,https://github.com/cuviper/autocfg,Apache-2.0 OR MIT,Josh Stone <cuviper@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/autocfg-1.5.0
+axum,https://github.com/tokio-rs/axum,MIT,The axum Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/axum-0.8.8
+axum-core,https://github.com/tokio-rs/axum,MIT,The axum-core Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/axum-core-0.5.6
+base64,https://github.com/marshallpierce/rust-base64,MIT OR Apache-2.0,Marshall Pierce <marshall@mpierce.org>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/base64-0.22.1
+bitflags,https://github.com/bitflags/bitflags,MIT OR Apache-2.0,The Rust Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.11.0
+block-buffer,https://github.com/RustCrypto/utils,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/block-buffer-0.10.4
+byteorder,https://github.com/BurntSushi/byteorder,Unlicense OR MIT,Andrew Gallant <jamslam@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/byteorder-1.5.0
+bytes,https://github.com/tokio-rs/bytes,MIT,"Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/bytes-1.11.1
+cc,https://github.com/rust-lang/cc-rs,MIT OR Apache-2.0,Alex Crichton <alex@alexcrichton.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/cc-1.2.56
+cfg-if,https://github.com/rust-lang/cfg-if,MIT OR Apache-2.0,Alex Crichton <alex@alexcrichton.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4
+chrono,https://github.com/chronotope/chrono,MIT OR Apache-2.0,The chrono Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/chrono-0.4.44
+clap,https://github.com/clap-rs/clap,MIT OR Apache-2.0,The clap Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/clap-4.5.60
+clap_builder,https://github.com/clap-rs/clap,MIT OR Apache-2.0,The clap_builder Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/clap_builder-4.5.60
+clap_derive,https://github.com/clap-rs/clap,MIT OR Apache-2.0,The clap_derive Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/clap_derive-4.5.55
+clap_lex,https://github.com/clap-rs/clap,MIT OR Apache-2.0,The clap_lex Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/clap_lex-1.0.0
+colorchoice,https://github.com/rust-cli/anstyle,MIT OR Apache-2.0,The colorchoice Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/colorchoice-1.0.4
+concurrent-queue,https://github.com/smol-rs/concurrent-queue,Apache-2.0 OR MIT,"Stjepan Glavina <stjepang@gmail.com>, Taiki Endo <te316e89@gmail.com>, John Nunley <dev@notgull.net>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/concurrent-queue-2.5.0
+const-oid,https://github.com/RustCrypto/formats/tree/master/const-oid,Apache-2.0 OR MIT,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/const-oid-0.9.6
+cpufeatures,https://github.com/RustCrypto/utils,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/cpufeatures-0.2.17
+crc32fast,https://github.com/srijs/rust-crc32fast,MIT OR Apache-2.0,"Sam Rijs <srijs@airpost.net>, Alex Crichton <alex@alexcrichton.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/crc32fast-1.5.0
+crossbeam-channel,https://github.com/crossbeam-rs/crossbeam,MIT OR Apache-2.0,The crossbeam-channel Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-channel-0.5.15
+crossbeam-epoch,https://github.com/crossbeam-rs/crossbeam,MIT OR Apache-2.0,The crossbeam-epoch Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-epoch-0.9.18
+crossbeam-utils,https://github.com/crossbeam-rs/crossbeam,MIT OR Apache-2.0,The crossbeam-utils Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21
+crypto-common,https://github.com/RustCrypto/traits,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/crypto-common-0.1.7
+darling,https://github.com/TedDriggs/darling,MIT,Ted Driggs <ted.driggs@outlook.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/darling-0.21.3
+darling_core,https://github.com/TedDriggs/darling,MIT,Ted Driggs <ted.driggs@outlook.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/darling_core-0.21.3
+darling_macro,https://github.com/TedDriggs/darling,MIT,Ted Driggs <ted.driggs@outlook.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/darling_macro-0.21.3
+deadpool,https://github.com/bikeshedder/deadpool,MIT OR Apache-2.0,Michael P. Jung <michael.jung@terreon.de>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/deadpool-0.12.3
+deadpool-postgres,https://github.com/bikeshedder/deadpool,MIT OR Apache-2.0,Michael P. Jung <michael.jung@terreon.de>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/deadpool-postgres-0.14.1
+deadpool-runtime,https://github.com/bikeshedder/deadpool,MIT OR Apache-2.0,Michael P. Jung <michael.jung@terreon.de>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/deadpool-runtime-0.1.4
+der,https://github.com/RustCrypto/formats/tree/master/der,Apache-2.0 OR MIT,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/der-0.7.10
+der_derive,https://github.com/RustCrypto/formats/tree/master/der/derive,Apache-2.0 OR MIT,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/der_derive-0.7.3
+deranged,https://github.com/jhpratt/deranged,MIT OR Apache-2.0,Jacob Pratt <jacob@jhpratt.dev>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.5.8
+digest,https://github.com/RustCrypto/traits,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.10.7
+displaydoc,https://github.com/yaahc/displaydoc,MIT OR Apache-2.0,Jane Lusby <jlusby@yaah.dev>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/displaydoc-0.2.5
+either,https://github.com/rayon-rs/either,MIT OR Apache-2.0,bluss,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.15.0
+equivalent,https://github.com/indexmap-rs/equivalent,Apache-2.0 OR MIT,The equivalent Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/equivalent-1.0.2
+errno,https://github.com/lambda-fairy/rust-errno,MIT OR Apache-2.0,"Chris Wong <lambda.fairy@gmail.com>, Dan Gohman <dev@sunfishcode.online>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14
+event-listener,https://github.com/smol-rs/event-listener,Apache-2.0 OR MIT,"Stjepan Glavina <stjepang@gmail.com>, John Nunley <dev@notgull.net>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/event-listener-5.4.1
+event-listener-strategy,https://github.com/smol-rs/event-listener-strategy,Apache-2.0 OR MIT,John Nunley <dev@notgull.net>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/event-listener-strategy-0.5.4
+fallible-iterator,https://github.com/sfackler/rust-fallible-iterator,MIT OR Apache-2.0,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/fallible-iterator-0.2.0
+fastrand,https://github.com/smol-rs/fastrand,Apache-2.0 OR MIT,Stjepan Glavina <stjepang@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/fastrand-2.3.0
+find-msvc-tools,https://github.com/rust-lang/cc-rs,MIT OR Apache-2.0,The find-msvc-tools Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/find-msvc-tools-0.1.9
+fixedbitset,https://github.com/petgraph/fixedbitset,MIT OR Apache-2.0,bluss,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/fixedbitset-0.5.7
+flagset,https://github.com/enarx/flagset,Apache-2.0,Nathaniel McCallum <nathaniel@profian.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/flagset-0.4.7
+flate2,https://github.com/rust-lang/flate2-rs,MIT OR Apache-2.0,"Alex Crichton <alex@alexcrichton.com>, Josh Triplett <josh@joshtriplett.org>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/flate2-1.1.9
+fnv,https://github.com/servo/rust-fnv,Apache-2.0  OR  MIT,Alex Crichton <alex@alexcrichton.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/fnv-1.0.7
+foldhash,https://github.com/orlp/foldhash,Zlib,Orson Peters <orsonpeters@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/foldhash-0.1.5
+form_urlencoded,https://github.com/servo/rust-url,MIT OR Apache-2.0,The rust-url developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.2
+futures-channel,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-channel Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.32
+futures-core,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-core Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-core-0.3.32
+futures-executor,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-executor Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-executor-0.3.32
+futures-macro,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-macro Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-macro-0.3.32
+futures-sink,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-sink Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-sink-0.3.32
+futures-task,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-task Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-task-0.3.32
+futures-util,https://github.com/rust-lang/futures-rs,MIT OR Apache-2.0,The futures-util Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/futures-util-0.3.32
+generic-array,https://github.com/fizyk20/generic-array,MIT,"Bartłomiej Kamiński <fizyk20@gmail.com>, Aaron Trent <novacrazy@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7
+getrandom,https://github.com/rust-random/getrandom,MIT OR Apache-2.0,The Rand Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.4.2
+h2,https://github.com/hyperium/h2,MIT,"Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/h2-0.4.13
+hashbrown,https://github.com/rust-lang/hashbrown,MIT OR Apache-2.0,Amanieu d'Antras <amanieu@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.16.1
+heck,https://github.com/withoutboats/heck,MIT OR Apache-2.0,The heck Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0
+hmac,https://github.com/RustCrypto/MACs,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.12.1
+http,https://github.com/hyperium/http,MIT OR Apache-2.0,"Alex Crichton <alex@alexcrichton.com>, Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/http-1.4.0
+http-body,https://github.com/hyperium/http-body,MIT,"Carl Lerche <me@carllerche.com>, Lucio Franco <luciofranco14@gmail.com>, Sean McArthur <sean@seanmonstar.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/http-body-1.0.1
+http-body-util,https://github.com/hyperium/http-body,MIT,"Carl Lerche <me@carllerche.com>, Lucio Franco <luciofranco14@gmail.com>, Sean McArthur <sean@seanmonstar.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/http-body-util-0.1.3
+httparse,https://github.com/seanmonstar/httparse,MIT OR Apache-2.0,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/httparse-1.10.1
+httpdate,https://github.com/pyfisch/httpdate,MIT OR Apache-2.0,Pyfisch <pyfisch@posteo.org>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/httpdate-1.0.3
+humantime,https://github.com/chronotope/humantime,MIT OR Apache-2.0,The humantime Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/humantime-2.3.0
+hyper,https://github.com/hyperium/hyper,MIT,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-1.8.1
+hyper-rustls,https://github.com/rustls/hyper-rustls,Apache-2.0 OR ISC OR MIT,The hyper-rustls Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-rustls-0.27.7
+hyper-timeout,https://github.com/hjr3/hyper-timeout,MIT OR Apache-2.0,Herman J. Radtke III <herman@hermanradtke.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-timeout-0.5.2
+hyper-util,https://github.com/hyperium/hyper-util,MIT,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/hyper-util-0.1.20
+iana-time-zone,https://github.com/strawlab/iana-time-zone,MIT OR Apache-2.0,"Andrew Straw <strawman@astraw.com>, René Kijewski <rene.kijewski@fu-berlin.de>, Ryan Lopopolo <rjl@hyperbo.la>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/iana-time-zone-0.1.65
+icu_collections,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_collections-2.1.1
+icu_locale_core,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_locale_core-2.1.1
+icu_normalizer,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_normalizer-2.1.1
+icu_normalizer_data,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_normalizer_data-2.1.1
+icu_properties,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_properties-2.1.2
+icu_properties_data,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_properties_data-2.1.2
+icu_provider,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/icu_provider-2.1.1
+ident_case,https://github.com/TedDriggs/ident_case,MIT OR Apache-2.0,Ted Driggs <ted.driggs@outlook.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/ident_case-1.0.1
+idna,https://github.com/servo/rust-url,MIT OR Apache-2.0,The rust-url developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/idna-1.1.0
+idna_adapter,https://github.com/hsivonen/idna_adapter,Apache-2.0 OR MIT,The rust-url developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/idna_adapter-1.2.1
+indexmap,https://github.com/indexmap-rs/indexmap,Apache-2.0 OR MIT,The indexmap Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/indexmap-2.13.0
+ipnet,https://github.com/krisprice/ipnet,MIT OR Apache-2.0,Kris Price <kris@krisprice.nz>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.12.0
+iri-string,https://github.com/lo48576/iri-string,MIT OR Apache-2.0,YOSHIOKA Takuma <nop_thread@nops.red>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/iri-string-0.7.10
+is_terminal_polyfill,https://github.com/polyfill-rs/is_terminal_polyfill,MIT OR Apache-2.0,The is_terminal_polyfill Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/is_terminal_polyfill-1.70.2
+itertools,https://github.com/rust-itertools/itertools,MIT OR Apache-2.0,bluss,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/itertools-0.14.0
+itoa,https://github.com/dtolnay/itoa,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/itoa-1.0.17
+jsonwebtoken,https://github.com/Keats/jsonwebtoken,MIT,Vincent Prouillet <hello@vincentprouillet.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/jsonwebtoken-10.3.0
+lazy_static,https://github.com/rust-lang-nursery/lazy-static.rs,MIT OR Apache-2.0,Marvin Löbel <loebel.marvin@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/lazy_static-1.5.0
+libc,https://github.com/rust-lang/libc,MIT OR Apache-2.0,The Rust Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.182
+litemap,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/litemap-0.8.1
+lock_api,https://github.com/Amanieu/parking_lot,MIT OR Apache-2.0,Amanieu d'Antras <amanieu@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/lock_api-0.4.14
+log,https://github.com/rust-lang/log,MIT OR Apache-2.0,The Rust Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29
+matchers,https://github.com/hawkw/matchers,MIT,Eliza Weisman <eliza@buoyant.io>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/matchers-0.2.0
+matchit,https://github.com/ibraheemdev/matchit,MIT AND BSD-3-Clause,Ibraheem Ahmed <ibraheem@ibraheem.ca>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/matchit-0.8.4
+md-5,https://github.com/RustCrypto/hashes,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/md-5-0.10.6
+memchr,https://github.com/BurntSushi/memchr,Unlicense OR MIT,"Andrew Gallant <jamslam@gmail.com>, bluss",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.0
+mime,https://github.com/hyperium/mime,MIT OR Apache-2.0,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17
+miniz_oxide,https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide,MIT OR Zlib OR Apache-2.0,"Frommi <daniil.liferenko@gmail.com>, oyvindln <oyvindln@users.noreply.github.com>, Rich Geldreich richgel99@gmail.com",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/miniz_oxide-0.8.9
+mio,https://github.com/tokio-rs/mio,MIT,"Carl Lerche <me@carllerche.com>, Thomas de Zeeuw <thomasdezeeuw@gmail.com>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/mio-1.1.1
+moka,https://github.com/moka-rs/moka,(MIT OR Apache-2.0) AND Apache-2.0,The moka Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/moka-0.12.14
+multimap,https://github.com/havarnov/multimap,MIT OR Apache-2.0,Håvar Nøvik <havar.novik@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/multimap-0.10.1
+nu-ansi-term,https://github.com/nushell/nu-ansi-term,MIT,"ogham@bsago.me, Ryan Scheel (Havvy) <ryan.havvy@gmail.com>, Josh Triplett <josh@joshtriplett.org>, The Nushell Project Developers",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/nu-ansi-term-0.50.3
+num-bigint,https://github.com/rust-num/num-bigint,MIT OR Apache-2.0,The Rust Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.4.6
+num-conv,https://github.com/jhpratt/num-conv,MIT OR Apache-2.0,Jacob Pratt <jacob@jhpratt.dev>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/num-conv-0.2.0
+num-integer,https://github.com/rust-num/num-integer,MIT OR Apache-2.0,The Rust Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/num-integer-0.1.46
+num-traits,https://github.com/rust-num/num-traits,MIT OR Apache-2.0,The Rust Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/num-traits-0.2.19
+num_cpus,https://github.com/seanmonstar/num_cpus,MIT OR Apache-2.0,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/num_cpus-1.17.0
+once_cell,https://github.com/matklad/once_cell,MIT OR Apache-2.0,Aleksey Kladov <aleksey.kladov@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/once_cell-1.21.3
+openssl-probe,https://github.com/rustls/openssl-probe,MIT OR Apache-2.0,Alex Crichton <alex@alexcrichton.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/openssl-probe-0.2.1
+opentelemetry,https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry,Apache-2.0,The opentelemetry Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/opentelemetry-0.31.0
+opentelemetry-otlp,https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-otlp,Apache-2.0,The opentelemetry-otlp Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/opentelemetry-otlp-0.31.1
+opentelemetry-proto,https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-proto,Apache-2.0,The opentelemetry-proto Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/opentelemetry-proto-0.31.0
+opentelemetry_sdk,https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-sdk,Apache-2.0,The opentelemetry_sdk Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/opentelemetry_sdk-0.31.0
+parking,https://github.com/smol-rs/parking,Apache-2.0 OR MIT,"Stjepan Glavina <stjepang@gmail.com>, The Rust Project Developers",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/parking-2.2.1
+parking_lot,https://github.com/Amanieu/parking_lot,MIT OR Apache-2.0,Amanieu d'Antras <amanieu@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/parking_lot-0.12.5
+parking_lot_core,https://github.com/Amanieu/parking_lot,MIT OR Apache-2.0,Amanieu d'Antras <amanieu@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/parking_lot_core-0.9.12
+pem,https://github.com/jcreekmore/pem-rs,MIT,Jonathan Creekmore <jonathan@thecreekmores.org>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pem-3.0.6
+percent-encoding,https://github.com/servo/rust-url,MIT OR Apache-2.0,The rust-url developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/percent-encoding-2.3.2
+petgraph,https://github.com/petgraph/petgraph,MIT OR Apache-2.0,"bluss, mitchmindtree",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/petgraph-0.8.3
+phf,https://github.com/rust-phf/rust-phf,MIT,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1
+phf_shared,https://github.com/rust-phf/rust-phf,MIT,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/phf_shared-0.13.1
+pin-project,https://github.com/taiki-e/pin-project,Apache-2.0 OR MIT,The pin-project Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-1.1.11
+pin-project-internal,https://github.com/taiki-e/pin-project,Apache-2.0 OR MIT,The pin-project-internal Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-internal-1.1.11
+pin-project-lite,https://github.com/taiki-e/pin-project-lite,Apache-2.0 OR MIT,The pin-project-lite Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pin-project-lite-0.2.17
+pin-utils,https://github.com/rust-lang-nursery/pin-utils,MIT OR Apache-2.0,Josef Brandl <mail@josefbrandl.de>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pin-utils-0.1.0
+portable-atomic,https://github.com/taiki-e/portable-atomic,Apache-2.0 OR MIT,The portable-atomic Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/portable-atomic-1.13.1
+postgres-protocol,https://github.com/rust-postgres/rust-postgres,MIT OR Apache-2.0,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/postgres-protocol-0.6.10
+postgres-types,https://github.com/rust-postgres/rust-postgres,MIT OR Apache-2.0,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/postgres-types-0.2.12
+potential_utf,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/potential_utf-0.1.4
+powerfmt,https://github.com/jhpratt/powerfmt,MIT OR Apache-2.0,Jacob Pratt <jacob@jhpratt.dev>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/powerfmt-0.2.0
+ppv-lite86,https://github.com/cryptocorrosion/cryptocorrosion,MIT OR Apache-2.0,The CryptoCorrosion Contributors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/ppv-lite86-0.2.21
+prettyplease,https://github.com/dtolnay/prettyplease,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/prettyplease-0.2.37
+proc-macro2,https://github.com/dtolnay/proc-macro2,MIT OR Apache-2.0,"David Tolnay <dtolnay@gmail.com>, Alex Crichton <alex@alexcrichton.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro2-1.0.106
+prost,https://github.com/tokio-rs/prost,Apache-2.0,"Dan Burkert <dan@danburkert.com>, Lucio Franco <luciofranco14@gmail.com>, Casper Meijn <casper@meijn.net>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/prost-0.14.3
+prost-build,https://github.com/tokio-rs/prost,Apache-2.0,"Dan Burkert <dan@danburkert.com>, Lucio Franco <luciofranco14@gmail.com>, Casper Meijn <casper@meijn.net>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/prost-build-0.14.3
+prost-derive,https://github.com/tokio-rs/prost,Apache-2.0,"Dan Burkert <dan@danburkert.com>, Lucio Franco <luciofranco14@gmail.com>, Casper Meijn <casper@meijn.net>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/prost-derive-0.14.3
+prost-types,https://github.com/tokio-rs/prost,Apache-2.0,"Dan Burkert <dan@danburkert.com>, Lucio Franco <luciofranco14@gmail.com>, Casper Meijn <casper@meijn.net>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/prost-types-0.14.3
+pulldown-cmark,https://github.com/raphlinus/pulldown-cmark,MIT,"Raph Levien <raph.levien@gmail.com>, Marcus Klaas de Vries <mail@marcusklaas.nl>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pulldown-cmark-0.13.1
+pulldown-cmark-to-cmark,https://github.com/Byron/pulldown-cmark-to-cmark,Apache-2.0,"Sebastian Thiel <byronimo@gmail.com>, Dylan Owen <dyltotheo@gmail.com>, Alessandro Ogier <alessandro.ogier@gmail.com>, Zixian Cai <2891235+caizixian@users.noreply.github.com>, Andrew Lyjak <andrew.lyjak@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/pulldown-cmark-to-cmark-22.0.0
+quote,https://github.com/dtolnay/quote,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/quote-1.0.45
+rand,https://github.com/rust-random/rand,MIT OR Apache-2.0,"The Rand Project Developers, The Rust Project Developers",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rand-0.9.4
+rand_chacha,https://github.com/rust-random/rand,MIT OR Apache-2.0,"The Rand Project Developers, The Rust Project Developers, The CryptoCorrosion Contributors",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rand_chacha-0.9.0
+rand_core,https://github.com/rust-random/rand,MIT OR Apache-2.0,"The Rand Project Developers, The Rust Project Developers",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.9.5
+regex,https://github.com/rust-lang/regex,MIT OR Apache-2.0,"The Rust Project Developers, Andrew Gallant <jamslam@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.3
+regex-automata,https://github.com/rust-lang/regex,MIT OR Apache-2.0,"The Rust Project Developers, Andrew Gallant <jamslam@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/regex-automata-0.4.14
+regex-syntax,https://github.com/rust-lang/regex,MIT OR Apache-2.0,"The Rust Project Developers, Andrew Gallant <jamslam@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/regex-syntax-0.8.10
+reqwest,https://github.com/seanmonstar/reqwest,MIT OR Apache-2.0,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/reqwest-0.12.28
+ring,https://github.com/briansmith/ring,Apache-2.0 AND ISC,The ring Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/ring-0.17.14
+rustls,https://github.com/rustls/rustls,Apache-2.0 OR ISC OR MIT,The rustls Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-0.23.45
+rustls-native-certs,https://github.com/rustls/rustls-native-certs,Apache-2.0 OR ISC OR MIT,The rustls-native-certs Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-native-certs-0.8.3
+rustls-pki-types,https://github.com/rustls/pki-types,MIT OR Apache-2.0,The rustls-pki-types Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-pki-types-1.14.0
+rustls-webpki,https://github.com/rustls/webpki,ISC,The rustls-webpki Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rustls-webpki-0.103.15
+rustversion,https://github.com/dtolnay/rustversion,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/rustversion-1.0.22
+ryu,https://github.com/dtolnay/ryu,Apache-2.0 OR BSL-1.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/ryu-1.0.23
+scopeguard,https://github.com/bluss/scopeguard,MIT OR Apache-2.0,bluss,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/scopeguard-1.2.0
+serde,https://github.com/serde-rs/serde,MIT OR Apache-2.0,"Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228
+serde_core,https://github.com/serde-rs/serde,MIT OR Apache-2.0,"Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228
+serde_derive,https://github.com/serde-rs/serde,MIT OR Apache-2.0,"Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_derive-1.0.228
+serde_json,https://github.com/serde-rs/json,MIT OR Apache-2.0,"Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.149
+serde_path_to_error,https://github.com/dtolnay/path-to-error,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_path_to_error-0.1.20
+serde_urlencoded,https://github.com/nox/serde_urlencoded,MIT OR Apache-2.0,Anthony Ramine <n.oxyde@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_urlencoded-0.7.1
+serde_with,https://github.com/jonasbb/serde_with,MIT OR Apache-2.0,"Jonas Bushart, Marcin Kaźmierczak",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with-3.17.0
+serde_with_macros,https://github.com/jonasbb/serde_with,MIT OR Apache-2.0,Jonas Bushart,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.17.0
+sha2,https://github.com/RustCrypto/hashes,MIT OR Apache-2.0,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/sha2-0.10.9
+sharded-slab,https://github.com/hawkw/sharded-slab,MIT,Eliza Weisman <eliza@buoyant.io>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/sharded-slab-0.1.7
+shlex,https://github.com/comex/rust-shlex,MIT OR Apache-2.0,"comex <comexk@gmail.com>, Fenhl <fenhl@fenhl.net>, Adrian Taylor <adetaylor@chromium.org>, Alex Touchet <alextouchet@outlook.com>, Daniel Parks <dp+git@oxidized.org>, Garrett Berg <googberg@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/shlex-1.3.0
+signal-hook-registry,https://github.com/vorner/signal-hook,MIT OR Apache-2.0,"Michal 'vorner' Vaner <vorner@vorner.cz>, Masaki Hara <ackie.h.gmai@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/signal-hook-registry-1.4.8
+signature,https://github.com/RustCrypto/traits/tree/master/signature,Apache-2.0 OR MIT,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0
+simd-adler32,https://github.com/mcountryman/simd-adler32,MIT,Marvin Countryman <me@maar.vin>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/simd-adler32-0.3.9
+simple_asn1,https://github.com/acw/simple_asn1,ISC,Adam Wick <awick@uhsure.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/simple_asn1-0.6.4
+siphasher,https://github.com/jedisct1/rust-siphash,MIT OR Apache-2.0,Frank Denis <github@pureftpd.org>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/siphasher-1.0.2
+slab,https://github.com/tokio-rs/slab,MIT,Carl Lerche <me@carllerche.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/slab-0.4.12
+smallvec,https://github.com/servo/rust-smallvec,MIT OR Apache-2.0,The Servo Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/smallvec-1.15.1
+socket2,https://github.com/rust-lang/socket2,MIT OR Apache-2.0,"Alex Crichton <alex@alexcrichton.com>, Thomas de Zeeuw <thomasdezeeuw@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.2
+spki,https://github.com/RustCrypto/formats/tree/master/spki,Apache-2.0 OR MIT,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.7.3
+stable_deref_trait,https://github.com/storyyeller/stable_deref_trait,MIT OR Apache-2.0,Robert Grosse <n210241048576@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/stable_deref_trait-1.2.1
+stringprep,https://github.com/sfackler/rust-stringprep,MIT OR Apache-2.0,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/stringprep-0.1.5
+strsim,https://github.com/rapidfuzz/strsim-rs,MIT,"Danny Guo <danny@dannyguo.com>, maxbachmann <oss@maxbachmann.de>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/strsim-0.11.1
+subtle,https://github.com/dalek-cryptography/subtle,BSD-3-Clause,"Isis Lovecruft <isis@patternsinthevoid.net>, Henry de Valence <hdevalence@hdevalence.ca>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/subtle-2.6.1
+syn,https://github.com/dtolnay/syn,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/syn-2.0.117
+sync_wrapper,https://github.com/Actyx/sync_wrapper,Apache-2.0,Actyx AG <developer@actyx.io>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/sync_wrapper-1.0.2
+synstructure,https://github.com/mystor/synstructure,MIT,Nika Layzell <nika@thelayzells.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/synstructure-0.13.2
+tagptr,https://github.com/oliver-giersch/tagptr,MIT OR Apache-2.0,Oliver Giersch,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tagptr-0.2.0
+tempfile,https://github.com/Stebalien/tempfile,MIT OR Apache-2.0,"Steven Allen <steven@stebalien.com>, The Rust Project Developers, Ashley Mannix <ashleymannix@live.com.au>, Jason White <me@jasonwhite.io>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tempfile-3.27.0
+thiserror,https://github.com/dtolnay/thiserror,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18
+thiserror-impl,https://github.com/dtolnay/thiserror,MIT OR Apache-2.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-impl-2.0.18
+thread_local,https://github.com/Amanieu/thread_local-rs,MIT OR Apache-2.0,Amanieu d'Antras <amanieu@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/thread_local-1.1.9
+time,https://github.com/time-rs/time,MIT OR Apache-2.0,"Jacob Pratt <open-source@jhpratt.dev>, Time contributors",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/time-0.3.47
+time-core,https://github.com/time-rs/time,MIT OR Apache-2.0,"Jacob Pratt <open-source@jhpratt.dev>, Time contributors",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.8
+time-macros,https://github.com/time-rs/time,MIT OR Apache-2.0,"Jacob Pratt <open-source@jhpratt.dev>, Time contributors",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/time-macros-0.2.27
+tinystr,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tinystr-0.8.2
+tinyvec,https://github.com/Lokathor/tinyvec,Zlib OR Apache-2.0 OR MIT,Lokathor <zefria@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tinyvec-1.10.0
+tinyvec_macros,https://github.com/Soveu/tinyvec_macros,MIT OR Apache-2.0 OR Zlib,Soveu <marx.tomasz@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tinyvec_macros-0.1.1
+tokio,https://github.com/tokio-rs/tokio,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.50.0
+tokio-macros,https://github.com/tokio-rs/tokio,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-macros-2.6.1
+tokio-postgres,https://github.com/rust-postgres/rust-postgres,MIT OR Apache-2.0,Steven Fackler <sfackler@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-postgres-0.7.16
+tokio-postgres-rustls,https://github.com/jbg/tokio-postgres-rustls,MIT,Jasper Hugo <jasper@jasperhugo.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-postgres-rustls-0.13.0
+tokio-rustls,https://github.com/rustls/tokio-rustls,MIT OR Apache-2.0,The tokio-rustls Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-rustls-0.26.4
+tokio-stream,https://github.com/tokio-rs/tokio,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-stream-0.1.18
+tokio-util,https://github.com/tokio-rs/tokio,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-util-0.7.18
+tonic,https://github.com/hyperium/tonic,MIT,Lucio Franco <luciofranco14@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tonic-0.14.5
+tonic-build,https://github.com/hyperium/tonic,MIT,Lucio Franco <luciofranco14@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tonic-build-0.14.5
+tonic-health,https://github.com/hyperium/tonic,MIT,James Nugent <james@jen20.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tonic-health-0.14.5
+tonic-prost,https://github.com/hyperium/tonic,MIT,Lucio Franco <luciofranco14@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tonic-prost-0.14.5
+tonic-prost-build,https://github.com/hyperium/tonic,MIT,Lucio Franco <luciofranco14@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tonic-prost-build-0.14.5
+tonic-reflection,https://github.com/hyperium/tonic,MIT,"James Nugent <james@jen20.com>, Samani G. Gikandi <samani@gojulas.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tonic-reflection-0.14.5
+tower,https://github.com/tower-rs/tower,MIT,Tower Maintainers <team@tower-rs.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tower-0.5.3
+tower-http,https://github.com/tower-rs/tower-http,MIT,Tower Maintainers <team@tower-rs.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tower-http-0.6.8
+tower-layer,https://github.com/tower-rs/tower,MIT,Tower Maintainers <team@tower-rs.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tower-layer-0.3.3
+tower-service,https://github.com/tower-rs/tower,MIT,Tower Maintainers <team@tower-rs.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tower-service-0.3.3
+tracing,https://github.com/tokio-rs/tracing,MIT,"Eliza Weisman <eliza@buoyant.io>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-0.1.44
+tracing-attributes,https://github.com/tokio-rs/tracing,MIT,"Tokio Contributors <team@tokio.rs>, Eliza Weisman <eliza@buoyant.io>, David Barsky <dbarsky@amazon.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-attributes-0.1.31
+tracing-core,https://github.com/tokio-rs/tracing,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-core-0.1.36
+tracing-log,https://github.com/tokio-rs/tracing,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-log-0.2.0
+tracing-opentelemetry,https://github.com/tokio-rs/tracing-opentelemetry,MIT,The tracing-opentelemetry Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-opentelemetry-0.32.1
+tracing-serde,https://github.com/tokio-rs/tracing,MIT,Tokio Contributors <team@tokio.rs>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-serde-0.2.0
+tracing-subscriber,https://github.com/tokio-rs/tracing,MIT,"Eliza Weisman <eliza@buoyant.io>, David Barsky <me@davidbarsky.com>, Tokio Contributors <team@tokio.rs>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-subscriber-0.3.22
+try-lock,https://github.com/seanmonstar/try-lock,MIT,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/try-lock-0.2.5
+typenum,https://github.com/paholg/typenum,MIT OR Apache-2.0,"Paho Lurie-Gregg <paho@paholg.com>, Andre Bogus <bogusandre@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/typenum-1.19.0
+unicase,https://github.com/seanmonstar/unicase,MIT OR Apache-2.0,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/unicase-2.9.0
+unicode-bidi,https://github.com/servo/unicode-bidi,MIT OR Apache-2.0,The Servo Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-bidi-0.3.18
+unicode-ident,https://github.com/dtolnay/unicode-ident,(MIT OR Apache-2.0) AND Unicode-3.0,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24
+unicode-normalization,https://github.com/unicode-rs/unicode-normalization,MIT OR Apache-2.0,"kwantam <kwantam@gmail.com>, Manish Goregaokar <manishsmail@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-normalization-0.1.25
+unicode-properties,https://github.com/unicode-rs/unicode-properties,MIT OR Apache-2.0,"Charles Lew <crlf0710@gmail.com>, Manish Goregaokar <manishsmail@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-properties-0.1.4
+untrusted,https://github.com/briansmith/untrusted,ISC,Brian Smith <brian@briansmith.org>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/untrusted-0.9.0
+url,https://github.com/servo/rust-url,MIT OR Apache-2.0,The rust-url developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/url-2.5.8
+utf8_iter,https://github.com/hsivonen/utf8_iter,Apache-2.0 OR MIT,Henri Sivonen <hsivonen@hsivonen.fi>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/utf8_iter-1.0.4
+utf8parse,https://github.com/alacritty/vte,Apache-2.0 OR MIT,"Joe Wilm <joe@jwilm.com>, Christian Duerr <contact@christianduerr.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/utf8parse-0.2.2
+uuid,https://github.com/uuid-rs/uuid,Apache-2.0 OR MIT,"Ashley Mannix<ashleymannix@live.com.au>, Dylan DPC<dylan.dpc@gmail.com>, Hunar Roop Kahlon<hunar.roop@gmail.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.22.0
+version_check,https://github.com/SergioBenitez/version_check,MIT OR Apache-2.0,Sergio Benitez <sb@sergio.bz>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.5
+want,https://github.com/seanmonstar/want,MIT,Sean McArthur <sean@seanmonstar.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/want-0.3.1
+webpki-roots,https://github.com/rustls/webpki-roots,CDLA-Permissive-2.0,The webpki-roots Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/webpki-roots-1.0.6
+whoami,https://github.com/ardaku/whoami,Apache-2.0 OR BSL-1.0 OR MIT,The whoami Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/whoami-2.1.1
+windows-link,https://github.com/microsoft/windows-rs,MIT OR Apache-2.0,The windows-link Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/windows-link-0.2.1
+windows-sys,https://github.com/microsoft/windows-rs,MIT OR Apache-2.0,The windows-sys Authors,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/windows-sys-0.61.2
+writeable,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.2
+x509-cert,https://github.com/RustCrypto/formats/tree/master/x509-cert,Apache-2.0 OR MIT,RustCrypto Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/x509-cert-0.2.5
+yoke,https://github.com/unicode-org/icu4x,Unicode-3.0,Manish Goregaokar <manishsmail@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/yoke-0.8.1
+yoke-derive,https://github.com/unicode-org/icu4x,Unicode-3.0,Manish Goregaokar <manishsmail@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/yoke-derive-0.8.1
+zerocopy,https://github.com/google/zerocopy,BSD-2-Clause OR Apache-2.0 OR MIT,"Joshua Liebow-Feeser <joshlf@google.com>, Jack Wrenn <jswrenn@amazon.com>",$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zerocopy-0.8.40
+zerofrom,https://github.com/unicode-org/icu4x,Unicode-3.0,Manish Goregaokar <manishsmail@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.6
+zerofrom-derive,https://github.com/unicode-org/icu4x,Unicode-3.0,Manish Goregaokar <manishsmail@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-derive-0.1.6
+zeroize,https://github.com/RustCrypto/utils,Apache-2.0 OR MIT,The RustCrypto Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zeroize-1.8.2
+zerotrie,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zerotrie-0.2.3
+zerovec,https://github.com/unicode-org/icu4x,Unicode-3.0,The ICU4X Project Developers,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-0.11.5
+zerovec-derive,https://github.com/unicode-org/icu4x,Unicode-3.0,Manish Goregaokar <manishsmail@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.2
+zmij,https://github.com/dtolnay/zmij,MIT,David Tolnay <dtolnay@gmail.com>,$CARGO_HOME/registry/src/index.crates.io-1949cf8c6b5b557f/zmij-1.0.21

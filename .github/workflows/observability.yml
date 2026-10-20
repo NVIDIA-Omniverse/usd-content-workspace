@@ -1,0 +1,66 @@
+# Type-check and test common/observability.
+#
+# Nothing else in the repository publishes into this component -- it is a
+# leaf library -- so the path filter is just its own tree plus the workflows
+# that run it. Three components (permission-service, envoy-auth-extension,
+# thumbnail-service) depend on it the other way round, and already list
+# common/observability in their own filters.
+
+name: observability
+
+on:
+  pull_request:
+    paths:
+      - 'common/observability/**'
+      - '.github/workflows/observability.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+  push:
+    # release/v*: the mirrored release branch in the public repository, whose
+    # pull request is opened with GITHUB_TOKEN and so gets no pull_request run.
+    branches: [main, 'release/v*']
+    paths:
+      - 'common/observability/**'
+      - '.github/workflows/observability.yml'
+      - '.github/workflows/rust-check.yml'
+      - '.github/workflows/rust-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    uses: ./.github/workflows/rust-check.yml
+    with:
+      component: common/observability
+
+  test:
+    # Unit tests only; no external dependencies. The exporters the tests drive
+    # are in-process fakes, not a live collector.
+    #
+    # nextest: true is mandatory here, not a style choice. Every test in this
+    # suite builds a tracing subscriber, and otel-tools' builder finishes with
+    # `tracing::subscriber::set_global_default(...).expect(...)`
+    # (crates/otel-tools/src/tracing/build.rs). That global can only be set once
+    # per process, so under `cargo test` -- which runs the whole suite in one
+    # process -- the first test to get there wins and the other 87 panic with
+    # SetGlobalDefaultError("a global default trace dispatcher has already been
+    # set"). `--test-threads=1` does not fix it; the global is per-process, so
+    # serialising the threads just changes which test wins.
+    #
+    # nextest forks a process per test, which is what the suite was written
+    # for: the component ships a .config/nextest.toml and its README states
+    # that unit tests must be run with cargo nextest. Under it, 334 pass and 1
+    # is skipped (a single #[ignore]).
+    #
+    # The upstream fix -- a builder that does not claim a process-wide global,
+    # or tests that use tracing's thread-local set_default -- belongs to the
+    # source repository's owners. Running the suite the way it is meant to be
+    # run costs us nothing and pre-empts nothing.
+    uses: ./.github/workflows/rust-test.yml
+    with:
+      component: common/observability
+      nextest: true
+      test-args: '--workspace'

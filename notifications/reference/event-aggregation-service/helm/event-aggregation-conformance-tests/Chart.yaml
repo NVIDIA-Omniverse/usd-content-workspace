@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: event-aggregation-conformance-tests
+description: Conformance tests for the Event Aggregation Service
+type: application
+version: 0.0.0
+appVersion: "0.0.0"

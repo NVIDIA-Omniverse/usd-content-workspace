@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+description = "NVIDIA Omniverse Storage Core Test Utilities"
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+name = "storage-core-test"
+repository.workspace = true
+rust-version.workspace = true
+version = "0.9.0-alpha.1"
+
+[dependencies]
+async-stream = "0.3.6"
+bytes = "1.12.1"
+ctrlc = "3.5.2"
+futures = "0.3.34"
+http = "1.5.0"
+http-body = "1.1.0"
+nix = { version = "0.31.3", features = ["process"] }
+opentelemetry = "=0.31.0"
+opentelemetry-proto = { version = "=0.31.0", features = ["gen-tonic", "logs", "metrics", "trace"] }
+opentelemetry_sdk = { version = "=0.31.0", features = ["testing"] }
+rand = "0.10.2"
+regex = "1.13.1"
+reqwest = { version = "0.13.4", default-features = false, features = ["hickory-dns", "json", "native-tls"] }
+serde = "1.0.229"
+serde_json = "1.0.151"
+storage-core = { version = "0.11.0-alpha.3", path = "../storage-core" }
+storage-core-builder = { version = "0.8.0-alpha.2", path = "../storage-core-builder" }
+storage-core-util = { version = "0.11.0-alpha.1", path = "../storage-core-util" }
+tokio = "1.53.1"
+tokio-stream = "0.1.19"
+tonic = { version = "0.14.6", features = ["gzip"] }
+tower = "0.5.3"
+tracing = "0.1.44"
+url = { version = "2.5.8", features = ["serde"] }
+urlencoding = "2.1.3"

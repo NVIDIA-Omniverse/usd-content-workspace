@@ -1,0 +1,169 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Custom CSS for enhanced rustdoc styling - docs.rs inspired */
+
+/* Improve the overall look and feel */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    background-color: #fafafa;
+}
+
+/* Better header styling */
+.main-heading h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #24292e;
+    margin-bottom: 0.5rem;
+}
+
+/* Improve sidebar styling */
+.sidebar {
+    background: #f6f8fa;
+    border-right: 1px solid #e1e4e8;
+}
+
+.sidebar-crate h2 {
+    color: #24292e;
+    font-weight: 600;
+}
+
+.sidebar-crate .version {
+    color: #586069;
+    font-size: 0.9rem;
+}
+
+/* Better content area */
+.content {
+    background: white;
+    padding: 2rem;
+}
+
+/* Improve item tables */
+.item-table dt {
+    font-weight: 600;
+    color: #24292e;
+}
+
+.item-table dt a {
+    color: #0366d6;
+    text-decoration: none;
+}
+
+.item-table dt a:hover {
+    text-decoration: underline;
+}
+
+/* Better section headers */
+.section-header {
+    color: #24292e;
+    font-weight: 600;
+    border-bottom: 2px solid #e1e4e8;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+}
+
+/* Improve search styling */
+rustdoc-search {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+}
+
+/* Better mobile responsiveness */
+@media (max-width: 768px) {
+    .content {
+        padding: 1rem;
+    }
+    
+    .main-heading h1 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Improve code blocks */
+pre {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 1rem;
+}
+
+/* Better link styling */
+a {
+    color: #0366d6;
+}
+
+a:hover {
+    color: #0256cc;
+}
+
+/* Improve toolbar styling */
+rustdoc-toolbar {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+}
+
+/* Docs.rs specific styling */
+.rustdoc {
+    background: white;
+}
+
+/* Improve navigation */
+nav {
+    background: #f6f8fa;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+/* Better button styling */
+button {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    color: #24292e;
+    border-radius: 3px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+button:hover {
+    background: #e1e4e8;
+}
+
+/* Improve table styling */
+table {
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+th {
+    background: #f6f8fa;
+    border-bottom: 1px solid #e1e4e8;
+    color: #24292e;
+    font-weight: 600;
+}
+
+td {
+    border-bottom: 1px solid #e1e4e8;
+    padding: 0.5rem;
+}
+
+/* Better form elements */
+input, select, textarea {
+    border: 1px solid #e1e4e8;
+    border-radius: 3px;
+    padding: 0.4rem;
+    background: white;
+    color: #24292e;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: #0366d6;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(3, 102, 214, 0.2);
+}

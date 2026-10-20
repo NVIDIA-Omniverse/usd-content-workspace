@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+repos:
+  - repo: local
+    hooks:
+      - id: generate-openapi
+        name: Generate OpenAPI YAML
+        entry: uv run generate_openapi_yaml
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      - id: add-openapi
+        name: Add OpenAPI YAML to commit
+        entry: git add openapi.yaml
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+

@@ -1,0 +1,7 @@
+fastapi>=0.141.1
+pydantic>=2.13.5
+uvicorn>=0.52.4
+googleapis-common-protos>=1.75.2
+grpcio>=1.83.1
+grpcio-tools>=1.83.1
+grpcio-reflection>=1.83.1

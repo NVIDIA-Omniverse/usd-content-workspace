@@ -1,0 +1,159 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "envoy-auth-extension.fullname" . }}-deployment
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "envoy-auth-extension.selectorLabels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "envoy-auth-extension.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "envoy-auth-extension.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "envoy-auth-extension.imagePullSecrets" .Values | nindent 6 }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: envoy-auth-ext
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default "latest" }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+          - name: RUST_LOG
+            value: {{ .Values.observability.logging.level | quote }}
+          - name: STRUCTURED_LOGGING
+            value: {{ .Values.observability.logging.structured.enabled | quote }}
+          - name: SERVICE_NAME
+            value: {{ .Values.observability.serviceName | quote }}
+          - name: SERVICE_SCOPE
+            value: {{ .Values.observability.serviceScope | quote }}
+          {{- if .Values.observability.tracing.enabled }}
+          {{- if and .Values.observability.tracing.endpoint.grpc .Values.observability.tracing.endpoint.rest }}
+          {{- fail "configure only one of observability.tracing.endpoint.grpc or observability.tracing.endpoint.rest" }}
+          {{- else if .Values.observability.tracing.endpoint.grpc }}
+          - name: OTEL_TRACES_EXPORTER
+            value: "otlp"
+          - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+            value: {{ .Values.observability.tracing.endpoint.grpc | quote }}
+          - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+            value: "grpc"
+          {{- else if .Values.observability.tracing.endpoint.rest }}
+          - name: OTEL_TRACES_EXPORTER
+            value: "otlp"
+          - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+            value: {{ .Values.observability.tracing.endpoint.rest | quote }}
+          - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+            value: "http/protobuf"
+          {{- else }}
+          {{- fail "observability.tracing.enabled requires a gRPC or REST endpoint" }}
+          {{- end }}
+          - name: OTEL_TRACES_SAMPLER
+            value: "parentbased_traceidratio"
+          - name: OTEL_TRACES_SAMPLER_ARG
+            value: {{ .Values.observability.tracing.samplingRatio | quote }}
+          {{- else }}
+          - name: OTEL_TRACES_EXPORTER
+            value: "none"
+          {{- end }}
+          {{- if .Values.observability.metrics.enabled }}
+          {{- if and .Values.observability.metrics.endpoint.grpc .Values.observability.metrics.endpoint.rest }}
+          {{- fail "configure only one of observability.metrics.endpoint.grpc or observability.metrics.endpoint.rest" }}
+          {{- else if .Values.observability.metrics.endpoint.grpc }}
+          - name: OTEL_METRICS_EXPORTER
+            value: "otlp"
+          - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            value: {{ .Values.observability.metrics.endpoint.grpc | quote }}
+          - name: OTEL_EXPORTER_OTLP_METRICS_PROTOCOL
+            value: "grpc"
+          {{- else if .Values.observability.metrics.endpoint.rest }}
+          - name: OTEL_METRICS_EXPORTER
+            value: "otlp"
+          - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            value: {{ .Values.observability.metrics.endpoint.rest | quote }}
+          - name: OTEL_EXPORTER_OTLP_METRICS_PROTOCOL
+            value: "http/protobuf"
+          {{- else }}
+          {{- fail "observability.metrics.enabled requires a gRPC or REST endpoint" }}
+          {{- end }}
+          {{- else }}
+          - name: OTEL_METRICS_EXPORTER
+            value: "none"
+          {{- end }}
+        ports:
+        - name: envoy-auth-ext
+          containerPort: {{ .Values.service.ports.envoyAuthExt }}
+          protocol: TCP
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          grpc:
+            port: {{ $.Values.service.ports.envoyAuthExt }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          grpc:
+            port: {{ $.Values.service.ports.envoyAuthExt }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: envoy-ext-config-volume
+          mountPath: /app/
+      volumes:
+      - name: envoy-ext-config-volume
+        configMap:
+          name: {{ include "envoy-auth-extension.fullname" . }}-config
+          items:
+          - key: envoy-ext-config.toml
+            path: envoy-ext-config.toml
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

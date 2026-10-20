@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# docker-compose for running conformance tests locally against the service.
+#
+# Quick start:
+#   # Build the conformance tests image first (from this directory):
+#   docker build -t event-consumer-conformance-tests:local .
+#
+#   # Set the service image and run:
+#   SERVICE_IMAGE=nvcr.io/nvidia/omniverse/event-consumer-service:1.9.9 \
+#     docker compose run --rm conformance-tests
+#
+# Environment variables:
+#   SERVICE_IMAGE             - event-consumer-service image to test against (required)
+#   CONFORMANCE_IMAGE         - conformance tests image (default: event-consumer-conformance-tests:local)
+#   CONFORMANCE_AUTH_TOKEN    - Bearer token (if the service has auth enabled)
+#   CONFORMANCE_AUTH_REQUIRED - set to "true" to run auth-error tests
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.1.3
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - conformance-net
+
+  event-consumer-service:
+    image: "${SERVICE_IMAGE:-nvcr.io/nvidia/omniverse/event-consumer-service:latest}"
+    ports:
+      - "50052:50052"
+      - "8000:8000"
+    environment:
+      OMNI_EVENTS_RABBITMQ_URI: amqp://guest:guest@rabbitmq:5672
+      OMNI_EVENTS_REST_API_ENABLED: "true"
+      OMNI_EVENTS_PRINCIPAL_SOURCE: "disabled"
+      OMNI_EVENTS_OPENID_ENABLED: "false"
+      OMNI_EVENTS_PERMISSIONS_ENDPOINT: ""
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - conformance-net
+
+  conformance-tests:
+    image: "${CONFORMANCE_IMAGE:-event-consumer-conformance-tests:local}"
+    environment:
+      CONFORMANCE_GRPC_ENDPOINT: event-consumer-service:50052
+      CONFORMANCE_REST_ENDPOINT: http://event-consumer-service:8000
+      CONFORMANCE_HEALTH_ENDPOINT: http://event-consumer-service:8000/api/v1beta/health
+      CONFORMANCE_AUTH_TOKEN: "${CONFORMANCE_AUTH_TOKEN:-}"
+      CONFORMANCE_AUTH_REQUIRED: "${CONFORMANCE_AUTH_REQUIRED:-false}"
+    depends_on:
+      - event-consumer-service
+    networks:
+      - conformance-net
+    volumes:
+      - ./reports:/app/reports
+
+networks:
+  conformance-net:
+    driver: bridge

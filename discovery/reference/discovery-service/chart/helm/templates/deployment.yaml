@@ -1,0 +1,114 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "discovery-service.fullname" . }}
+  labels:
+    {{- include "discovery-service.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "discovery-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "discovery-service.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: nginx
+        # args: ["-g", "daemon off;"]
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default "latest" }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.ports.http }}
+          protocol: TCP
+        {{- if .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 10 }}
+        {{- end }}
+        {{- if .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        - name: nginx-config-volume
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: nginx.conf
+          readOnly: true
+        - name: nginx-index-volume
+          mountPath: "/usr/share/nginx/html/index.html"
+          subPath: index.html
+          readOnly: true
+        - name: response-manifests-volume
+          {{- if and .Values.http .Values.http.mountPath }}
+          mountPath: {{ .Values.http.mountPath }}
+          {{- else }}
+          mountPath: "/var/www/api/"
+          {{- end }}
+          readOnly: true
+      volumes:
+      - name: nginx-config-volume
+        configMap:
+          name: {{ include "discovery-service.fullname" . }}
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+      - name: nginx-index-volume
+        configMap:
+          name: {{ include "discovery-service.fullname" . }}
+          items:
+          - key: "index.html"
+            path: "index.html"
+      - name: response-manifests-volume
+        configMap:
+          name: {{ include "discovery-service.fullname" . }}
+          items:
+          - key: servicesJson
+            path: "services"
+          {{- if .Values.openId.enabled }}
+          - key: authConfigJson
+            path: "auth-config"
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

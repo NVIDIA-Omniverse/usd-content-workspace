@@ -1,0 +1,164 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "discovery.fullname" . }}
+  labels:
+    {{- include "discovery.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "discovery.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "discovery.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "discovery.imagePullSecrets" ( dict "images" (list .Values.image) "global" .Values) | nindent 6 }}
+      serviceAccountName: {{ include "discovery.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: internal
+              containerPort: {{ .Values.service.ports.internal }}
+              protocol: TCP
+            - name: external
+              containerPort: {{ .Values.service.ports.external }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: INTERNAL_PORT
+              value: "{{ .Values.service.ports.internal }}"
+            - name: EXTERNAL_PORT
+              value: "{{ .Values.service.ports.external }}"
+            - name: KUBE_NAMESPACE
+              {{- $kubeNamespace := .Values.config.kubeNamespace }}
+              {{- if kindIs "slice" $kubeNamespace }}
+              {{- $kubeNamespace = join "," $kubeNamespace }}
+              {{- end }}
+              {{- if $kubeNamespace }}
+              value: {{ $kubeNamespace | quote }}
+              {{- else }}
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+              {{- end }}
+            {{- if .Values.config.kubeContext }}
+            - name: KUBE_CONTEXT
+              value: "{{ .Values.config.kubeContext }}"
+            {{- end }}
+            - name: RECONCILE_INTERVAL
+              value: "{{ .Values.config.reconcileInterval }}"
+            - name: ANNOTATION_DISCOVERY
+              value: "{{ .Values.config.annotations.discoveryEnabled }}"
+            - name: ANNOTATION_GRPC_PORT
+              value: "{{ .Values.config.annotations.grpcPort }}"
+            - name: ANNOTATION_BASE_PATH
+              value: "{{ .Values.config.annotations.basePath }}"
+            - name: ANNOTATION_VISIBILITY
+              value: "{{ .Values.config.annotations.visibility }}"
+            - name: ANNOTATION_EXTERNAL_REST_ENDPOINT
+              value: "{{ .Values.config.annotations.externalRestEndpoint }}"
+            - name: ANNOTATION_EXTERNAL_GRPC_ENDPOINT
+              value: "{{ .Values.config.annotations.externalGrpcEndpoint }}"
+            - name: RUST_LOG
+              value: "{{ .Values.observability.logging.level }}"
+            - name: STRUCTURED_LOGGING
+              value: "{{ .Values.observability.logging.structured.enabled }}"
+            {{- if .Values.observability.tracing.enabled }}
+            - name: TRACES_ENDPOINT
+              value: "{{ .Values.observability.tracing.endpoint.grpc }}"
+            - name: TRACE_SAMPLING_RATIO
+              value: "{{ .Values.observability.tracing.samplingRatio }}"
+            {{- end }}
+            {{- if .Values.observability.metrics.enabled }}
+            - name: METRICS_ENDPOINT
+              value: "{{ .Values.observability.metrics.endpoint.grpc }}"
+            {{- end }}
+            - name: SERVICE_NAME
+              value: "{{ .Values.observability.serviceName }}"
+            - name: SERVICE_SCOPE
+              value: "{{ .Values.observability.serviceScope }}"
+            {{ if .Values.config.v1Endpoints.enabled -}}
+            - name: V1_ENDPOINTS_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "discovery.v1EndpointsConfigMapName" . }}
+                  key: v1-endpoints-config
+            {{- end }}
+            {{- if .Values.openId.enabled }}
+            - name: AUTH_CONFIG_JSON
+              value: {{ include "discovery.authConfigJson" . | quote }}
+            {{- end }}
+            {{- if .Values.httpProxy.rootRedirect.enabled }}
+            {{- $redirectTarget := required "httpProxy.rootRedirect.target is required when rootRedirect.enabled is true" .Values.httpProxy.rootRedirect.target }}
+            {{- $redirectFqdn := required "httpProxy.rootRedirect.target.fqdn is required when rootRedirect.enabled is true" $redirectTarget.fqdn }}
+            {{- $redirectPath := $redirectTarget.path | default "/" }}
+            {{- if not (hasPrefix "/" $redirectPath) }}
+            {{- $redirectPath = print "/" $redirectPath }}
+            {{- end }}
+            {{- $redirectScheme := ternary "https" "http" .Values.httpProxy.tls.enabled }}
+            - name: ROOT_REDIRECT_URL
+              value: {{ printf "%s://%s%s" $redirectScheme $redirectFqdn $redirectPath | quote }}
+            - name: ROOT_REDIRECT_STATUS
+              value: {{ ($redirectTarget.statusCode | default 302) | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
