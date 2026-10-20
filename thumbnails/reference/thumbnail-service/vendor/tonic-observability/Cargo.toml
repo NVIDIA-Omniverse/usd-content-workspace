@@ -1,0 +1,155 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Vendored from tonic-observability 0.14.0 (tonic-observability); see README.md.
+
+[package]
+edition = "2024"
+rust-version = "1.91.0"
+name = "tonic-observability"
+version = "0.14.0"
+authors = ["NVIDIA"]
+build = false
+include = [
+    "/src",
+    "/LICENSE.txt",
+    "/README.md",
+]
+publish = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+description = "Tracing and metric layers for Tonic-based gRPC clients and servers"
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/NVIDIA-Omniverse/usd-content-workspace/tree/main/common/observability"
+resolver = "2"
+
+[features]
+default = []
+traceresponse = []
+verbose = []
+
+[lib]
+name = "tonic_observability"
+path = "src/lib.rs"
+
+[dependencies.bytes]
+version = "1.10"
+default-features = false
+
+[dependencies.h2]
+version = "0.4"
+default-features = false
+
+[dependencies.http-body]
+version = "1.0"
+default-features = false
+
+[dependencies.hyper]
+version = "1"
+default-features = false
+
+[dependencies.opentelemetry]
+version = "~0.31"
+default-features = false
+
+[dependencies.opentelemetry-semantic-conventions]
+version = "~0.31"
+features = [
+    "semconv_experimental",
+    "semconv_experimental",
+]
+default-features = false
+
+[dependencies.otel-tools]
+version = "0.14.0"
+path = "../otel-tools"
+default-features = false
+
+[dependencies.pin-project-lite]
+version = "0.2"
+default-features = false
+
+[dependencies.prost]
+version = "~0.14"
+default-features = false
+
+[dependencies.prost-types]
+version = "~0.14"
+features = ["std"]
+default-features = false
+
+[dependencies.tonic]
+version = "~0.14"
+features = [
+    "codegen",
+    "transport",
+]
+default-features = false
+
+[dependencies.tower-layer]
+version = "0.3.3"
+default-features = false
+
+[dependencies.tower-service]
+version = "0.3.3"
+default-features = false
+
+[dependencies.tracing]
+version = "~0.1"
+default-features = false
+
+[dev-dependencies.axum-core]
+version = "*"
+
+[dev-dependencies.futures]
+version = "0.3"
+features = ["std"]
+default-features = false
+
+[dev-dependencies.hyper-util]
+version = "*"
+
+[dev-dependencies.tokio]
+version = "1.47"
+features = [
+    "net",
+    "sync",
+    "rt-multi-thread",
+]
+default-features = false
+
+[dev-dependencies.tonic]
+version = "~0.14"
+features = [
+    "router",
+    "gzip",
+]
+default-features = false
+
+[dev-dependencies.tower]
+version = "0.5"
+default-features = false
+
+[dev-dependencies.tracing-opentelemetry]
+version = "~0.32"
+default-features = false
+
+[dev-dependencies.tracing-subscriber]
+version = "0.3"
+default-features = false

@@ -1,0 +1,39 @@
+# Repo-root Docker build context ignores.
+#
+# Component images in this repository are built with the repository root as the
+# build context, because the component Cargo workspaces have path dependencies
+# that reach outside their own directory (for example
+# storage/reference/storage-service -> storage/reference/storage-core,
+# storage/reference/externals/azure-sdk and common/url-normalizer).
+#
+# Everything the Rust workspaces need to compile must therefore stay in the
+# context. In particular do NOT ignore storage/reference/externals/azure-sdk:
+# it is a vendored path dependency of storage-service.
+
+# Version control metadata.
+.git/
+.gitattributes
+.gitmodules
+
+# Build outputs.
+**/target/
+**/build/
+**/dist/
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/node_modules/
+
+# Editor / OS noise.
+**/.idea/
+**/.vscode/
+**/.DS_Store
+
+# Local-only artifacts.
+**/*.profraw
+**/*.tgz
+**/.env
+**/_trace/
+**/codecov/
+**/scratch/

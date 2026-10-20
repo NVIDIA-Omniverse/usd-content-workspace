@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="560" viewBox="0 0 1180 560" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333333"/>
+    </marker>
+    <marker id="ag" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#76b900"/>
+    </marker>
+  </defs>
+  <style>
+    .cluster { fill: #fafafa; stroke: #999999; stroke-width: 1.5; stroke-dasharray: 8 4; rx: 10; }
+    .box { fill: #ffffff; stroke: #333333; stroke-width: 1.5; rx: 6; }
+    .svc { fill: #eef6df; stroke: #76b900; stroke-width: 2; rx: 6; }
+    .ext { fill: #f1f5fb; stroke: #4a6fa5; stroke-width: 1.5; rx: 6; }
+    .title { font-weight: bold; font-size: 14px; fill: #111111; }
+    .sub { font-size: 11.5px; fill: #444444; }
+    .lbl { font-size: 11.5px; fill: #222222; }
+    .flow { stroke: #333333; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .flowseg { stroke: #333333; stroke-width: 1.5; fill: none; }
+    .event { stroke: #76b900; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; marker-end: url(#ag); }
+  </style>
+
+  <!-- Kubernetes namespace -->
+  <rect class="cluster" x="230" y="20" width="685" height="520"/>
+  <text class="sub" x="245" y="40">Kubernetes namespace — one Helm release: thumbnail-service</text>
+
+  <!-- Ingress -->
+  <rect class="box" x="255" y="60" width="200" height="60"/>
+  <text class="title" x="355" y="84" text-anchor="middle">Contour HTTPProxy</text>
+  <text class="sub" x="355" y="104" text-anchor="middle">host.domain · grpc.host.domain</text>
+
+  <!-- Service deployment -->
+  <rect class="svc" x="255" y="160" width="280" height="150"/>
+  <text class="title" x="395" y="186" text-anchor="middle">Deployment: thumbnail-service</text>
+  <text class="sub" x="395" y="206" text-anchor="middle">container thumbnail-service (server)</text>
+  <text class="sub" x="395" y="226" text-anchor="middle">REST :3000 · gRPC :50051</text>
+  <text class="sub" x="395" y="246" text-anchor="middle">StorageEventQueue consumer</text>
+  <text class="sub" x="395" y="266" text-anchor="middle">CapabilitiesService · gRPC health</text>
+  <text class="sub" x="395" y="288" text-anchor="middle" font-size="10">Service: discovery.omniverse.nvidia.com/enabled</text>
+
+  <!-- Worker deployment -->
+  <rect class="svc" x="610" y="160" width="280" height="150"/>
+  <text class="title" x="750" y="186" text-anchor="middle">Deployment: thumbnail-task-worker</text>
+  <text class="sub" x="750" y="206" text-anchor="middle">container thumbnail-worker (task-worker)</text>
+  <text class="sub" x="750" y="226" text-anchor="middle">/healthz · /readyz · /metrics :8080</text>
+  <text class="sub" x="750" y="246" text-anchor="middle">WorkerEventQueue consumer</text>
+  <text class="sub" x="750" y="266" text-anchor="middle">HPA 2–20 replicas (CPU)</text>
+  <text class="sub" x="750" y="288" text-anchor="middle">2 conversions in flight per replica</text>
+
+  <!-- Token sidecar note -->
+  <rect class="box" x="255" y="340" width="635" height="50"/>
+  <text class="title" x="572.5" y="361" text-anchor="middle">serviceIdentity (one mode): client credentials or access-token file sidecar</text>
+  <text class="sub" x="572.5" y="380" text-anchor="middle">both Deployments authenticate outbound calls as the same principal</text>
+
+  <!-- Storage service -->
+  <rect class="ext" x="255" y="430" width="280" height="90"/>
+  <text class="title" x="395" y="456" text-anchor="middle">Storage service (gRPC)</text>
+  <text class="sub" x="395" y="476" text-anchor="middle">FileObjectService: Stat · Read · Write · Delete</text>
+  <text class="sub" x="395" y="494" text-anchor="middle">MetadataService: Get · Update · Delete · Batch</text>
+  <text class="sub" x="395" y="510" text-anchor="middle">storage.endpoint</text>
+
+  <!-- Notification service -->
+  <rect class="ext" x="610" y="430" width="280" height="90"/>
+  <text class="title" x="750" y="456" text-anchor="middle">Notification Service (gRPC)</text>
+  <text class="sub" x="750" y="476" text-anchor="middle">Event Consumer API: durable queues, ACK/NACK</text>
+  <text class="sub" x="750" y="494" text-anchor="middle">Event Aggregation API: PublishEvent</text>
+  <text class="sub" x="750" y="510" text-anchor="middle">notifications.eventConsumer / eventAggregation</text>
+
+  <!-- External left -->
+  <rect class="box" x="20" y="60" width="180" height="60"/>
+  <text class="title" x="110" y="84" text-anchor="middle">Clients</text>
+  <text class="sub" x="110" y="104" text-anchor="middle">Navigator, services, SDKs</text>
+
+  <rect class="ext" x="20" y="160" width="180" height="90"/>
+  <text class="title" x="110" y="186" text-anchor="middle">OpenID Connect IdP</text>
+  <text class="sub" x="110" y="206" text-anchor="middle">token endpoint via discovery</text>
+  <text class="sub" x="110" y="222" text-anchor="middle">CLIENT_CREDENTIALS_</text>
+  <text class="sub" x="110" y="238" text-anchor="middle">OPENID_CONFIGURATION</text>
+
+  <rect class="ext" x="20" y="270" width="180" height="60"/>
+  <text class="title" x="110" y="294" text-anchor="middle">Discovery operator</text>
+  <text class="sub" x="110" y="314" text-anchor="middle">ListServices (unauthenticated)</text>
+
+  <!-- External right -->
+  <rect class="ext" x="955" y="160" width="190" height="88"/>
+  <text class="title" x="1050" y="186" text-anchor="middle">OpenTelemetry collector</text>
+  <text class="sub" x="1050" y="206" text-anchor="middle">OTLP traces + metrics (optional)</text>
+  <text class="sub" x="1050" y="222" text-anchor="middle">observability.tracing/</text>
+  <text class="sub" x="1050" y="236" text-anchor="middle">metrics.endpoint.grpc</text>
+
+  <rect class="box" x="955" y="430" width="190" height="104"/>
+  <text class="title" x="1050" y="456" text-anchor="middle">Blob storage</text>
+  <text class="sub" x="1050" y="476" text-anchor="middle">source images and generated</text>
+  <text class="sub" x="1050" y="494" text-anchor="middle">thumbnails at the destination</text>
+  <text class="sub" x="1050" y="510" text-anchor="middle">rendered from</text>
+  <text class="sub" x="1050" y="524" text-anchor="middle">THUMBNAIL_PATH_TEMPLATE</text>
+
+  <!-- Flows -->
+  <line class="flow" x1="200" y1="90" x2="253" y2="90"/>
+  <line class="flow" x1="355" y1="120" x2="355" y2="158"/>
+  <text class="lbl" x="365" y="143">TLS terminates here; plaintext h2 inside</text>
+  <line class="flow" x1="200" y1="195" x2="253" y2="195"/>
+  <line class="flow" x1="200" y1="300" x2="253" y2="300"/>
+  <line class="flowseg" x1="395" y1="310" x2="395" y2="338"/>
+  <line class="flow" x1="395" y1="392" x2="395" y2="428"/>
+  <text class="lbl" x="405" y="410">caller token (API) / service token (sweep)</text>
+  <line class="flowseg" x1="750" y1="310" x2="750" y2="338"/>
+  <line class="flow" x1="750" y1="392" x2="750" y2="428"/>
+  <text class="lbl" x="760" y="410">service token</text>
+  <line class="event" x1="535" y1="204" x2="608" y2="204"/>
+  <text class="lbl" x="572.5" y="194" text-anchor="middle">generate</text>
+  <path class="flow" d="M 610 270 C 585 273, 562 273, 537 270"/>
+  <text class="lbl" x="572.5" y="286" text-anchor="middle">Associate</text>
+  <line class="flow" x1="890" y1="195" x2="953" y2="195"/>
+  <line class="flow" x1="890" y1="470" x2="953" y2="470"/>
+  <path class="flow" d="M 535 470 C 558 470, 585 470, 608 470"/>
+</svg>

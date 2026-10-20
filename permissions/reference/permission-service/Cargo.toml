@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+# Vendored first-party crates (see vendor/*/README.md); built as path dependencies only.
+exclude = ["vendor"]
+
+[workspace.package]
+# In-development version; CI uses it as the dev-version base and replaces it with the Git tag on tagged builds.
+version = "0.0.54"
+authors = ["NVIDIA"]
+edition = "2021"
+rust-version = "1.88.0"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# internal
+# No registry key, so the workspace builds without the internal Cargo registry. NVIDIA's internal crate publish
+# adds it, because it needs it to package permission-auth against the published permission-core.
+permission-core = { path = "crates/permission-core", version = "0.0.54" }
+
+# dev
+prost-types = "0.14.1"
+
+# regular
+arc-swap = "1.9.1"
+async-trait = "0.1.86"
+cedar-policy = { version = "4.4.1", features = ["default", "partial-eval"] }
+clap = { version = "4.5.41", features = ["derive", "env"] }
+deadpool-postgres = "0.14.1"
+jsonwebtoken = "9.3.1"
+garde = { version = "0.22.1", features = ["derive", "pattern", "regex"] }
+humantime = "2.2.0"
+moka = "0.12.10"
+prost = "0.14.1"
+reqwest = "0.12.20"
+serde = "1.0.218"
+serde_json = "1.0.139"
+serde_norway = "0.9.42"
+time = "0.3.47"
+tokio = "1.45.1"
+tokio-postgres = "0.7.18"
+tokio-stream = "0.1.17"
+tonic = "0.14.2"
+tonic-health = "0.14.2"
+tonic-prost = "0.14.2"
+tonic-reflection = "0.14.2"
+tower = "0.5.2"
+tower-http = "0.6.8"
+url = "2.5.4"
+urlencoding = "2.1.3"
+utoipa = "5.4.0"
+# warning: `tracing-opentlementry` and `opentelemetry` must track each other,
+# and not by version number. otherwise, horrible things happen.
+tracing-opentelemetry = { version = "0.32.0", default-features = false }
+# `tracing-opentelemetry` also depends on `opentelemetry`
+opentelemetry = { version = "0.31.0", default-features = false }
+opentelemetry-http = "0.31.0"
+tracing = { version = "0.1.43", default-features = false, features = [
+    "attributes",
+] }
+tracing-subscriber = { version = "0.3.22", default-features = false, features = [
+    "std",
+    "fmt",
+    "json",
+    "registry",
+] }
+opentelemetry_sdk = { version = "0.31.0", default-features = false }
+opentelemetry-otlp = { version = "0.31.0" }
+opentelemetry-semantic-conventions = { version = "0.31.0", default-features = false, features = [
+    "semconv_experimental",
+] }

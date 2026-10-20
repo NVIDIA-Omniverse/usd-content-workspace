@@ -1,0 +1,267 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{ $hasPostgresMetadata := false }}
+{{- range .Values.config.metadata }}
+  {{- if .postgres }}
+    {{- $hasPostgresMetadata = true }}
+  {{- end }}
+{{- end }}
+{{- $extraVolumes := (default (list) .Values.extraVolumes) }}
+{{- $extraContainers := (default (list) .Values.extraContainers )}}
+{{- $extraVolumeMounts := (default (list) .Values.extraVolumeMounts) }}
+{{- $nativeSidecars := (list) }}
+{{- with .Values.serviceIdentity.accessTokenFile }}
+  {{- if .enabled }}
+    {{- $_ := required "serviceIdentity.accessTokenFile.provisionerSidecar.container must be set when serviceIdentity.accessTokenFile.enabled is true" .provisionerSidecar.container }}
+    {{- $extraVolumes = append $extraVolumes (dict "name" "token-exchange" "emptyDir" (dict "sizeLimit" "4Mi" "medium" "Memory")) }}
+    {{- /* Native sidecar: starts before the other init containers, ends after the main ones (Kubernetes >= 1.29). */}}
+    {{- $nativeSidecars = append $nativeSidecars (
+      mergeOverwrite .provisionerSidecar.container
+        (dict "name" (default (printf "%s-token-exchange" $.Chart.Name) .provisionerSidecar.container.name))
+        (dict "volumeMounts" (
+          append (default (list) .provisionerSidecar.container.volumeMounts)
+            (dict "name" "token-exchange" "mountPath" "/etc/secrets/access-token")
+        ))
+        (dict "restartPolicy" "Always")
+    ) }}
+    {{- $extraVolumeMounts = append $extraVolumeMounts (dict "name" "token-exchange" "mountPath" "/etc/secrets/access-token" ) }}
+  {{- end }}
+{{- end }}
+
+{{- $readinessProbeConfig := mergeOverwrite .Values.probes.readiness (dict "grpc" (dict "port" 8100))  }}
+{{- $livenessProbeConfig := mergeOverwrite .Values.probes.liveness (dict "grpc" (dict "port" 8100)) }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "storage-service.fullname" . }}
+  labels:
+    {{- include "storage-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "storage-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/storage-service/configmap.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "storage-service.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "storage-service.imagePullSecrets" .Values.image.pullSecrets | nindent 6 }}
+      serviceAccountName: {{ include "storage-service.serviceAccountName" . }}
+      {{- if .Values.shareProcessNamespace }}
+      shareProcessNamespace: true
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if or $nativeSidecars $hasPostgresMetadata .Values.extraInitContainers }}
+      initContainers:
+        {{- with $nativeSidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if $hasPostgresMetadata }}
+        # Applies the Postgres metadata migrations (service image in bootstrap
+        # mode) before any replica starts serving.
+        - name: {{ .Chart.Name }}-bootstrap
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "storage-service.image" .Values.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: STORAGE_SERVICE_BOOTSTRAP_ONLY
+              value: "true"
+            - name: STORAGE_SERVICE_CONFIG_TOML
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ printf "%s-config" (include "storage-service.fullname" .) }}
+                  key: config.toml
+
+            {{- with .Values.config.logging }}
+            - name: RUST_LOG
+              {{- $logLevel := .level | default "info" }}
+              value: {{ printf "warn,storage_service=%s,storage_service_metrics=%s,storage_service_permissions=%s,storage_core=%s,storage_core_util=%s,storage_core_builder=%s,%s" $logLevel $logLevel $logLevel $logLevel $logLevel $logLevel (.extraTargets | default "") | quote }}
+            - name: RUST_BACKTRACE
+              value: {{ .backtrace | default "0" | quote }}
+            {{- end }}
+            - name: STRUCTURED_LOGGING
+              value: {{ .Values.observability.logging.structured.enabled | default false | quote }}
+            {{- with .Values.serviceIdentity.clientCredentials }}
+              {{- if .enabled }}
+            - name: STORAGE_SERVICE_SERVICE_IDENTITY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .clientSecretRef.name | quote }}
+                  key: {{ .clientSecretRef.key | quote }}
+              {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnvs }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+              {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- if .Values.resources }}
+            limits:
+              {{- toYaml .Values.resources.limits | nindent 14 }}
+            requests:
+              {{- toYaml .Values.resources.requests | nindent 14 }}
+            {{- end }}
+        {{- end }}
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "storage-service.image" .Values.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: HELM_VERSION
+              value: "{{ .Chart.Version }}"
+            - name: HELM_APP_VERSION
+              value: "{{ .Chart.AppVersion }}"
+            - name: STORAGE_SERVICE_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STORAGE_SERVICE_CONFIG_TOML
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ printf "%s-config" (include "storage-service.fullname" .) }}
+                  key: config.toml
+
+            {{- with .Values.config.logging }}
+            - name: RUST_LOG
+              {{- $logLevel := .level | default "info" }}
+              value: {{ printf "warn,storage_service=%s,storage_service_metrics=%s,storage_service_permissions=%s,storage_core=%s,storage_core_util=%s,storage_core_builder=%s,%s" $logLevel $logLevel $logLevel $logLevel $logLevel $logLevel (.extraTargets | default "") | quote }}
+            - name: RUST_BACKTRACE
+              value: {{ .backtrace | default "0" | quote }}
+            {{- end }}
+
+            - name: STRUCTURED_LOGGING
+              value: {{ .Values.observability.logging.structured.enabled | default false | quote }}
+            - name: OTEL_METRIC_EXPORT_INTERVAL
+              value: {{ .Values.observability.metrics.exportIntervalMs | default 15000 | quote }}
+
+            {{- with .Values.extraEnvs }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.observability.metrics.enabled }}
+            - name: OTEL_METRICS_EXPORTER
+              value: otlp
+            - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+              value: {{ dig "endpoint" "grpc" "" .Values.observability.metrics | required "observability.metrics.endpoint.grpc must be set when observability.metrics.enabled is true" | quote }}
+            - name: OTEL_EXPORTER_OTLP_METRICS_PROTOCOL
+              value: grpc
+            {{- else if .Values.service.metrics.enabled }}
+            - name: OTEL_METRICS_EXPORTER
+              value: prometheus
+            {{- end }}
+            {{- with .Values.service.metrics }}
+              {{- if .enabled }}
+            - name: OTEL_EXPORTER_PROMETHEUS_PORT
+              value: {{ .port | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if .Values.observability.tracing.enabled }}
+            - name: OTEL_TRACES_EXPORTER
+              value: otlp
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ dig "endpoint" "grpc" "" .Values.observability.tracing | required "observability.tracing.endpoint.grpc must be set when observability.tracing.enabled is true" | quote }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+              value: grpc
+              {{- with .Values.observability.tracing.samplingRatio }}
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ . | quote }}
+              {{- end }}
+            {{- end }}
+            {{- with .Values.serviceIdentity.clientCredentials }}
+              {{- if .enabled }}
+            - name: STORAGE_SERVICE_SERVICE_IDENTITY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .clientSecretRef.name | quote }}
+                  key: {{ .clientSecretRef.key | quote }}
+              {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+          envFrom:
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.service.grpc.port }}
+              protocol: TCP
+              name: storage
+            {{- if .Values.service.metrics.enabled }}
+            - containerPort: {{ .Values.service.metrics.port }}
+              protocol: TCP
+              name: metrics
+            {{- end }}
+            - containerPort: {{ .Values.service.rest.port }}
+              protocol: TCP
+              name: rest
+            - containerPort: 8100
+              protocol: TCP
+              name: probe
+          readinessProbe: {{- toYaml $readinessProbeConfig | nindent 12 }}
+          livenessProbe: {{- toYaml $livenessProbeConfig | nindent 12 }}
+          {{- with $extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- if .Values.resources }}
+            limits:
+              {{- toYaml .Values.resources.limits | nindent 14 }}
+            requests:
+              {{- toYaml .Values.resources.requests | nindent 14 }}
+            {{- end }}
+      {{- with $extraContainers }}
+          {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $extraVolumes }}
+      volumes: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

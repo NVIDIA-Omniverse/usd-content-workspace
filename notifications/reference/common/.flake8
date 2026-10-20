@@ -1,0 +1,3 @@
+[flake8]
+exclude = .git,tools,.venv,.venv*,_deps,db/migrations/models,_build,build,pytest_report/pytest_report.xml,proto,nvidia
+max-line-length = 88

@@ -1,0 +1,201 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- if and .Values.serviceIdentity.clientCredentials.enabled .Values.serviceIdentity.accessTokenFile.enabled }}
+{{- fail "Only one of serviceIdentity.clientCredentials.enabled and serviceIdentity.accessTokenFile.enabled should be true" }}
+{{- end }}
+
+{{- if .Values.smokeTest.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "userinfoservice.fullname" . }}-smoke-test"
+  labels:
+    {{- include "userinfoservice.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test,post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  {{- if gt (int (.Values.smokeTest.ttlSecondsAfterFinished | default 0)) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.smokeTest.ttlSecondsAfterFinished }}
+  {{- end }}
+  backoffLimit: 0
+  template:
+    metadata:
+      {{- $podAnnotations := merge (deepCopy .Values.smokeTest.podAnnotations) .Values.podAnnotations }}
+      {{- $podLabels := merge (deepCopy .Values.smokeTest.podLabels) .Values.podLabels }}
+      {{- with $podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "userinfoservice.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: smoke-test
+        {{- with $podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if eq .Values.providers.entra.authMode "workload-identity" }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      {{- $pullSecrets := .Values.smokeTest.image.pullSecrets | default .Values.image.pullSecrets }}
+      {{- include "userinfoservice.imagePullSecrets" ( dict "images" (list (dict "pullSecrets" $pullSecrets)) "global" .Values) | nindent 6 }}
+      serviceAccountName: {{ include "userinfoservice.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: smoke-test
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.smokeTest.image.repository }}:{{ .Values.smokeTest.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.smokeTest.image.pullPolicy }}
+          env:
+            {{- /*
+              Default REST URL: ingress URL when httpProxy is enabled, otherwise the in-cluster Service DNS.
+              Override with smokeTest.rest.url if set.
+            */}}
+            {{- $serviceName := include "userinfoservice.servicename" . }}
+            {{- $namespace := .Release.Namespace }}
+            {{- $restPort := .Values.service.ports.rest }}
+            {{- $grpcPort := .Values.service.ports.grpc }}
+            {{- $defaultRestUrl := printf "http://%s.%s.svc.cluster.local:%v" $serviceName $namespace $restPort }}
+            {{- if .Values.httpProxy.enabled }}
+              {{- $scheme := ternary "https" "http" .Values.httpProxy.tls.enabled }}
+              {{- $fqdn := printf "%s.%s" .Values.httpProxy.fqdn.host .Values.httpProxy.fqdn.domain }}
+              {{- $defaultRestUrl = printf "%s://%s%s" $scheme $fqdn (.Values.httpProxy.path | default "/") }}
+            {{- end }}
+            {{- $restUrl := .Values.smokeTest.rest.url | default $defaultRestUrl }}
+            {{- $defaultGrpcEndpoint := printf "%s.%s.svc.cluster.local:%v" $serviceName $namespace $grpcPort }}
+            {{- $grpcEndpoint := .Values.smokeTest.grpc.endpoint | default $defaultGrpcEndpoint }}
+            - name: REST_URL
+              value: {{ $restUrl | quote }}
+            - name: GRPC_ENABLED
+              value: {{ .Values.smokeTest.grpc.enabled | quote }}
+            {{- if .Values.smokeTest.grpc.enabled }}
+            - name: GRPC_ENDPOINT
+              value: {{ $grpcEndpoint | quote }}
+            - name: GRPC_TLS_ENABLED
+              value: {{ .Values.smokeTest.grpc.tls.enabled | quote }}
+            {{- end }}
+            - name: AZURE_TENANT_ID
+              value: {{ .Values.providers.entra.tenantId | quote }}
+            - name: AZURE_CLIENT_ID
+              value: {{ .Values.providers.entra.clientId | quote }}
+            - name: AZURE_AUTH_MODE
+              value: {{ .Values.providers.entra.authMode | quote }}
+            {{- if eq .Values.providers.entra.authMode "client-secret" }}
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.providers.entra.clientSecret.secretRef.name }}
+                  key: {{ .Values.providers.entra.clientSecret.secretRef.key }}
+            {{- end }}
+            - name: GRAPH_BASE_URL
+              value: {{ .Values.smokeTest.graphBaseUrl | quote }}
+            - name: GRAPH_SCOPE
+              value: {{ .Values.smokeTest.graphScope | quote }}
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: OAUTH2_OPENID_CONFIGURATION_URI
+              value: {{ .Values.serviceIdentity.clientCredentials.openIdConfigurationUri | quote }}
+            - name: OAUTH2_CLIENT_ID
+              value: {{ .Values.serviceIdentity.clientCredentials.clientId | quote }}
+            - name: OAUTH2_CLIENT_SCOPE
+              value: {{ .Values.serviceIdentity.clientCredentials.clientScope | quote }}
+            - name: OAUTH2_CLIENT_SECRET_FILE
+              value: "/etc/secrets/smoke-test-client-credentials/{{ .Values.serviceIdentity.clientCredentials.clientSecretRef.key }}"
+            - name: OAUTH2_EXTRA_HEADERS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraHeaders | toJson | quote }}
+            - name: OAUTH2_EXTRA_BODY_PARAMS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraBodyParams | toJson | quote }}
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: ACCESS_TOKEN_FILE
+              value: {{ .Values.serviceIdentity.accessTokenFile.path }}
+            {{- end }}
+            - name: WAIT_RETRIES
+              value: "{{ .Values.smokeTest.waitRetries | default 10 }}"
+            - name: WAIT_INTERVAL
+              value: "{{ .Values.smokeTest.waitInterval | default 5 }}"
+            - name: PAGE_LIMIT
+              value: "{{ .Values.smokeTest.pageLimit | default 10 }}"
+            - name: HTTP_TIMEOUT
+              value: "{{ .Values.smokeTest.httpTimeout | default 30 }}"
+            - name: HELM
+              value: "true"
+            {{- range $key, $value := .Values.smokeTest.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.smokeTest.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.volumeMounts .Values.serviceIdentity.clientCredentials.enabled .Values.serviceIdentity.accessTokenFile.enabled }}
+          volumeMounts:
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: smoke-test-client-credentials
+              readOnly: true
+              mountPath: "/etc/secrets/smoke-test-client-credentials"
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: token-exchange
+              readOnly: true
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+            {{- end }}
+          {{- end }}
+      {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+        -
+          {{- (omit .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+              {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+                {{- toYaml . | nindent 12 }}
+              {{- end }}
+            - name: token-exchange
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+      {{- end }}
+      {{- if or .Values.volumes .Values.serviceIdentity.clientCredentials.enabled .Values.serviceIdentity.accessTokenFile.enabled }}
+      volumes:
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+        - name: token-exchange
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Mi
+        {{- end }}
+        {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+        - name: smoke-test-client-credentials
+          secret:
+            secretName: {{ .Values.serviceIdentity.clientCredentials.clientSecretRef.name }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

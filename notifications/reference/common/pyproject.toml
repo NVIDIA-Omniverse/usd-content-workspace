@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "notification-common"
+version = "7.0.2"
+description = "Common code for the notification services"
+authors = [{ name = "NVIDIA" }]
+license = "Apache-2.0"
+requires-python = ">=3.12"
+
+dependencies = [
+    "aio-pika>=9.5.5,<10",
+    "pydantic-settings>=2.8.1,<3",
+    "opentelemetry-api>=1.39.1,<2",
+    "opentelemetry-sdk>=1.39.1,<2",
+    "opentelemetry-exporter-otlp>=1.39.1,<2",
+    "opentelemetry-instrumentation-grpc>=0.60b1,<0.61",
+    "opentelemetry-instrumentation-requests>=0.60b1,<0.61",
+    "opentelemetry-instrumentation-system-metrics>=0.60b1,<0.61",
+    "opentelemetry-instrumentation-logging>=0.60b1,<0.61",
+    "opentelemetry-instrumentation-aio-pika>=0.60b1,<0.61",
+    "opentelemetry-semantic-conventions>=0.60b1,<0.61",
+    "opentelemetry-instrumentation-fastapi>=0.60b1,<0.61",
+    "aiohttp>=3.11.13,<4",
+    "tenacity>=9,<10",
+    "pydantic>=2.10.6,<3",
+    "grpc-interceptor>=0.15.4,<0.16",
+    # The generated Discovery stubs (capabilities_service_pb2_grpc.py) hardcode
+    # GRPC_GENERATED_VERSION = '1.78.0' and raise RuntimeError at import when the
+    # installed grpcio is older, and that module is imported unconditionally by
+    # notification_server. Floor grpcio (and the grpc tooling packages) at 1.78.0
+    # so the declared contract matches the shipped stubs. grpcio is pinned
+    # directly because the stubs import it at runtime.
+    "grpcio>=1.78.0,<2",
+    "grpcio-health-checking>=1.78.0,<2",
+    "grpcio-tools>=1.78.0,<2",
+    "grpcio-reflection>=1.78.0,<2",
+    "pyjwt[crypto]>=2.15.1,<3",  # BDSA-2026-35552
+    "async-lru>=2.0.5,<3",
+    "redis[hiredis]>=7.0.1,<8",
+    "pyyaml>=6.0.2,<7",
+    "fastapi[standard]>=0.132,<1",
+    "cryptography>=50.0.1",
+    # Security floors on otherwise-transitive deps, pinned here so the fix
+    # propagates to consuming services via published metadata.
+    "urllib3>=2.8.0",  # CVE-2026-44432, BDSA-2026-35864, BDSA-2026-35861
+    "anyio>=4.15.1",  # BDSA-2026-33862
+    "pygments>=2.20.0",  # CVE-2026-4539
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.25.0",
+    "pytest-mock>=3.14.0",
+    "pytest-random-order>=1.1.1",
+    "black>=25.1.0",
+    "flake8>=7.1.1",
+    "pytest-cov>=6.0.0",
+    "pytest-freezer>=0.4.9,<0.5",
+]
+
+[project.scripts]
+nc-test = "notification_common.scripts.app_scripts:test_internals"
+nc-lint = "notification_common.scripts.app_scripts:nc_lint"
+nc-update-proto = "notification_common.scripts.app_scripts:update_proto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The generated Discovery stubs live under a top-level `nvidia/` tree that is a
+# PEP 420 implicit namespace package (no __init__.py anywhere in it) so it
+# merges at import with the consuming services' own `nvidia.omniverse...` trees
+# instead of shadowing them. Hatchling auto-detects a single top-level package;
+# once `nvidia/` is added the set must be listed explicitly.
+[tool.hatch.build.targets.wheel]
+packages = ["notification_common", "nvidia"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.black]
+target-version = ["py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | \.tools
+  | \.idea
+  | \_build
+  | build
+  | dist
+  | nvidia
+  | .flake8
+  | pytest_report/pytest_report.xml
+)/
+'''

@@ -1,0 +1,21 @@
+# .publishignore — paths excluded from the GitHub source release.
+#
+# This repository is the discovery API surface: the protos, their buf module and
+# the README. Everything else is internal tooling. Patterns use tar --exclude
+# semantics; ".git" and this file are always excluded.
+
+# ── Internal CI configuration ──
+.gitlab-ci.yml
+
+# ── Internal-only agent configuration ──
+CLAUDE.md
+
+# ── Local developer toolchain pinning ──
+mise.toml
+
+# ── The publish tooling itself ──
+tools
+
+# ── Local editor / IDE artifacts ──
+.vscode
+.idea

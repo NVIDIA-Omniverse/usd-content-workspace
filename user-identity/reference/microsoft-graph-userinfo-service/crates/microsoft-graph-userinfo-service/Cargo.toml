@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "microsoft-graph-userinfo-service"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+[dependencies]
+arc-swap = "1"
+axum = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry", "json"] }
+tracing-opentelemetry = "0.32"
+opentelemetry = { version = "0.31", default-features = false }
+opentelemetry_sdk = { version = "0.31", default-features = false }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace", "metrics"] }
+tower-http = { version = "0.6", features = ["cors", "normalize-path"] }
+base64 = "0.22"
+chrono = { version = "0.4.44", features = ["serde"] }
+serde_with = "3.17.0"
+async-trait = "0.1.89"
+http = "1"
+humantime = "2"
+moka = { version = "0.12", features = ["future"] }
+rand = "0.9"
+uuid = { version = "1", features = ["v4"] }
+tokio-postgres = "0.7.13"
+deadpool-postgres = "0.14.1"
+tokio-postgres-rustls = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
+tonic-health = "0.14"
+tonic-reflection = "0.14"
+microsoft-graph-userinfo-capabilities-proto = { path = "../microsoft-graph-userinfo-capabilities-proto" }
+jsonwebtoken = "10.3.0"
+tower = "0.5.3"
+sha2 = "0.10"
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+
+[dev-dependencies]
+axum-test = "18"
+mockito = "1"
+tokio = { version = "1", features = ["test-util"] }
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }

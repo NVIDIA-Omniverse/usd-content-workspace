@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.httpProxy.enabled -}}
+# LOAD-BEARING — do NOT delete this Service or merge it into the main
+# Service (service.yaml). This is the not-ready-publishing half of a
+# deliberate two-Service pair.
+#
+# This Service always publishes pod addresses regardless of readiness
+# status, and the Contour HTTPProxy routes through it, so a pod that
+# has gone not-ready at the readiness reserve stays in Envoy's EDS
+# cluster. Such a pod is over its soft threshold but KEEPS ADMITTING:
+# pinned streams pack into the non-durable pool's overflow band and are
+# refused only at the memory cap. Keeping the pod reachable is the
+# whole point — a pinned (sticky) gRPC connection is bound to the pod
+# it landed on for its whole life, so scaling up cannot rescue it; if
+# this Service dropped the pod from EDS, its burst would have nowhere
+# to land.
+#
+# Re-routable streams (all REST/SSE, plus gRPC consume carrying the
+# X-Via-Proxy stamp) are refused earlier, at the shed threshold
+# (rabbitmq.max_re_routable_streams_per_pod), which is what reserves
+# the upper band for pinned traffic. Every streaming route — the two
+# SSE prefixes and all four streaming gRPC RPCs — carries a
+# retryPolicy that retries a capacity refusal by making a fresh
+# load-balancer selection that can land on another pod. (The
+# non-streaming catch-all route carries a retryPolicy too, but a
+# different and much narrower one — httpProxy.unary, connect-failure
+# and refused-stream only — which is about undeliverable requests
+# during a rollout, not about capacity refusals.) A stamped,
+# non-durable stream's refusal comes from that shed threshold; a
+# durable-pool stream's comes from the durable pool's own capacity
+# check. Either way it leaves as a trailers-only RESOURCE_EXHAUSTED
+# before any response commits, which is what makes the retry safe, so
+# a proxied client sees an error only once the bounded fleet-wide
+# retries exhaust. At the memory cap everything non-durable is
+# refused, pinned included, with RESOURCE_EXHAUSTED / 503 + backoff.
+# Existing streaming connections are never torn down by an EDS
+# membership change.
+#
+# The main Service is readiness-gated (ready-only endpoints) on purpose;
+# routing external streams through it would sever live connections every
+# time a pod hit capacity. That is why the split exists and why the two
+# Services cannot be collapsed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "event-consumer-service.envoy-servicename" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-consumer-service.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  publishNotReadyAddresses: true
+  ports:
+    - port: {{ .Values.service.grpc.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    {{- if .Values.service.rest.enabled }}
+    - port: {{ .Values.service.rest.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    {{- end }}
+  selector:
+    {{- include "event-consumer-service.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+{{- end }}

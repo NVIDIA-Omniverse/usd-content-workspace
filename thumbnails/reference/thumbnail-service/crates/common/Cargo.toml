@@ -1,0 +1,105 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "thumbnail-common"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[features]
+# Test doubles and helpers, off by default.
+#
+# `#[cfg(test)]` cannot express this: `thumbnail-service` and
+# `thumbnail-task-worker` depend on this crate normally, so a `cfg(test)` gate
+# here compiles the module only when *this* crate is under test — never when a
+# downstream crate's own tests run. That is why the module shipped ungated, which
+# linked three mock gRPC servers and several credential-planting helpers into both
+# release binaries. `#[doc(hidden)]` hid some of them from docs, not from callers.
+#
+# The self dev-dependency below is what lets this crate's own integration tests
+# under `tests/` opt in: they link this crate as an ordinary dependency, so they
+# need the feature the same way a downstream test crate does.
+#
+# One consequence to know: because dev-dependencies enable it, Cargo's feature
+# unification turns it on for *everything* in commands that build dev targets —
+# `cargo test`, `cargo build --all-targets`, `cargo clippy --all-targets`. A
+# binary produced by those commands does contain the doubles. What matters is that
+# the shipped artifact does not, and `docker/Dockerfile` builds with plain
+# `cargo build --locked --release`, no dev targets. Verify with:
+#   cargo build --workspace && strings target/debug/server | grep test-token
+#
+# `tracing-opentelemetry` is pulled in by the feature rather than as a
+# dev-dependency because feature unification compiles `test_fixtures` into the
+# plain lib target, which cannot see dev-dependencies. Production code reaches
+# `set_parent` through `otel-tools`, which re-exports it.
+#
+# `opentelemetry_sdk/testing` brings in the in-memory span exporter, which is how
+# a propagation test reads a span's parent rather than inferring it. It stays off
+# in release builds for the same reason the rest of this feature does.
+test-utils = ["dep:tracing-opentelemetry", "opentelemetry_sdk/testing"]
+
+[dependencies]
+rand.workspace = true
+# Workspace dependencies
+serde.workspace = true
+serde_json.workspace = true
+utoipa.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+otel-tools.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+# Only for `test_fixtures::trace_probe`, via the `test-utils` feature.
+tracing-opentelemetry = { workspace = true, optional = true }
+chrono.workspace = true
+uuid.workspace = true
+tonic.workspace = true
+tonic-observability.workspace = true
+# Just the `Layer` trait, to apply the client trace layer to a channel. `tower`
+# itself is not needed here: nothing in this crate builds a service stack.
+tower-layer = "0.3"
+tokio.workspace = true
+prost-types.workspace = true
+tokio-stream.workspace = true
+futures-util.workspace = true
+thiserror.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
+
+# Local crate dependencies
+thumbnail-auth = { path = "../auth" }
+thumbnail-proto = { path = "../proto/thumbnail" }
+storage-proto = { path = "../proto/storage" }
+notifications-proto = { path = "../proto/notifications" }
+
+# Additional dependencies
+md5 = "0.7"
+sha2 = "0.11.0"
+humantime = "2.3.0"
+
+[dev-dependencies]
+# Self-dependency with the feature on, so `tests/` binaries see the doubles.
+thumbnail-common = { path = ".", features = ["test-utils"] }
+# Dev-only, and it must stay that way: `thumbnail-common` is linked by `server`,
+# so a real dependency here would put the image codecs on the API deployment —
+# exactly what keeping `thumbnail-convert` a leaf crate prevents. Tests use it to
+# check `ALLOWED_EXTENSIONS` against the decoder set it publishes, instead of
+# maintaining a second copy of that list.
+thumbnail-convert = { path = "../thumbnail-convert" }
+tempfile.workspace = true
+serial_test.workspace = true
+proptest.workspace = true
+wiremock.workspace = true

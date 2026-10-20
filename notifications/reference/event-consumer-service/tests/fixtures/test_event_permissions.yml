@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+storage_permissions_endpoints:
+  - ep_1
+  - ep_2
+event_permissions:
+  - event_type: event-type-1
+    action: read
+  - event_type: event-type-2
+    action: write

@@ -1,0 +1,33 @@
+repo: storage/api
+tag: 0.28.0
+hash: df15f41445871c218a79b8af64d746b3b30378a2
+partial-pin: native-metadata v1alpha hunks from storage-protos 1.0.0-beta.6
+  applied by hand on top of 0.28.0: fileobject.proto Metadata.native_metadata,
+  fileobject_service.proto GetNativeMetadataSupport + WriteParameters.native_metadata,
+  filefolder_service.proto ListStatRequest.include_native_metadata.
+  A full re-vendor to 1.0.0-beta.6 must not silently revert these, nor the
+  RPCs described below.
+
+# LOCAL PATCH -- do not re-vendor from the tag above without reading this.
+#
+# The following RPCs are present in this tree but NOT in tag 0.28.0. They were
+# added here ahead of the upstream release so storage-core could implement them:
+#
+#   fileobject/v1alpha  FileObjectService.IsReadOnly
+#   versioning/v1alpha  VersioningService.IsVersioned
+#
+# Upstream: released in storage-protos tag 1.0.0-beta.6. The vendored v1alpha versioning.proto matches that
+# tag apart from the license header, and the IsReadOnly messages match it field
+# for field. The rest of this tree is still 0.28.0 plus the partial pin above, so
+# copying the tree at the tag above will silently delete both RPCs and break every
+# consumer in storage-core (the traits, both metrics layers, the
+# manifest/egress/additional-headers overrides, the gRPC and REST handlers, and
+# the test clients).
+#
+# When re-vendoring at 1.0.0-beta.6 or later: update tag/hash above, update the
+# version and RPC lists in storage-core-protos/README.md, add the
+# "Update to storage-protos X.Y.Z" CHANGELOG entry, and delete this block.
+#
+# Note the conformance-test CI job derives CONFORMANCE_VERSION from the
+# `tag:` line above, so conformance currently runs against a proto set that does
+# not describe these two RPCs.

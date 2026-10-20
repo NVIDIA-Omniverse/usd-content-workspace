@@ -1,0 +1,177 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[graph]
+all-features = true
+exclude = ["examples"]
+
+[advisories]
+ignore = [
+  # ID: RUSTSEC-2026-0221
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0221
+  # - event-listener 5.4.1 unsoundly implements Send, allowing !Send tags to cross threads via StackSlot;
+  #   transitive dependency (async ecosystem), no fixed release available, unsoundness advisory only.
+  "RUSTSEC-2026-0221",
+  # ID: RUSTSEC-2024-0384
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0384
+  # - instant is no longer maintained, and the author recommends using the maintained [`web-time`] crate instead.
+  "RUSTSEC-2024-0384",
+  # ID: RUSTSEC-2024-0436
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0436
+  # - paste is unmaintained.
+  "RUSTSEC-2024-0436",
+  # ID: RUSTSEC-2025-0052
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0052
+  # - async-std has been discontinued.
+  "RUSTSEC-2025-0052",
+  # ID: RUSTSEC-2025-0134
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0134
+  # - rustls-pemfile is unmaintained; transitive dependency via aws-sdk -> hyper-rustls -> rustls-native-certs
+  "RUSTSEC-2025-0134",
+  # ID: RUSTSEC-2026-0097
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0097
+  "RUSTSEC-2026-0097",
+  # ID: RUSTSEC-2026-0098
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0098
+  # - rustls-webpki 0.101.7 URI name constraint flaw; pinned via storage-core 0.5.12.
+  "RUSTSEC-2026-0098",
+  # ID: RUSTSEC-2026-0099
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0099
+  # - rustls-webpki 0.101.7 wildcard name constraint flaw; pinned via storage-core 0.5.12.
+  "RUSTSEC-2026-0099",
+  # ID: RUSTSEC-2026-0104
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0104
+  # - rustls-webpki 0.101.7 panic when parsing certificate revocation lists; pinned via storage-core 0.5.12.
+  "RUSTSEC-2026-0104",
+  # ID: RUSTSEC-2026-0349
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0349
+  # rustls key-share hint can downgrade later connections from X25519MLKEM768 to classical key exchange; rustls 0.23 is on
+  # the patched 0.23.46, the remaining hit is rustls 0.21.12 (AWS SDK legacy hyper 0.14 stack, no backport), which has no
+  # post-quantum key exchange to lose
+  "RUSTSEC-2026-0349",
+  # ID: RUSTSEC-2026-0346
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0346
+  # rustls derived Debug on client session values prints TLS secrets; rustls 0.23 is on the patched 0.23.46, the remaining
+  # hit is rustls 0.21.12 (AWS SDK legacy hyper 0.14 stack, no backport). Needs code that Debug-formats rustls session-store
+  # values; nothing here does
+  "RUSTSEC-2026-0346",
+  # ID: RUSTSEC-2026-0118
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0118
+  # - hickory-proto 0.25.2 NSEC3 closest-encloser proof unbounded loop; advisory states no safe upgrade is
+  #   available (fix landed in the separate hickory-net 0.26.1 crate). Pulled in transitively via
+  #   reqwest -> hickory-resolver. Vulnerable code path requires the dnssec-ring/dnssec-aws-lc-rs feature,
+  #   which is not enabled in our build, so practical exposure is nil.
+  "RUSTSEC-2026-0118",
+  # ID: RUSTSEC-2026-0119
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0119
+  # - hickory-proto 0.25.2 O(n^2) name compression CPU exhaustion; fixed in hickory-proto >= 0.26.1, but
+  #   reqwest 0.12.28 -> hickory-resolver 0.25.2 pins hickory-proto to ^0.25, so we can't pull the fix
+  #   without an upstream reqwest update.
+  "RUSTSEC-2026-0119",
+  # ID: RUSTSEC-2023-0089
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2023-0089
+  # - atomic-polyfill is unmaintained; transitive via fred -> heapless -> postcard
+  #   pulled in by storage-core-util 0.6.0's Redis/Valkey L2 cache support. The
+  #   `portable-atomic` upgrade is gated on heapless/postcard releases, not on us.
+  "RUSTSEC-2023-0089",
+  # ID: RUSTSEC-2026-0174
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0174
+  # - http-types is unmaintained; transitive via azure_core.
+  #   Clients can technically bypass the header value character set validation,
+  #   but the complianse is validated on the server end anyway. Hence, no
+  #   impact is expected.
+  "RUSTSEC-2026-0174",
+  # ID: RUSTSEC-2026-0194
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0194
+  # - quick-xml 0.31.0 quadratic run time when checking a start tag for duplicate
+  #   attribute names; transitive via azure_core 0.21 (pins quick-xml 0.31). Fix is
+  #   quick-xml >= 0.41, which requires an azure_core major upgrade.
+  "RUSTSEC-2026-0194",
+  # ID: RUSTSEC-2026-0195
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0195
+  # - quick-xml 0.31.0 unbounded namespace-declaration allocation in NsReader;
+  #   same dependency chain/constraint as RUSTSEC-2026-0194.
+  "RUSTSEC-2026-0195",
+  # ID: RUSTSEC-2026-0249
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0249
+  # - The smartstring crate is unmaintained; transitive via
+  #   opentelemetry-prometheus-text-exporter 0.2.1.
+  "RUSTSEC-2026-0249",
+  # ID: RUSTSEC-2026-0253
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0253
+  # - lru's LruCache::pop() is not panic-safe (a panicking key Drop leaves dangling pointers);
+  #   transitive dependency, unsoundness advisory only, no fixed release available.
+  "RUSTSEC-2026-0253",
+  # ID: RUSTSEC-2026-0258
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0258
+  # - h2 version 0.3.27 is pinned via storage_core and aws-smithy-runtime.
+  "RUSTSEC-2026-0258",
+  # ID: RUSTSEC-2026-0275
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0275
+  # - azure authentication metadata is leaking in the debug log; transitive via storage-core.
+  "RUSTSEC-2026-0275",
+  # ID: RUSTSEC-2024-0449
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0449
+  # - unsafe-libyaml is unmaintained; transitive via storage-core, figment.
+  "RUSTSEC-2024-0449",
+  # ID: RUSTSEC-2026-0367, RUSTSEC-2026-0368, RUSTSEC-2026-0369
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0367
+  # - zip 3.0.0 extract(): keeps SUID/SGID bits, writes symlinks outside the destination, applies permissions
+  #   through symlinks. Fixed only in zip >= 9, and no utoipa-swagger-ui release uses it (10.0.1 requires ^8.6).
+  #   zip is only a build dependency of utoipa-swagger-ui (via storage-core-builder), whose build script unpacks
+  #   one fixed archive (Swagger UI v5.17.14 from GitHub) with its own by_index() loop and never calls extract().
+  #   Nothing in the service links zip: `cargo tree --workspace -i zip -e normal` prints nothing.
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+]
+
+[bans]
+multiple-versions = "allow"
+
+[bans.workspace-dependencies]
+duplicates = "allow"
+unused = "allow"
+
+[licenses]
+unused-allowed-license = "allow"
+# We want really high confidence when inferring licenses from text
+confidence-threshold = 0.92
+allow = [
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "OpenSSL",
+  "Unicode-3.0",
+  "Zlib",
+  "CC0-1.0",
+  "BSL-1.0",
+]
+
+[[licenses.clarify]]
+crate = "ring"
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]

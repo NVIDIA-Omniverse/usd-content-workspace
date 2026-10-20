@@ -1,0 +1,16 @@
+# sync me with .gitignore
+
+_*/
+.DS_Store
+/.idea
+/.vscode
+/build
+/target
+/codecov
+/scratch
+/generated
+
+*.tgz
+*.profraw
+
+.env

@@ -1,0 +1,81 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@font-face {
+  font-family: "Open Sans";
+  src: url("../fonts/OpenSans-Regular.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-style: italic;
+  src: url("../fonts/OpenSans-Italic.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 401 599;
+  src: url("../fonts/OpenSans-Medium.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 401 599;
+  font-style: italic;
+  src: url("../fonts/OpenSans-MediumItalic.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 100 399;
+  src: url("../fonts/OpenSans-Light.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 100 399;
+  font-style: italic;
+  src: url("../fonts/OpenSans-LightItalic.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 600 799;
+  src: url("../fonts/OpenSans-Bold.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 600 799;
+  font-style: italic;
+  src: url("../fonts/OpenSans-BoldItalic.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 800;
+  src: url("../fonts/OpenSans-ExtraBold.ttf");
+}
+
+@font-face {
+  font-family: "Open Sans";
+  font-weight: 800;
+  font-style: italic;
+  src: url("../fonts/OpenSans-ExtraBoldItalic.ttf");
+}

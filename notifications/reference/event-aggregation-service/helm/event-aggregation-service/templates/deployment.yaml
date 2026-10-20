@@ -1,0 +1,199 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "event-aggregation-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "event-aggregation-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "event-aggregation-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checkov.io/skip: CKV_K8S_35=Secrets passed as env vars by design
+        checksum/config: {{ include (print $.Template.BasePath "/settings-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ (lookup "v1" "Secret" .Release.Namespace .Values.envSecretName) | toJson | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "event-aggregation-service.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- $teardownTailSeconds := 10.0 }}
+      {{- /*
+      Bounds-check the shutdown values at render time. The three float knobs
+      reach the app as ConfigMap strings rather than as API-server-validated
+      pod fields, so a negative, empty or non-numeric value renders cleanly
+      here and then fails the library's field validation at process start -- a
+      CrashLoopBackOff and a stalled rollout instead of an immediate template
+      error. The accepted ranges mirror notification_common CommonSettings
+      exactly: the settle and the drain window take any value >= 0 (0 skips the
+      phase), the poll interval is a cadence and must be > 0. The test is on
+      the rendered text, not on the value's type, because --set delivers a
+      float as a string ("0.5") while a values file delivers it as a number --
+      both are legitimate, and only the sign and the digits distinguish them
+      from a typo. The pattern rejects a leading "-" too, so a negative fails
+      here rather than silently shrinking the grace-period bound below.
+
+      terminationGracePeriodSeconds is the loop's fourth key, also a >= 0 band,
+      and it is there for a different reason: it IS an API-server-validated pod
+      field, but the two guards below read it through sprig's float64, which
+      yields 0 for any text it cannot parse. Without this entry an empty or
+      non-numeric grace period reaches the coverage invariant as 0 and is
+      reported as a shortfall against the settle-plus-drain-plus-teardown
+      floor -- a message that sends the operator to the wrong knob. Running it
+      through the loop first names the real problem instead. The consumer
+      chart's loop deliberately does not carry this key; that chart has no
+      whole-number check either, and this one diverges on both.
+
+      The pattern accepts exponent notation, which lets a value out of float64
+      range ("1e400", "1e-400") through the text test while sprig's float64
+      swallows ParseFloat's range error and yields 0 -- so the grace-period
+      invariant below would compute against 0 and pass, and the ConfigMap
+      would carry the text to pydantic, which reads it as inf and settles
+      until SIGKILL. Text that is numeric and does not spell zero yet
+      converts to 0 is exactly that overflow/underflow signature, so it is
+      rejected here as non-finite.
+      */ -}}
+      {{- range $key, $exclusive := dict "settleDelaySeconds" false "drainWindowSeconds" false "drainPollIntervalSeconds" true "terminationGracePeriodSeconds" false }}
+      {{- $value := index $.Values.shutdown $key }}
+      {{- $numeric := regexMatch "^\\+?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][-+]?[0-9]+)?$" (printf "%v" $value) }}
+      {{- $zero := regexMatch "^\\+?(0+(\\.0*)?|\\.0+)([eE][-+]?[0-9]+)?$" (printf "%v" $value) }}
+      {{- if and $numeric (not $zero) (eq ($value | float64) 0.0) }}
+      {{- fail (printf "shutdown.%s must be a finite number (got %v)" $key $value) }}
+      {{- end }}
+      {{- if or (not $numeric) (and $exclusive (eq ($value | float64) 0.0)) }}
+      {{- fail (printf "shutdown.%s must be a number %s (got %v)" $key (ternary "> 0" ">= 0" $exclusive) $value) }}
+      {{- end }}
+      {{- end }}
+      {{- /*
+      Enforce the coupled-knob drain invariant at render time so a
+      misconfiguration fails the template instead of SIGKILLing the pod
+      mid-shutdown in production. The grace period is spent in order -- the
+      app-side settleDelaySeconds settle, then the up-to-drainWindowSeconds
+      app drain, then the post-drain server teardown -- so it must cover all
+      three terms. drainWindowSeconds is a float, so all terms are compared
+      in float64 arithmetic to avoid a truncation false-trip.
+
+      The teardown tail is a fixed property of the library's shutdown
+      implementation, not a deployment knob, so it is a template constant
+      rather than a value. Its two legs run concurrently once the drain ends:
+      the gRPC server's stop grace (notification_server.py, stop(grace=5))
+      and the REST teardown, whose longest step is the default lifespan
+      shutdown sleep (notification_rest_server.py, _default_lifespan, 5s).
+      10s covers the longer of the two with margin -- re-derive it whenever
+      either of those library values changes. After both legs return, the
+      client close runs (start_servers.py, _close_clients: the RabbitMQ
+      connector, the shared HTTP client, then the Redis client); it is
+      normally sub-second, and the roughly 5s of slack the 10s term carries
+      over those ~5s concurrent legs is what absorbs it -- so it is covered
+      at every grace value this guard admits, including one exactly at the
+      floor. What the term deliberately does NOT cover is that close blocking
+      on an unresponsive broker, nor uvicorn's unbounded wait for open
+      connections. Those tails are bounded only by whatever margin the grace
+      period leaves above this floor -- 30s at the shipped defaults, zero at
+      the floor itself; see the shutdown.terminationGracePeriodSeconds prose
+      in values.yaml.
+
+      Re-deriving the constant is not a one-file change: the number is a
+      literal here and is restated in prose this template cannot
+      interpolate, so update these in the same pass -- the shutdown.*
+      "## @param" blocks in values.yaml, the README section on graceful
+      shutdown, the source repository's internal design docs and changelog
+      (not published), the shutdown entries in CHANGELOG.md, and the
+      TEARDOWN_TAIL_SECONDS constant in
+      tests/helm/test_drain_lifecycle_template.py, which is asserted against
+      the fail message text below and is the one surface that fails loudly.
+      */ -}}
+      {{- $grace := .Values.shutdown.terminationGracePeriodSeconds | float64 }}
+      {{- $required := addf (.Values.shutdown.settleDelaySeconds | float64) (.Values.shutdown.drainWindowSeconds | float64) $teardownTailSeconds }}
+      # The pod-spec field is an int64, so a fractional grace period renders
+      # here and is only rejected by the API server at apply time. Catch it at
+      # render time instead. The shutdown.* floats are deliberately not checked
+      # for whole numbers: they are float knobs and a fractional value is
+      # legitimate.
+      {{- if ne $grace (floor $grace) }}{{ fail (printf "shutdown.terminationGracePeriodSeconds (%v) must be a whole number of seconds" .Values.shutdown.terminationGracePeriodSeconds) }}{{ end }}
+      {{- if lt $grace $required }}{{ fail (printf "shutdown.terminationGracePeriodSeconds (%v) must be >= shutdown.settleDelaySeconds (%v) + shutdown.drainWindowSeconds (%v) + %vs post-drain teardown" .Values.shutdown.terminationGracePeriodSeconds .Values.shutdown.settleDelaySeconds .Values.shutdown.drainWindowSeconds $teardownTailSeconds) }}{{ end }}
+      # Total shutdown budget, from pod deletion to SIGKILL. It must cover all
+      # three phases, which run in order: the settleDelaySeconds settle, the
+      # up-to-drainWindowSeconds drain, then a fixed {{ $teardownTailSeconds }}s post-drain server
+      # teardown. The chart enforces that at render time; the full derivation is
+      # in the shutdown.terminationGracePeriodSeconds prose in values.yaml.
+      terminationGracePeriodSeconds: {{ .Values.shutdown.terminationGracePeriodSeconds }}
+      {{- include "event-aggregation-service.imagePullSecrets" ( dict "images" (list .Values.image) "global" .Values) | nindent 6 }}
+      serviceAccountName: {{ include "event-aggregation-service.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.rest.port }}
+              protocol: TCP
+          envFrom:
+          - configMapRef:
+              name: {{ include "event-aggregation-service.fullname" . }}-settings
+          env:
+            - name: OMNI_EVENTS_RABBITMQ_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.envSecretName }}
+                  key: rabbitmq_uri
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          {{- if .Values.volumeMounts }}
+            {{- toYaml .Values.volumeMounts | nindent 12 }}
+          {{- end }}
+          {{- if .Values.secrets.csi.enabled }}
+            - name: {{ .Values.secrets.csi.volumeName }}
+              mountPath: {{ .Values.secrets.csi.mountPath }}
+              readOnly: true
+          {{- end }}
+      volumes:
+      {{- if .Values.volumes }}
+        {{- toYaml .Values.volumes | nindent 8 }}
+      {{- end }}
+      {{- if .Values.secrets.csi.enabled }}
+        - name: {{ .Values.secrets.csi.volumeName }}
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ .Values.secrets.csi.secretProviderClassName | quote }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

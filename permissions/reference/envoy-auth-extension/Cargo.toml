@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+# Vendored first-party crates (see vendor/*/README.md); built as path dependencies only.
+exclude = ["vendor"]
+
+[workspace.package]
+version = "2.4.1"
+authors = ["NVIDIA"]
+edition = "2021"
+rust-version = "1.97"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# dev
+prost-types = "0.14"
+permission-auth = { version = "=0.0.54-rc.3", path = "vendor/permission-auth" }
+# regular
+clap = { version = "4.6" }
+config = { version = "0.15", default-features = false, features = [
+    "json",
+    "toml",
+] }
+prost = "0.14"
+reqwest = "0.12"
+serde = "1.0"
+serde_json = "1.0"
+tokio = "1.53"
+tokio-stream = "0.1"
+toml = "1.1"
+tonic = "0.14"
+tonic-health = "0.14"
+tonic-reflection = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+tower = "0.5"
+
+# Observability / OTEL
+otel-tools = { version = "0.14.0", path = "vendor/otel-tools" }
+tonic-observability = { version = "0.14.0", path = "vendor/tonic-observability" }
+# warning: `tracing-opentelementry` and `opentelemetry` must track each other,
+# and not by version number. otherwise, horrible things happen.
+# (e.g. tracing-opentelemetry 0.28 needs opentelemetry 0.27)
+# tracing-opentelemetry = { version = "0.28", default-features = false }
+# `tracing-opentelemetry` also depends on `opentelemetry`
+opentelemetry = { version = "0.31", default-features = false }
+tracing = { version = "0.1.41", default-features = false, features = [
+    "attributes",
+] }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "std",
+    "fmt",
+    "registry",
+] }
+opentelemetry_sdk = { version = "0.31", default-features = false }
+opentelemetry-otlp = { version = "0.31" }
+base64 = "0.23"

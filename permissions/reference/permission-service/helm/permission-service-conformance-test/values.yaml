@@ -1,0 +1,147 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+image:
+  repository: nvcr.io/nvidia/omniverse/permission-service-conformance-test
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+  pullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  ## @param serviceAccount.annotations Annotations to add to the ServiceAccount.
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+## Shared pod metadata applied to every pod the chart deploys.
+## @param podAnnotations Annotations added to all pods.
+podAnnotations: {}
+## @param podLabels Extra labels added to all pods.
+## Merged on top of the chart's common labels; must not collide with selector labels.
+podLabels: {}
+
+## @param podSecurityContext Pod-level security context for the conformance-test Job.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+## @param securityContext Container-level security context for the conformance-test container.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
+## @param resources Resource requests and limits for the conformance-test container.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+## Observability is not required for this chart: the conformance test is a short-lived
+## test Job that reports its results on stdout and emits no logs, metrics, or traces to
+## configure, so the chart intentionally has no `observability` section.
+
+openId:
+  openIdConfigurationUri: ""
+
+## Configures the service identity used to authenticate outgoing requests to other services.
+serviceIdentity:
+  clientCredentials:
+    ## @param serviceIdentity.clientCredentials.enabled Defines if the service needs to authenticate its requests to other services.
+    ## @param serviceIdentity.clientCredentials.openIdConfigurationUri The OpenID configuration URI used for the client credentials token exchange.
+    ## @param serviceIdentity.clientCredentials.clientId The client ID used for client credentials flow to obtain a service token.
+    ## @param serviceIdentity.clientCredentials.clientScope The value for `scope` field passed to the identity provider with the client credentials flow.
+    ## @param serviceIdentity.clientCredentials.clientSecretRef Reference to an existing Kubernetes secret containing the client secret.
+    ## When enabled, the referenced secret is mounted into the deployment.
+    ## @param serviceIdentity.clientCredentials.extraHeaders Additional HTTP headers to include in the token exchange request (e.g. {"X-Custom-Header": "value"}).
+    ## @param serviceIdentity.clientCredentials.extraBodyParams Additional body parameters to include in the token exchange request (e.g. {"audience": "https://api.example.com"}).
+
+    enabled: false
+    openIdConfigurationUri: ""
+    clientId: ""
+    clientScope: ""
+    clientSecretRef:
+      name: ""
+      key: ""
+    extraHeaders: {}
+    extraBodyParams: {}
+
+  accessTokenFile:
+    ## @param serviceIdentity.accessTokenFile.enabled Defines if the service should read a pre-provisioned access token from a file instead of using client credentials flow.
+    ## Only one of clientCredentials.enabled and accessTokenFile.enabled should be true.
+
+    enabled: false
+    path: "/etc/secrets/access-token/token"
+
+    provisionerSidecar:
+
+      # Full container spec; will be replicated verbatim, with one exception:
+      # volume mounts will get an ADDITIONAL volume called `token-exchange` to be
+      # able to communicate the token to the actual service this token
+      # provisioner sidecar is for.
+      #
+      # Must be left EMPTY with no defaults: the service cannot know upfront which
+      # sidecar an operator will use or what values it needs, so any default here
+      # would be wrong. The operator supplies the full container spec, including
+      # its own resource requests and limits (helm-resources exempts this spec
+      # precisely because it is empty here).
+      container:
+
+    ## @param serviceIdentity.accessTokenFile.pollInterval How often to check the token file for changes (e.g. "15s", "1m").
+    pollInterval: "15s"
+
+## --- Conformance test specific values ---
+
+conformanceTest:
+  ## Which test suites to run: "rest", "grpc", or "all"
+  testSuite: "all"
+
+  ## Target service endpoints
+  restUrl: "http://permission-service:3000"
+  grpcUrl: "http://permission-service:3010"
+
+  ## Authorization request parameters for "allow" tests
+  principal: ""
+  actionName: ""
+  actionService: ""
+  resourceId: ""
+  resourceType: ""
+
+  ## Retry settings for waiting on service readiness
+  waitRetries: 10
+  waitInterval: 5

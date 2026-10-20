@@ -1,0 +1,138 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+openapi: 3.0.3
+info:
+  title: Omniverse Discovery Capabilities API
+  description: |
+    REST representation of `nvidia.omniverse.discovery.capabilities.v2beta.CapabilitiesService`.
+    The REST and gRPC representations are versioned independently and their field
+    names and pagination support differ.
+  version: v1beta
+
+paths:
+  /v1beta/services:
+    get:
+      operationId: listServices
+      summary: Return the list of service APIs implemented by this service
+      description: Maps to `CapabilitiesService.ListServices`.
+      tags:
+        - CapabilitiesService
+      responses:
+        "200":
+          description: List of services with details implemented by this server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListServicesResponse"
+
+components:
+  schemas:
+    ListServicesRequest:
+      type: object
+      description: Empty request for ListServices.
+      additionalProperties: false
+
+    ListServicesResponse:
+      type: object
+      description: Response of the ListServices call.
+      properties:
+        services:
+          type: array
+          description: List of services with details implemented by this Storage API server.
+          items:
+            $ref: "#/components/schemas/ServiceEntry"
+
+    ServiceEntry:
+      type: object
+      description: One service described by name and transport-specific endpoint details.
+      properties:
+        service_name:
+          type: string
+          description: The name of the service, e.g. fileobject.
+          example: fileobject
+        grpc:
+          type: array
+          description: gRPC transport details for this service.
+          items:
+            $ref: "#/components/schemas/GrpcService"
+        rest:
+          type: array
+          description: REST transport details for this service.
+          items:
+            $ref: "#/components/schemas/RestService"
+
+    GrpcService:
+      type: object
+      description: gRPC transport block with service endpoints.
+      properties:
+        endpoints:
+          type: array
+          description: Fully qualified gRPC service names exposed by this server.
+          items:
+            $ref: "#/components/schemas/GrpcEndpoint"
+
+    GrpcEndpoint:
+      type: object
+      description: A gRPC service implementation.
+      properties:
+        service:
+          type: string
+          description: Fully qualified protobuf service name.
+          example: nvidia.omniverse.storage.fileobject.v1.FileObjectService
+
+    RestService:
+      type: object
+      description: REST transport block with named endpoints.
+      properties:
+        endpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/RestEndpoint"
+
+    RestEndpoint:
+      type: object
+      description: A named REST API with versioned paths.
+      properties:
+        name:
+          type: string
+          description: The name of the REST API, e.g. fileobject.
+          example: fileobject
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RestVersion"
+
+    RestVersion:
+      type: object
+      description: A supported REST API version.
+      required:
+        - version
+      properties:
+        version:
+          type: string
+          description: Version identifier, e.g. v1 or v1alpha.
+          example: v1
+        detail:
+          $ref: "#/components/schemas/RestVersionDetail"
+
+    RestVersionDetail:
+      type: object
+      description: Version-specific REST details.
+      properties:
+        path:
+          type: string
+          description: Path for this service version.
+          example: /api/v1/fileobject

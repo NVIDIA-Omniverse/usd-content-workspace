@@ -1,0 +1,82 @@
+# Git
+.git
+.gitignore
+.gitlab-ci.yml
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+
+# Testing
+tests
+pytest.ini
+pytest_report
+htmlcov
+.coverage
+.pytest_cache
+
+# Documentation (*.md matches only the repo root; **/*.md also catches
+# nested markdown such as docs/ and .bees/ plan files)
+README.md
+*.md
+**/*.md
+!ATTRIBUTIONS.md
+helm/README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+*.env.example
+
+# Scripts (development only)
+scripts
+
+# Helm charts (not needed in runtime container)
+helm
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# Other
+.cursorignore
+.cursorrules
+notification_protos
+buf.gen.yaml
+openapi.yaml
+Dockerfile
+.dockerignore
+sonar-project.properties
+grafana-dashboard.json
+
+# Project planning / agent tooling (not needed at runtime; contains internal
+# index-URL token patterns the container scan flags as secrets)
+.bees
+.claude
+docs
+migration-metadata.csv
+migration-readiness-report.md
+
+# Dev / test / CI / security-scan config (not needed at runtime)
+.coveragerc
+.flake8
+.pre-commit-config.yaml
+.gitmodules
+.nspect-allowlist.toml
+.pulse-trufflehog-allowlist.json
+.spectral-extension.yml
+.spectral-extension.yml.example
+

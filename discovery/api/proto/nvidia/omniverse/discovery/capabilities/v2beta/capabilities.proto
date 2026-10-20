@@ -1,0 +1,80 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file defines the supporting types for the CapabilitiesService,
+// describing service entries and their gRPC and REST transport details.
+
+syntax = "proto3";
+
+package nvidia.omniverse.discovery.capabilities.v2beta;
+
+option go_package = "pb.api.nvidia.com/omniverse/discovery/capabilities/v2beta;discovery";
+option java_multiple_files = true;
+option java_outer_classname = "CapabilitiesProto";
+option java_package = "com.nvidia.omniverse.discovery.capabilities.v2beta";
+
+// A service entry describing a service by name and its transport-specific endpoint details.
+message ServiceEntry {
+  // The name of the service, e.g. "fileobject".
+  // (-- api-linter: core::0122::name-suffix=disabled
+  //     aip.dev/not-precedent: "service_name" is better than "service" --)
+  string service_name = 1;
+  // gRPC transport details for this service.
+  repeated GrpcService grpc_services = 2;
+  // REST transport details for this service.
+  repeated RestService rest_services = 3;
+}
+
+// A gRPC server entry listing the gRPC services it exposes.
+message GrpcService {
+  // The individual gRPC services available on this server.
+  repeated GrpcEndpoint endpoints = 1;
+}
+
+// A single gRPC service available on a GrpcService endpoint.
+message GrpcEndpoint {
+  // Fully-qualified gRPC service name, e.g. "nvidia.omniverse.storage.v1beta.FileObjectService".
+  // (-- api-linter: core::0122::name-suffix=disabled
+  //     aip.dev/not-precedent: "service_name" is clearer than "name" for a descriptor struct --)
+  string service_name = 1;
+}
+
+// A REST server entry listing the REST resources it exposes.
+message RestService {
+  // The individual REST resources available on this server.
+  repeated RestEndpoint endpoints = 1;
+}
+
+// A logical REST resource with one or more versioned paths.
+message RestEndpoint {
+  // Resource name, e.g. "fileobject". Falls back to the service name when empty.
+  string name = 1;
+  // The supported versions for this resource.
+  repeated RestVersion versions = 2;
+}
+
+// A single supported version of a REST resource.
+message RestVersion {
+  // Version identifier, e.g. "v1" or "v1alpha1".
+  string version = 1;
+  // URL path details for this version.
+  RestVersionDetail url_detail = 2;
+}
+
+// URL path details for a specific REST resource version.
+message RestVersionDetail {
+  // URL path for this version, e.g. "/api/v1/fileobject".
+  string path = 1;
+}

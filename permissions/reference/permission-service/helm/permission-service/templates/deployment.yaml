@@ -1,0 +1,440 @@
+# SPDX-FileCopyrightText: Copyright 2026 NVIDIA CORPORATION & AFFILIATES
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{{- $remapperEnabled := .Values.config.urlRemapper.enabled -}}
+{{- $remapperExternal := and $remapperEnabled .Values.config.urlRemapper.rewriteRulesRef.name -}}
+{{- $remapperManaged := and $remapperEnabled (not .Values.config.urlRemapper.rewriteRulesRef.name) -}}
+{{- $remapperKey := default "url-remapper.yaml" .Values.config.urlRemapper.rewriteRulesRef.key -}}
+{{- $remapperFile := "" -}}
+{{- if $remapperManaged -}}
+  {{- $remapperFile = "/etc/permission-config/url-remapper.yaml" -}}
+{{- else if $remapperExternal -}}
+  {{- $remapperFile = printf "/etc/permission-config/url-remapper/%s" $remapperKey -}}
+{{- end -}}
+{{- $notificationsTlsEnabled := and .Values.notifications.publisher.enabled .Values.notifications.publisher.tls.enabled -}}
+{{- $notificationsTlsCaSecret := .Values.notifications.publisher.tls.caCertificateSecretRef.name -}}
+{{- $notificationsTlsCaKey := default "ca.crt" .Values.notifications.publisher.tls.caCertificateSecretRef.key -}}
+{{- $notificationsTlsMountCa := and $notificationsTlsEnabled $notificationsTlsCaSecret -}}
+{{- $notificationsTlsCaFile := "" -}}
+{{- if $notificationsTlsMountCa -}}
+  {{- $notificationsTlsCaFile = printf "/etc/permission-config/notifications-tls/%s" $notificationsTlsCaKey -}}
+{{- end }}
+{{- $consumerEnabled := .Values.notifications.consumer.enabled -}}
+{{- $consumerTlsEnabled := and $consumerEnabled .Values.notifications.consumer.tls.enabled -}}
+{{- $consumerTlsCaSecret := .Values.notifications.consumer.tls.caCertificateSecretRef.name -}}
+{{- $consumerTlsCaKey := default "ca.crt" .Values.notifications.consumer.tls.caCertificateSecretRef.key -}}
+{{- $consumerTlsMountCa := and $consumerTlsEnabled $consumerTlsCaSecret -}}
+{{- $consumerTlsCaFile := "" -}}
+{{- if $consumerTlsMountCa -}}
+  {{- $consumerTlsCaFile = printf "/etc/permission-config/consumer-tls/%s" $consumerTlsCaKey -}}
+{{- end }}
+{{- $postgresEnabled := ne .Values.database.type "config-file" -}}
+{{- $postgresPasswordFile := and $postgresEnabled (not .Values.database.postgres.tokenFile.enabled) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "permissions.fullname" . }}
+  labels:
+    {{- include "permissions.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "permissions.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config-files: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "permissions.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "permissions.imagePullSecrets" ( dict "images" (list .Values.image)) | nindent 6 }}
+      serviceAccountName: {{ include "permissions.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.ports.http }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.service.ports.grpc }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: DATABASE_TYPE
+              value: "{{ .Values.database.type }}"
+            {{- if .Values.database.init.policies }}
+            - name: INIT_POLICIES_FILE
+              value: "/etc/permission-config/policies.yaml"
+            {{- end }}
+            {{- if .Values.database.init.services }}
+            - name: INIT_METADATA_FILE
+              value: "/etc/permission-config/metadata.yaml"
+            {{- end }}
+            {{- if ne .Values.database.type "config-file" }}
+            - name: POSTGRES_HOST
+              value: "{{ .Values.database.postgres.host }}"
+            - name: POSTGRES_PORT
+              value: "{{ .Values.database.postgres.port }}"
+            - name: POSTGRES_USER
+              {{- if .Values.database.postgres.user }}
+              value: "{{ .Values.database.postgres.user }}"
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.database.postgres.secretRef.name }}"
+                  key: POSTGRES_USER
+              {{- end }}
+            - name: POSTGRES_DBNAME
+              value: "{{ .Values.database.postgres.dbname }}"
+            - name: POSTGRES_CONNECTIONS
+              value: "{{ .Values.database.postgres.connections }}"
+            - name: POSTGRES_WORKER_THREADS
+              value: "{{ .Values.database.postgres.workerThreads }}"
+            - name: POSTGRES_CREDENTIAL_WAIT_TIMEOUT
+              value: {{ .Values.database.postgres.credentialWaitTimeout | quote }}
+            - name: POSTGRES_CREDENTIAL_WAIT_INTERVAL
+              value: {{ .Values.database.postgres.credentialWaitInterval | quote }}
+            {{- if .Values.database.postgres.tokenFile.enabled }}
+            - name: POSTGRES_TOKEN_FILE
+              value: {{ .Values.database.postgres.tokenFile.path | quote }}
+            - name: POSTGRES_TOKEN_FILE_POLL_INTERVAL
+              value: {{ .Values.database.postgres.tokenFile.pollInterval | quote }}
+            {{- else }}
+            - name: POSTGRES_PASSWORD_FILE
+              value: /etc/secrets/POSTGRES_PASSWORD
+            {{- end }}
+            - name: POSTGRES_SSL_MODE
+              value: "{{ .Values.database.postgres.sslMode }}"
+            {{- end }}
+            - name: ENABLE_AUTH
+              value: "{{ .Values.openId.enabled }}"
+            - name: AUTH_TYPE
+              value: "{{ .Values.openId.tokenVerificationType }}"
+            - name: ENABLE_DENY_REASON
+              value: "{{ .Values.config.enableDenyReason }}"
+            - name: DEFAULT_POLICY_ORDER
+              value: "{{ .Values.config.defaultPolicyOrder }}"
+            - name: CACHE_CONTROL_MAX_AGE
+              value: "{{ .Values.config.cacheControlMaxAge }}"
+            - name: EVALUATION_CACHE_SIZE
+              value: "{{ .Values.config.evaluationCacheSize }}"
+            - name: EVALUATION_CACHE_TTL
+              value: "{{ .Values.config.evaluationCacheTtl }}"
+            - name: POLICY_SET_CACHE_SIZE
+              value: "{{ .Values.config.policySetCacheSize }}"
+            - name: POLICY_SET_CACHE_TTL
+              value: "{{ .Values.config.policySetCacheTtl }}"
+            - name: OPENID_CONFIGURATION
+              value: "{{ .Values.openId.openIdConfigurationUri }}"
+            - name: JWKS_TTL
+              value: "{{ .Values.config.jwksTtl }}"
+            - name: JWKS_FAILURE_BACKOFF
+              value: "{{ .Values.config.jwksFailureBackoff }}"
+            {{- $jwtAudience := include "permissions.jwtAudience" $.Values.openId }}
+            {{- if $jwtAudience }}
+            - name: JWT_AUDIENCE
+              value: "{{ $jwtAudience }}"
+            {{- end }}
+            {{- $jwtIssuers := include "permissions.jwtIssuers" $.Values.openId }}
+            {{- if $jwtIssuers }}
+            - name: JWT_ISSUERS
+              value: "{{ $jwtIssuers }}"
+            {{- end }}
+            {{- with .Values.openId.requiredJwtClaims }}
+            - name: JWT_REQUIRED_CLAIMS
+              value: {{ . | toJson | quote }}
+            {{- end }}
+            - name: PRINCIPAL_ID_CLAIM
+              value: "{{ .Values.openId.principalIdClaim }}"
+            - name: PRINCIPAL_GROUPS_CLAIM
+              value: "{{ .Values.openId.principalGroupsClaim }}"
+            - name: MAX_TOKEN_LENGTH
+              value: "{{ .Values.openId.maxTokenLength }}"
+            - name: IDP_CONNECT_TIMEOUT
+              value: "{{ .Values.config.clientTimeouts.idp.connect }}"
+            - name: IDP_REQUEST_TIMEOUT
+              value: "{{ .Values.config.clientTimeouts.idp.request }}"
+            - name: IDP_POOL_IDLE_TIMEOUT
+              value: "{{ .Values.config.clientTimeouts.idp.idle }}"
+            - name: JWT_LEEWAY
+              value: "{{ .Values.config.jwtLeeway }}"
+            - name: TOKEN_CACHE_SIZE
+              value: "{{ .Values.config.tokenCacheSize }}"
+            - name: TOKEN_TTL
+              value: "{{ .Values.config.tokenTtl }}"
+            - name: INVALID_TOKEN_CACHE_SIZE
+              value: "{{ .Values.config.invalidTokenCacheSize }}"
+            - name: INVALID_TOKEN_CACHE_TTL
+              value: "{{ .Values.config.invalidTokenCacheTtl }}"
+            - name: METADATA_CACHE_SIZE
+              value: "{{ .Values.config.metadataCacheSize }}"
+            - name: METADATA_CACHE_TTL
+              value: "{{ .Values.config.metadataCacheTtl }}"
+            - name: RUST_LOG
+              value: "{{ .Values.observability.logging.level }}"
+            - name: STRUCTURED_LOGGING
+              value: "{{ .Values.observability.logging.structured.enabled }}"
+            - name: ACCESS_LOG_ENABLED
+              value: "{{ .Values.observability.logging.access.enabled }}"
+            - name: ACCESS_LOG_HEADERS
+              value: {{ .Values.observability.logging.access.headers | toJson | quote }}
+            {{- if .Values.observability.tracing.enabled }}
+            - name: TRACES_ENDPOINT
+              value: "{{ .Values.observability.tracing.endpoint.grpc }}"
+            - name: TRACE_SAMPLING_RATIO
+              value: "{{ .Values.observability.tracing.samplingRatio }}"
+            {{- end }}
+            {{- if .Values.observability.metrics.enabled }}
+            - name: METRICS_ENDPOINT
+              value: "{{ .Values.observability.metrics.endpoint.grpc }}"
+            {{- end }}
+            - name: SERVICE_NAME
+              value: "{{ .Values.observability.serviceName }}"
+            - name: SERVICE_SCOPE
+              value: "{{ .Values.observability.serviceScope }}"
+            - name: SERVICE_WORKER_THREADS
+              value: "{{ .Values.config.workerThreads }}"
+            - name: SERVICE_THREAD_STACK_SIZE
+              value: "{{ int64 .Values.config.threadStackSize }}"
+            - name: PARALLEL_EVALUATION_THRESHOLD
+              value: "{{ .Values.config.parallelEvaluationThreshold }}"
+            - name: TONIC_INITIAL_CONNECTION_WINDOW_SIZE
+              value: "{{ .Values.grpc.tonicInitialConnectionWindowSize }}"
+            - name: TONIC_INITIAL_STREAM_WINDOW_SIZE
+              value: "{{ .Values.grpc.tonicInitialStreamWindowSize }}"
+            - name: TONIC_MAX_DECODING_MESSAGE_SIZE
+              value: "{{ .Values.grpc.tonicMaxDecodingMessageSize }}"
+            - name: ENABLE_NOTIFICATIONS
+              value: "{{ .Values.notifications.publisher.enabled }}"
+            - name: EVENT_PUBLISHING_GRPC_ENDPOINT
+              value: "{{ .Values.notifications.publisher.endpoint }}"
+            {{- if $notificationsTlsEnabled }}
+            - name: EVENT_PUBLISHING_TLS_ENABLED
+              value: "true"
+            {{- if $notificationsTlsMountCa }}
+            - name: EVENT_PUBLISHING_TLS_CA_CERTIFICATE_FILE
+              value: {{ $notificationsTlsCaFile | quote }}
+            {{- end }}
+            {{- with .Values.notifications.publisher.tls.serverName }}
+            - name: EVENT_PUBLISHING_TLS_SERVER_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $consumerEnabled }}
+            - name: ENABLE_NOTIFICATION_CONSUMER
+              value: "true"
+            - name: EVENT_CONSUMER_GRPC_ENDPOINT
+              value: "{{ .Values.notifications.consumer.endpoint }}"
+            {{- if $consumerTlsEnabled }}
+            - name: EVENT_CONSUMER_TLS_ENABLED
+              value: "true"
+            {{- if $consumerTlsMountCa }}
+            - name: EVENT_CONSUMER_TLS_CA_CERTIFICATE_FILE
+              value: {{ $consumerTlsCaFile | quote }}
+            {{- end }}
+            {{- with .Values.notifications.consumer.tls.serverName }}
+            - name: EVENT_CONSUMER_TLS_SERVER_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if $remapperEnabled }}
+            - name: ENABLE_URL_REMAPPER
+              value: "true"
+            - name: URL_REMAPPER_FILE
+              value: {{ $remapperFile | quote }}
+            {{- end }}
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: ENABLE_CLIENT_CREDENTIALS
+              value: "true"
+            - name: CLIENT_CREDENTIALS_OPENID_CONFIGURATION
+              value: "{{ .Values.serviceIdentity.clientCredentials.openIdConfigurationUri | default .Values.openId.openIdConfigurationUri }}"
+            - name: CLIENT_ID
+              value: "{{ .Values.serviceIdentity.clientCredentials.clientId }}"
+            - name: CLIENT_SCOPE
+              value: "{{ .Values.serviceIdentity.clientCredentials.clientScope }}"
+            - name: CLIENT_SECRET_FILE
+              value: "/etc/secrets/client-credentials/{{ .Values.serviceIdentity.clientCredentials.clientSecretRef.key }}"
+            - name: CLIENT_CREDENTIALS_EXTRA_HEADERS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraHeaders | toJson | quote }}
+            - name: CLIENT_CREDENTIALS_EXTRA_BODY_PARAMS
+              value: {{ .Values.serviceIdentity.clientCredentials.extraBodyParams | toJson | quote }}
+            {{- end }}
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: ENABLE_ACCESS_TOKEN_FILE
+              value: "true"
+            - name: ACCESS_TOKEN_FILE_PATH
+              value: {{ .Values.serviceIdentity.accessTokenFile.path | quote }}
+            - name: ACCESS_TOKEN_FILE_POLL_INTERVAL
+              value: {{ .Values.serviceIdentity.accessTokenFile.pollInterval | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.extraVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- if or .Values.database.init.policies .Values.database.init.services $remapperManaged }}
+            - name: permission-config-files
+              readOnly: true
+              mountPath: "/etc/permission-config"
+            {{- end }}
+            {{- if $remapperExternal }}
+            - name: url-remapper-rules
+              readOnly: true
+              mountPath: "/etc/permission-config/url-remapper"
+            {{- end }}
+            {{- if $consumerTlsMountCa }}
+            - name: consumer-tls-ca
+              readOnly: true
+              mountPath: "/etc/permission-config/consumer-tls"
+            {{- end }}
+            {{- if $notificationsTlsMountCa }}
+            - name: notifications-tls-ca
+              readOnly: true
+              mountPath: "/etc/permission-config/notifications-tls"
+            {{- end }}
+            {{- if $postgresPasswordFile }}
+            - name: postgres-credentials
+              readOnly: true
+              mountPath: "/etc/secrets"
+            {{- end }}
+            {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+            - name: client-credentials-secret
+              readOnly: true
+              mountPath: "/etc/secrets/client-credentials"
+            {{- end }}
+
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+            {{- if .Values.serviceIdentity.accessTokenFile.enabled }}
+            - name: token-exchange
+              readOnly: true
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+            {{- end }}
+            {{- if and (ne .Values.database.type "config-file") .Values.database.postgres.tokenFile.enabled .Values.database.postgres.tokenFile.provisionerSidecar.container }}
+            - name: postgres-token
+              readOnly: true
+              mountPath: {{ .Values.database.postgres.tokenFile.path | dir | quote }}
+            {{- end }}
+      {{- if and .Values.serviceIdentity.accessTokenFile.enabled .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container }}
+        - name: {{ .Chart.Name }}-token-provisioner
+            {{- (omit .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+              {{- with .Values.serviceIdentity.accessTokenFile.provisionerSidecar.container.volumeMounts }}
+                {{- toYaml . | nindent 12 }}
+              {{- end }}
+            - name: token-exchange
+              mountPath: {{ .Values.serviceIdentity.accessTokenFile.path | dir | quote }}
+      {{- end }}
+      {{- if and (ne .Values.database.type "config-file") .Values.database.postgres.tokenFile.enabled .Values.database.postgres.tokenFile.provisionerSidecar.container }}
+        - name: {{ .Chart.Name }}-postgres-token-provisioner
+            {{- (omit .Values.database.postgres.tokenFile.provisionerSidecar.container "volumeMounts") | toYaml | nindent 10 }}
+          volumeMounts:
+              {{- with .Values.database.postgres.tokenFile.provisionerSidecar.container.volumeMounts }}
+                {{- toYaml . | nindent 12 }}
+              {{- end }}
+            - name: postgres-token
+              mountPath: {{ .Values.database.postgres.tokenFile.path | dir | quote }}
+      {{- end }}
+      volumes:
+        {{ if .Values.serviceIdentity.accessTokenFile.enabled -}}
+        - name: token-exchange
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end -}}
+        {{- if and (ne .Values.database.type "config-file") .Values.database.postgres.tokenFile.enabled .Values.database.postgres.tokenFile.provisionerSidecar.container }}
+        - name: postgres-token
+          emptyDir:
+            sizeLimit: 4Mi
+            medium: Memory
+        {{- end }}
+        {{- if or .Values.database.init.policies .Values.database.init.services $remapperManaged }}
+        - name: permission-config-files
+          configMap:
+            name: {{ include "permissions.fullname" . }}-config-files
+        {{- end }}
+        {{- if $remapperExternal }}
+        - name: url-remapper-rules
+          configMap:
+            name: {{ .Values.config.urlRemapper.rewriteRulesRef.name }}
+            items:
+              - key: {{ $remapperKey }}
+                path: {{ $remapperKey }}
+        {{- end }}
+        {{- if $notificationsTlsMountCa }}
+        - name: notifications-tls-ca
+          secret:
+            secretName: {{ $notificationsTlsCaSecret }}
+            items:
+              - key: {{ $notificationsTlsCaKey }}
+                path: {{ $notificationsTlsCaKey }}
+        {{- end }}
+        {{- if $consumerTlsMountCa }}
+        - name: consumer-tls-ca
+          secret:
+            secretName: {{ $consumerTlsCaSecret }}
+            items:
+              - key: {{ $consumerTlsCaKey }}
+                path: {{ $consumerTlsCaKey }}
+        {{- end }}
+        {{- if $postgresPasswordFile }}
+        - name: postgres-credentials
+          secret:
+            secretName: {{ .Values.database.postgres.secretRef.name }}
+        {{- end }}
+        {{- if .Values.serviceIdentity.clientCredentials.enabled }}
+        - name: client-credentials-secret
+          secret:
+            secretName: {{ .Values.serviceIdentity.clientCredentials.clientSecretRef.name }}
+        {{- end }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
